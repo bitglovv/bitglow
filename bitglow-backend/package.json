@@ -1,0 +1,30 @@
+{
+  "name": "bitglow-backend",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "audit:live-messages": "tsx scripts/audit-live-messages.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.2.3",
+    "fastify": "^4.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.17.2",
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "@types/pg": "^8.16.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
+  }
+}

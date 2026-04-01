@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test - BitGlow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #10b981;
+        }
+
+        .status {
+            background: #1f1f1f;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+
+        .status h2 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #888;
+        }
+
+        .log {
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+
+        .log div {
+            padding: 4px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .log .success {
+            color: #10b981;
+        }
+
+        .log .error {
+            color: #ef4444;
+        }
+
+        .log .warning {
+            color: #f59e0b;
+        }
+
+        .log .info {
+            color: #3b82f6;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #10b981;
+            color: #000;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: #fff;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px 15px;
+            background: #1f1f1f;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge.connected {
+            background: #10b981;
+            color: #000;
+        }
+
+        .badge.disconnected {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .badge.connecting {
+            background: #f59e0b;
+            color: #000;
+        }
+
+        .metric {
+            display: inline-block;
+            margin-right: 20px;
+        }
+
+        .metric strong {
+            color: #10b981;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Connection Test</h1>
+
+        <div class="status">
+            <h2>Connection Status</h2>
+            <div>
+                <span class="metric">State: <strong id="state">-</strong></span>
+                <span class="metric">ID: <strong id="userId">-</strong></span>
+                <span class="metric">Online: <strong id="online">-</strong></span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" id="connectBtn">Connect</button>
+            <button class="btn-danger" id="disconnectBtn" disabled>Disconnect</button>
+            <button class="btn-secondary" id="clearBtn">Clear Log</button>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+            <button class="btn-primary" id="sendBtn" disabled>Send</button>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let selfId = null;
+        let onlineCount = 0;
+
+        const $state = document.getElementById('state');
+        const $userId = document.getElementById('userId');
+        const $online = document.getElementById('online');
+        const $log = document.getElementById('log');
+        const $connectBtn = document.getElementById('connectBtn');
+        const $disconnectBtn = document.getElementById('disconnectBtn');
+        const $clearBtn = document.getElementById('clearBtn');
+        const $messageInput = document.getElementById('messageInput');
+        const $sendBtn = document.getElementById('sendBtn');
+
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${time}] ${message}`;
+            $log.appendChild(div);
+            $log.scrollTop = $log.scrollHeight;
+        }
+
+        function updateState(state) {
+            $state.textContent = state;
+            if (state === 'OPEN') {
+                $connectBtn.disabled = true;
+                $disconnectBtn.disabled = false;
+                $messageInput.disabled = false;
+                $sendBtn.disabled = false;
+            } else {
+                $connectBtn.disabled = false;
+                $disconnectBtn.disabled = true;
+                $messageInput.disabled = true;
+                $sendBtn.disabled = true;
+            }
+        }
+
+        function connect() {
+            if (socket) {
+                log('⚠️ Socket already exists', 'warning');
+                return;
+            }
+
+            log('🔄 Connecting to ws://localhost:3000...', 'info');
+            socket = new WebSocket('ws://localhost:3000');
+            updateState('CONNECTING');
+
+            socket.onopen = () => {
+                log('✅ WebSocket connected', 'success');
+                updateState('OPEN');
+            };
+
+            socket.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+
+                    if (data.type === 'server:welcome') {
+                        selfId = data.userId;
+                        $userId.textContent = data.userId.substring(0, 8) + '...';
+                        log(`🆔 Identity received: ${data.userId}`, 'success');
+                    }
+
+                    if (data.type === 'server:chat:message') {
+                        const isSelf = data.userId === selfId;
+                        log(`💬 ${isSelf ? '(You)' : data.username}: ${data.text}`, isSelf ? 'info' : 'success');
+                    }
+
+                    if (data.type === 'server:presence') {
+                        onlineCount = data.onlineCount;
+                        $online.textContent = data.onlineCount;
+                        log(`👥 Online count: ${data.onlineCount}`, 'info');
+                    }
+
+                    if (data.type === 'server:error') {
+                        log(`❌ Server error: ${data.message}`, 'error');
+                    }
+                } catch (err) {
+                    log(`❌ Failed to parse message: ${err.message}`, 'error');
+                }
+            };
+
+            socket.onerror = (err) => {
+                log(`❌ WebSocket error: ${err}`, 'error');
+            };
+
+            socket.onclose = () => {
+                log('🔌 WebSocket closed', 'warning');
+                updateState('CLOSED');
+                socket = null;
+                selfId = null;
+                $userId.textContent = '-';
+            };
+        }
+
+        function disconnect() {
+            if (!socket) {
+                log('⚠️ No socket to disconnect', 'warning');
+                return;
+            }
+
+            // ✅ Only close if OPEN
+            if (socket.readyState === WebSocket.OPEN) {
+                log('🔌 Closing connection...', 'info');
+                socket.close();
+            } else if (socket.readyState === WebSocket.CONNECTING) {
+                log('⏳ Socket still connecting, will close when open', 'warning');
+                socket.addEventListener('open', () => socket.close());
+            } else {
+                log(`⚠️ Cannot close: socket is ${getReadyStateName(socket.readyState)}`, 'warning');
+            }
+        }
+
+        function sendMessage() {
+            const text = $messageInput.value.trim();
+            if (!text) return;
+
+            // ✅ Only send if socket is OPEN
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('⚠️ Cannot send message: socket not open', 'warning');
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: 'client:chat:send',
+                text
+            }));
+
+            $messageInput.value = '';
+        }
+
+        function getReadyStateName(state) {
+            const states = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+            return states[state] || 'UNKNOWN';
+        }
+
+        // Event listeners
+        $connectBtn.addEventListener('click', connect);
+        $disconnectBtn.addEventListener('click', disconnect);
+        $clearBtn.addEventListener('click', () => {
+            $log.innerHTML = '';
+            log('📋 Log cleared', 'info');
+        });
+        $sendBtn.addEventListener('click', sendMessage);
+        $messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Initial log
+        log('✨ WebSocket Test Ready', 'info');
+        log('📝 Click "Connect" to start testing', 'info');
+    </script>
+</body>
+
+</html>

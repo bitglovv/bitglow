@@ -1,0 +1,176 @@
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+@theme {
+  --color-brand: #ffffff;
+  --color-brand-light: #e5e7eb;
+  --color-brand-dark: #9ca3af;
+  --color-brand-accent: #f8fafc;
+
+  --animation-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animation-float: float 6s ease-in-out infinite;
+  --animation-glow: glow 2s ease-in-out infinite;
+  --shadow-brand: 0 0 18px rgba(255, 255, 255, 0.2);
+  --shadow-brand-glow: 0 0 24px rgba(255, 255, 255, 0.2);
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes glow {
+
+    0%,
+    100% {
+      opacity: 0.8;
+      filter: brightness(1);
+    }
+
+    50% {
+      opacity: 1;
+      filter: brightness(1.2);
+    }
+  }
+}
+
+@layer base {
+  :root {
+    --brand: 255 255 255;
+    --zinc-950: 9 9 11;
+    --brand-gradient: linear-gradient(135deg, #9C27B0, #E91E63, #FF9800, #FFC107);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    @apply bg-zinc-950 text-zinc-100 antialiased selection:bg-brand/30 selection:text-brand-light;
+  }
+
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background-image:
+      radial-gradient(circle at 0% 0%, rgba(156, 39, 176, 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 100% 100%, rgba(233, 30, 99, 0.08) 0%, transparent 45%);
+    background-attachment: fixed;
+  }
+
+  /* Prevent iOS zoom on focus */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/[0.03] border border-white/10 backdrop-blur-xl rounded-3xl shadow-2xl;
+  }
+
+  .glass-input {
+    @apply w-full bg-white/[0.03] border border-white/5 rounded-2xl px-4 py-3 text-base md:text-sm transition-all focus:outline-none focus:ring-1 focus:ring-brand/50 focus:bg-white/[0.05] placeholder:text-zinc-500;
+  }
+
+  .btn-vnext {
+    @apply relative overflow-hidden bg-white text-black font-semibold px-6 py-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-brand hover:bg-white/90;
+  }
+
+  .btn-vnext-secondary {
+    @apply bg-white/[0.03] backdrop-blur-xl hover:bg-white/10 text-white font-medium px-6 py-3 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 border border-white/10;
+  }
+
+  .card {
+    @apply bg-[#0c0f16] rounded-xl p-6 transition cursor-pointer border border-white/5;
+  }
+
+  .desc {
+    @apply block text-sm text-white/60 mt-2;
+  }
+
+  .bg-brand-gradient {
+    background: var(--brand-gradient);
+  }
+
+  .text-brand-gradient {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Live Chat Icon Styles */
+  .live-icon {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+  }
+
+  .live-icon-sm {
+    width: 24px;
+    height: 24px;
+  }
+
+  .live-icon-lg {
+    width: 36px;
+    height: 36px;
+  }
+
+  .live-icon-xl {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* Animated pulse for live icon */
+  @keyframes live-pulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(1.05);
+    }
+  }
+
+  .live-icon-animated {
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+}
+
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
+
+/* Smooth Transitions */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 400ms, transform 400ms;
+}
+
+.auth-mesh-gradient {
+  background:
+    radial-gradient(at 0% 0%, rgba(156, 39, 176, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(233, 30, 99, 0.12) 0px, transparent 50%);
+}

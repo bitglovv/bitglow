@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Chat bubble shape -->
+  <path d="M30 32 C30 32 30 70 30 70 L70 70 L70 70 L76 78 L76 70 C76 70 76 32 76 32 C76 32 76 32 76 32 L30 32 C30 32 30 32 30 32 Z" 
+        stroke="#ffffff" 
+        stroke-width="4" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+        fill="none"/>
+  
+  <!-- Two parallel lines inside chat bubble (text messages) -->
+  <path d="M38 45 H62" 
+        stroke="#ffffff" 
+        stroke-width="4" 
+        stroke-linecap="round"
+        fill="none"/>
+  <path d="M38 57 H62" 
+        stroke="#ffffff" 
+        stroke-width="4" 
+        stroke-linecap="round"
+        fill="none"/>
+</svg>
