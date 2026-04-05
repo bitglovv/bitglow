@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import AuthLayout from "../layouts/AuthLayout";
-import { ArrowRight, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+
+type LoginTouched = {
+    email: boolean;
+    password: boolean;
+};
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
@@ -13,12 +18,37 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [touched, setTouched] = useState<LoginTouched>({
+        email: false,
+        password: false,
+    });
     const { login } = useAuth();
     const navigate = useNavigate();
 
+    const emailError = useMemo(() => {
+        if (!touched.email) return "";
+        if (!email.trim()) return "Email is required.";
+        if (!/^\S+@\S+\.\S+$/.test(email)) return "Enter a valid email address.";
+        return "";
+    }, [email, touched.email]);
+
+    const passwordError = useMemo(() => {
+        if (!touched.password) return "";
+        if (!password) return "Password is required.";
+        return "";
+    }, [password, touched.password]);
+
+    const isFormValid = !emailError && !passwordError && email.trim() && password;
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+        setTouched({ email: true, password: true });
         setError("");
+
+        if (!email.trim() || !password || emailError || passwordError) {
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -34,15 +64,14 @@ export default function LoginPage() {
 
     return (
         <AuthLayout
-            title="BitGlow"
-            subtitle="Welcome back, please enter your details."
+            title="Log in"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
-                {error && (
-                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center font-medium animate-in fade-in slide-in-from-top-1">
+                {error ? (
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-center text-sm font-medium text-red-300 animate-in fade-in slide-in-from-top-1">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 <div className="space-y-4">
                     <Input
@@ -51,7 +80,8 @@ export default function LoginPage() {
                         placeholder="name@example.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        leftIcon={<Mail className="w-4 h-4" />}
+                        onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                        error={emailError}
                         required
                     />
 
@@ -62,49 +92,39 @@ export default function LoginPage() {
                             placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            leftIcon={<Lock className="w-4 h-4" />}
+                            onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
                             rightIcon={
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="hover:text-white transition-colors"
+                                    className="transition-colors hover:text-white"
                                 >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    {showPassword ? (
+                                        <EyeOff className="h-4 w-4" />
+                                    ) : (
+                                        <Eye className="h-4 w-4" />
+                                    )}
                                 </button>
                             }
+                            error={passwordError}
                             required
                         />
-                        <div className="flex justify-end px-1">
-                            <a href="#" className="text-xs text-brand font-semibold hover:text-brand-light transition-colors">
-                                Forgot password?
-                            </a>
-                        </div>
                     </div>
-                </div>
-
-                <div className="flex items-center gap-3 px-1">
-                    <input
-                        type="checkbox"
-                        id="remember"
-                        className="w-5 h-5 rounded-lg border-white/10 bg-white/5 text-brand focus:ring-brand/20 transition-all cursor-pointer accent-brand"
-                    />
-                    <label htmlFor="remember" className="text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors font-medium">
-                        Remember me
-                    </label>
                 </div>
 
                 <Button
                     type="submit"
                     isLoading={loading}
+                    disabled={!isFormValid || loading}
                     className="w-full py-4 text-base"
                 >
                     Sign In
                 </Button>
 
-                <div className="text-center pt-2">
-                    <p className="text-zinc-500 text-sm">
+                <div className="text-center">
+                    <p className="text-sm text-zinc-500">
                         New to BitGlow?{" "}
-                        <Link to="/signup" className="text-white hover:text-brand font-bold transition-colors">
+                        <Link to="/signup" className="font-bold text-white transition-colors hover:text-emerald-200">
                             Create an account
                         </Link>
                     </p>
@@ -113,4 +133,3 @@ export default function LoginPage() {
         </AuthLayout>
     );
 }
-

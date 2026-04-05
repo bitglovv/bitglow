@@ -1,42 +1,110 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import AuthLayout from "../layouts/AuthLayout";
-import { Eye, EyeOff, User, AtSign, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 
+type SignupForm = {
+    username: string;
+    displayName: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+};
+
+type SignupTouched = Record<keyof SignupForm, boolean>;
+
 export default function SignupPage() {
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<SignupForm>({
         username: "",
         displayName: "",
         email: "",
         password: "",
-        confirmPassword: ""
+        confirmPassword: "",
     });
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [touched, setTouched] = useState<SignupTouched>({
+        username: false,
+        displayName: false,
+        email: false,
+        password: false,
+        confirmPassword: false,
+    });
     const { login } = useAuth();
     const navigate = useNavigate();
 
+    const usernameError = useMemo(() => {
+        if (!touched.username) return "";
+        if (!form.username.trim()) return "Username is required.";
+        if (!/^[a-zA-Z0-9_.]+$/.test(form.username)) {
+            return "Use letters, numbers, underscores, or periods only.";
+        }
+        return "";
+    }, [form.username, touched.username]);
+
+    const displayNameError = useMemo(() => {
+        if (!touched.displayName) return "";
+        if (!form.displayName.trim()) return "Display name is required.";
+        return "";
+    }, [form.displayName, touched.displayName]);
+
+    const emailError = useMemo(() => {
+        if (!touched.email) return "";
+        if (!form.email.trim()) return "Email is required.";
+        if (!/^\S+@\S+\.\S+$/.test(form.email)) return "Enter a valid email address.";
+        return "";
+    }, [form.email, touched.email]);
+
+    const passwordError = useMemo(() => {
+        if (!touched.password) return "";
+        if (!form.password) return "Password is required.";
+        if (form.password.length < 6) return "Password must be at least 6 characters.";
+        return "";
+    }, [form.password, touched.password]);
+
+    const confirmPasswordError = useMemo(() => {
+        if (!touched.confirmPassword) return "";
+        if (!form.confirmPassword) return "Please confirm your password.";
+        if (form.password !== form.confirmPassword) return "Passwords do not match.";
+        return "";
+    }, [form.confirmPassword, form.password, touched.confirmPassword]);
+
+    const passwordStrength = useMemo(() => {
+        if (!form.password) return "";
+        if (form.password.length < 6) return "Weak";
+        if (form.password.length < 10) return "Medium";
+        return "Strong";
+    }, [form.password]);
+
+    const isFormValid =
+        !usernameError &&
+        !displayNameError &&
+        !emailError &&
+        !passwordError &&
+        !confirmPasswordError &&
+        form.username.trim() &&
+        form.displayName.trim() &&
+        form.email.trim() &&
+        form.password &&
+        form.confirmPassword;
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+        setTouched({
+            username: true,
+            displayName: true,
+            email: true,
+            password: true,
+            confirmPassword: true,
+        });
         setError("");
 
-        if (form.password.length < 6) {
-            setError("Password must be at least 6 characters.");
-            return;
-        }
-        if (form.password !== form.confirmPassword) {
-            setError("Passwords do not match.");
-            return;
-        }
-        if (!/^[a-zA-Z0-9_.]+$/.test(form.username)) {
-            setError("Username can only contain letters, numbers, and underscores.");
-            return;
-        }
+        if (!isFormValid) return;
 
         setLoading(true);
 
@@ -45,7 +113,7 @@ export default function SignupPage() {
                 username: form.username,
                 displayName: form.displayName,
                 email: form.email,
-                password: form.password
+                password: form.password,
             });
             login(token, user);
             navigate("/home");
@@ -60,27 +128,31 @@ export default function SignupPage() {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
 
+    const markTouched = (field: keyof SignupTouched) => {
+        setTouched((prev) => ({ ...prev, [field]: true }));
+    };
+
     return (
         <AuthLayout
             title="Create account"
-            subtitle="Join the next generation of real-time chat"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
-                {error && (
-                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center font-medium animate-in fade-in slide-in-from-top-1">
+                {error ? (
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-center text-sm font-medium text-red-300 animate-in fade-in slide-in-from-top-1">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input
                             label="Username"
                             name="username"
                             placeholder="johndoe"
                             value={form.username}
                             onChange={handleChange}
-                            leftIcon={<AtSign className="w-4 h-4" />}
+                            onBlur={() => markTouched("username")}
+                            error={usernameError}
                             required
                         />
                         <Input
@@ -89,7 +161,8 @@ export default function SignupPage() {
                             placeholder="John Doe"
                             value={form.displayName}
                             onChange={handleChange}
-                            leftIcon={<User className="w-4 h-4" />}
+                            onBlur={() => markTouched("displayName")}
+                            error={displayNameError}
                             required
                         />
                     </div>
@@ -101,11 +174,12 @@ export default function SignupPage() {
                         placeholder="name@example.com"
                         value={form.email}
                         onChange={handleChange}
-                        leftIcon={<Mail className="w-4 h-4" />}
+                        onBlur={() => markTouched("email")}
+                        error={emailError}
                         required
                     />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input
                             label="Password"
                             type={showPassword ? "text" : "password"}
@@ -113,26 +187,37 @@ export default function SignupPage() {
                             placeholder="••••••••"
                             value={form.password}
                             onChange={handleChange}
-                            leftIcon={<Lock className="w-4 h-4" />}
+                            onBlur={() => markTouched("password")}
+                            error={passwordError}
+                            helperText={
+                                form.password
+                                    ? `Strength: ${passwordStrength}`
+                                    : "Use at least 6 characters."
+                            }
                             required
                         />
                         <Input
-                            label="Confirm"
+                            label="Confirm Password"
                             type={showPassword ? "text" : "password"}
                             name="confirmPassword"
                             placeholder="••••••••"
                             value={form.confirmPassword}
                             onChange={handleChange}
-                            leftIcon={<Lock className="w-4 h-4" />}
+                            onBlur={() => markTouched("confirmPassword")}
                             rightIcon={
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="hover:text-white transition-colors"
+                                    className="transition-colors hover:text-white"
                                 >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    {showPassword ? (
+                                        <EyeOff className="h-4 w-4" />
+                                    ) : (
+                                        <Eye className="h-4 w-4" />
+                                    )}
                                 </button>
                             }
+                            error={confirmPasswordError}
                             required
                         />
                     </div>
@@ -142,6 +227,7 @@ export default function SignupPage() {
                     <Button
                         type="submit"
                         isLoading={loading}
+                        disabled={!isFormValid || loading}
                         className="w-full py-4 text-base"
                     >
                         Create Account
@@ -149,9 +235,9 @@ export default function SignupPage() {
                 </div>
 
                 <div className="text-center">
-                    <p className="text-zinc-500 text-sm font-medium">
+                    <p className="text-sm font-medium text-zinc-500">
                         Already have an account?{" "}
-                        <Link to="/login" className="text-white hover:text-brand font-bold transition-colors">
+                        <Link to="/login" className="font-bold text-white transition-colors hover:text-emerald-200">
                             Sign in
                         </Link>
                     </p>
@@ -160,4 +246,3 @@ export default function SignupPage() {
         </AuthLayout>
     );
 }
-

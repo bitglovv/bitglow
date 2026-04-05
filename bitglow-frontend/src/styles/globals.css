@@ -44,21 +44,22 @@
   :root {
     --brand: 255 255 255;
     --zinc-950: 9 9 11;
-    --brand-gradient: linear-gradient(135deg, #9C27B0, #E91E63, #FF9800, #FFC107);
+    --brand-gradient: linear-gradient(135deg, #c8ffd8 0%, #7ee7a8 38%, #27433a 72%, #050505 100%);
   }
 
   html,
   body,
   #root {
     height: 100%;
+    scroll-behavior: smooth;
     @apply bg-zinc-950 text-zinc-100 antialiased selection:bg-brand/30 selection:text-brand-light;
   }
 
   body {
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
     background-image:
-      radial-gradient(circle at 0% 0%, rgba(156, 39, 176, 0.08) 0%, transparent 45%),
-      radial-gradient(circle at 100% 100%, rgba(233, 30, 99, 0.08) 0%, transparent 45%);
+      radial-gradient(circle at 0% 0%, rgba(126, 231, 168, 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 100% 100%, rgba(39, 67, 58, 0.14) 0%, transparent 45%);
     background-attachment: fixed;
   }
 
@@ -171,6 +172,6 @@
 
 .auth-mesh-gradient {
   background:
-    radial-gradient(at 0% 0%, rgba(156, 39, 176, 0.18) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(233, 30, 99, 0.12) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, rgba(126, 231, 168, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(39, 67, 58, 0.14) 0px, transparent 50%);
 }

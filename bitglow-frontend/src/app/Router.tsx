@@ -2,6 +2,9 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import SignupPage from "../pages/SignupPage";
 import IndexPage from "../pages/IndexPage";
+import PrivacyPage from "../pages/PrivacyPage";
+import TermsPage from "../pages/TermsPage";
+import ContactPage from "../pages/ContactPage";
 import HomePage from "../pages/HomePage";
 import LiveChatPage from "../pages/LiveChatPage";
 import MessagesPage from "../pages/MessagesPage";
@@ -25,6 +28,9 @@ export default function Router() {
     return (
         <Routes>
             <Route path="/" element={<IndexPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/contact" element={<ContactPage />} />
 
             {/* Auth Routes - block if already logged in */}
             <Route path="/login" element={token && user ? <Navigate to="/home" /> : <LoginPage />} />
