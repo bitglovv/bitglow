@@ -8,29 +8,28 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 
 type LoginTouched = {
-    email: boolean;
+    identifier: boolean;
     password: boolean;
 };
 
 export default function LoginPage() {
-    const [email, setEmail] = useState("");
+    const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [touched, setTouched] = useState<LoginTouched>({
-        email: false,
+        identifier: false,
         password: false,
     });
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const emailError = useMemo(() => {
-        if (!touched.email) return "";
-        if (!email.trim()) return "Email is required.";
-        if (!/^\S+@\S+\.\S+$/.test(email)) return "Enter a valid email address.";
+    const identifierError = useMemo(() => {
+        if (!touched.identifier) return "";
+        if (!identifier.trim()) return "Email or username is required.";
         return "";
-    }, [email, touched.email]);
+    }, [identifier, touched.identifier]);
 
     const passwordError = useMemo(() => {
         if (!touched.password) return "";
@@ -38,21 +37,21 @@ export default function LoginPage() {
         return "";
     }, [password, touched.password]);
 
-    const isFormValid = !emailError && !passwordError && email.trim() && password;
+    const isFormValid = !identifierError && !passwordError && identifier.trim() && password;
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        setTouched({ email: true, password: true });
+        setTouched({ identifier: true, password: true });
         setError("");
 
-        if (!email.trim() || !password || emailError || passwordError) {
+        if (!identifier.trim() || !password || identifierError || passwordError) {
             return;
         }
 
         setLoading(true);
 
         try {
-            const { token, user } = await api.auth.login(email, password);
+            const { token, user } = await api.auth.login(identifier, password);
             login(token, user);
             navigate("/home");
         } catch (err: any) {
@@ -75,13 +74,13 @@ export default function LoginPage() {
 
                 <div className="space-y-4">
                     <Input
-                        label="Email Address"
-                        type="email"
-                        placeholder="name@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-                        error={emailError}
+                        label="Email or Username"
+                        type="text"
+                        placeholder="name@example.com or bitglow"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        onBlur={() => setTouched((prev) => ({ ...prev, identifier: true }))}
+                        error={identifierError}
                         required
                     />
 
@@ -116,7 +115,7 @@ export default function LoginPage() {
                     type="submit"
                     isLoading={loading}
                     disabled={!isFormValid || loading}
-                    className="w-full py-4 text-base"
+                    className="w-full bg-brand-gradient py-4 text-base text-white shadow-[0_18px_38px_-20px_rgba(126,231,168,0.42)] hover:brightness-110"
                 >
                     Sign In
                 </Button>

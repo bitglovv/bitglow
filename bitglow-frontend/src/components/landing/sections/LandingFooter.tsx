@@ -17,8 +17,7 @@ export function LandingFooter() {
                         Contact
                     </Link>
                 </div>
-                <div>&copy; 2026 BitGlow. All rights reserved.</div>
-                <div>Built for real-time social infrastructure</div>
+                <div>&copy; 2026 BitGlow</div>
             </div>
         </footer>
     );

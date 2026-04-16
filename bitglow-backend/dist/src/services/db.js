@@ -173,6 +173,11 @@ exports.db = {
         const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         return res.rows[0];
     },
+    async findUserByLoginIdentifier(identifier) {
+        const normalizedIdentifier = identifier.trim().toLowerCase();
+        const res = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1', [normalizedIdentifier]);
+        return res.rows[0];
+    },
     async findUserByUsername(username) {
         const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, created_at, updated_at FROM users WHERE username = $1', [username]);
         return res.rows[0];
@@ -427,7 +432,8 @@ exports.db = {
         }
         return { senderRoom, deliveries };
     },
-    async getLiveMessages(roomId, limit = 50) {
+    async getLiveMessages(roomId) {
+        // Fetch ALL messages from the last 5 minutes (300 seconds)
         const res = await pool.query(`SELECT lm.id,
                     lm.room_id,
                     lm.sender_id,
@@ -437,9 +443,9 @@ exports.db = {
              FROM live_messages lm
              JOIN users u ON u.id = lm.sender_id
              WHERE lm.room_id = $1
-             ORDER BY lm.created_at DESC
-             LIMIT $2`, [roomId, limit]);
-        return res.rows.reverse().map(row => ({
+               AND lm.created_at >= NOW() - INTERVAL '5 minutes'
+             ORDER BY lm.created_at ASC`, [roomId]);
+        return res.rows.map(row => ({
             id: row.id,
             roomId: row.room_id,
             userId: row.sender_id,
@@ -453,7 +459,7 @@ exports.db = {
         if (!room) {
             return null;
         }
-        const messages = await this.getLiveMessages(room.id, limit);
+        const messages = await this.getLiveMessages(room.id);
         return { room, messages };
     },
     async getSuspiciousLiveMessagesAudit(limit = 500) {

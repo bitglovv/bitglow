@@ -8,7 +8,7 @@ import { db } from "../services/db";
 export async function authRoutes(fastify: FastifyInstance) {
 
     // Helpful pointers for developers trying to visit routes in browser
-    fastify.get("/login", async () => ({ message: "Please use POST /api/auth/login with {email, password} to login." }));
+    fastify.get("/login", async () => ({ message: "Please use POST /api/auth/login with {identifier, password} to login." }));
     fastify.get("/signup", async () => ({ message: "Please use POST /api/auth/signup to create an account." }));
 
     fastify.post("/signup", async (req, reply) => {
@@ -56,17 +56,21 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post("/login", async (req, reply) => {
-        const { email, password } = req.body as any;
+        const { identifier, password } = req.body as any;
 
-        const dbUser = await db.findUserByEmail(email);
+        if (!identifier || !password) {
+            return reply.code(400).send({ message: "Username/email and password are required" });
+        }
+
+        const dbUser = await db.findUserByLoginIdentifier(identifier);
 
         if (!dbUser) {
-            return reply.code(401).send({ message: "Invalid email or password" });
+            return reply.code(401).send({ message: "Invalid username/email or password" });
         }
 
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            return reply.code(401).send({ message: "Invalid email or password" });
+            return reply.code(401).send({ message: "Invalid username/email or password" });
         }
 
         const user = {

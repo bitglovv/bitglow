@@ -203,6 +203,15 @@ export const db = {
         return res.rows[0];
     },
 
+    async findUserByLoginIdentifier(identifier: string) {
+        const normalizedIdentifier = identifier.trim().toLowerCase();
+        const res = await pool.query(
+            'SELECT * FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
+            [normalizedIdentifier]
+        );
+        return res.rows[0];
+    },
+
     async findUserByUsername(username: string) {
         const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, created_at, updated_at FROM users WHERE username = $1', [username]);
         return res.rows[0];

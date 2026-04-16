@@ -228,7 +228,7 @@ export default function SignupPage() {
                         type="submit"
                         isLoading={loading}
                         disabled={!isFormValid || loading}
-                        className="w-full py-4 text-base"
+                        className="w-full bg-brand-gradient py-4 text-base text-white shadow-[0_18px_38px_-20px_rgba(126,231,168,0.42)] hover:brightness-110"
                     >
                         Create Account
                     </Button>

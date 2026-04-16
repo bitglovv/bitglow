@@ -32,10 +32,16 @@ function startWS(httpServer) {
         socket.on("close", () => {
             const joinedRooms = Array.from(meta.rooms);
             clients.delete(meta);
-            console.log(`???? Client ${userId} disconnected. Total: ${clients.size}`);
+            console.log(`❌ Client ${userId} disconnected. Total: ${clients.size}`);
             (0, handlers_1.broadcastPresence)(clients);
             for (const roomId of joinedRooms) {
-                (0, handlers_1.broadcastRoomPresence)(clients, roomId);
+                // STEP 4 & 10: REMOVE USER FROM GLOBAL STORE
+                const users = handlers_1.roomUsers.get(roomId);
+                if (users) {
+                    users.delete(meta.userId);
+                    // Broadcast the new accurate count
+                    (0, handlers_1.broadcastRoomPresence)(clients, roomId);
+                }
             }
         });
         // Handle errors

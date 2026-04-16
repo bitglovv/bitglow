@@ -136,24 +136,84 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     return res;
 }
 
+async function readErrorMessage(res: Response, fallback: string) {
+    const text = await res.text();
+    if (!text) return fallback;
+
+    try {
+        const json = JSON.parse(text);
+        return json.error || json.message || fallback;
+    } catch {
+        return text || fallback;
+    }
+}
+
+async function parseJsonSafe<T>(res: Response): Promise<T | null> {
+    try {
+        return (await res.json()) as T;
+    } catch {
+        return null;
+    }
+}
+
+async function performLoginRequest(payload: Record<string, string>) {
+    return fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+}
+
+async function resolveEmailFromUsername(username: string): Promise<string | null> {
+    const res = await fetch(`${API_URL}/profile/${encodeURIComponent(username)}`);
+    if (!res.ok) return null;
+
+    const profile = await parseJsonSafe<{ email?: string }>(res);
+    return profile?.email?.trim() || null;
+}
+
 export const api = {
     auth: {
-        login: async (email: string, password: string): Promise<{ token: string; user: User }> => {
-            const res = await fetch(`${API_URL}/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
+        login: async (identifier: string, password: string): Promise<{ token: string; user: User }> => {
+            const normalizedIdentifier = identifier.trim();
+
+            let res = await performLoginRequest({
+                identifier: normalizedIdentifier,
+                email: normalizedIdentifier,
+                username: normalizedIdentifier,
+                password,
             });
-            if (!res.ok) {
-                const text = await res.text();
-                try {
-                    const json = JSON.parse(text);
-                    throw new Error(json.error || json.message || text);
-                } catch {
-                    throw new Error(text || "Login failed");
+
+            if (res.ok) {
+                return res.json();
+            }
+
+            const primaryError = await readErrorMessage(res, "Login failed");
+
+            res = await performLoginRequest({
+                email: normalizedIdentifier,
+                password,
+            });
+
+            if (res.ok) {
+                return res.json();
+            }
+
+            if (!normalizedIdentifier.includes("@")) {
+                const resolvedEmail = await resolveEmailFromUsername(normalizedIdentifier);
+                if (resolvedEmail) {
+                    res = await performLoginRequest({
+                        email: resolvedEmail,
+                        password,
+                    });
+
+                    if (res.ok) {
+                        return res.json();
+                    }
                 }
             }
-            return res.json();
+
+            throw new Error(primaryError);
         },
         signup: async (data: any): Promise<{ token: string; user: User }> => {
             const res = await fetch(`${API_URL}/auth/signup`, {
@@ -162,13 +222,7 @@ export const api = {
                 body: JSON.stringify(data),
             });
             if (!res.ok) {
-                const text = await res.text();
-                try {
-                    const json = JSON.parse(text);
-                    throw new Error(json.error || json.message || text);
-                } catch {
-                    throw new Error(text || "Signup failed");
-                }
+                throw new Error(await readErrorMessage(res, "Signup failed"));
             }
             return res.json();
         },

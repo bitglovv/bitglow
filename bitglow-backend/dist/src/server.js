@@ -13,7 +13,10 @@ const live_1 = require("./routes/live");
 const dms_1 = require("./routes/dms");
 const posts_1 = require("./routes/posts");
 const notifications_1 = require("./routes/notifications");
-const server = (0, fastify_1.default)({ logger: true });
+const server = (0, fastify_1.default)({
+    logger: true,
+    bodyLimit: 52428800 // 50MB limit to handle large mobile image base64 uploads
+});
 server.register(cors_1.default, {
     origin: true,
     credentials: true,

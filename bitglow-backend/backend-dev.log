@@ -1,0 +1,14 @@
+
+> dev
+> tsx watch src/server.ts
+
+[dotenv@17.2.3] injecting env (4) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+DATABASE_URL from env: postgresql://postgres:26092008@localhost:5432/bitglow
+{"level":30,"time":1775400714804,"pid":376,"hostname":"ERROR-04","msg":"Server listening at http://0.0.0.0:3003"}
+Server listening at http://0.0.0.0:3003
+🚀 WebSocket server ready
+Registered routes:
+{"level":30,"time":1775400754065,"pid":376,"hostname":"ERROR-04","reqId":"req-1","req":{"method":"GET","url":"/api/auth/login","hostname":"127.0.0.1:3003","remoteAddress":"127.0.0.1","remotePort":25377},"msg":"incoming request"}
+{"level":30,"time":1775400754076,"pid":376,"hostname":"ERROR-04","reqId":"req-1","res":{"statusCode":200},"responseTime":10.165200054645538,"msg":"request completed"}
+{"level":30,"time":1775400756673,"pid":376,"hostname":"ERROR-04","reqId":"req-2","req":{"method":"POST","url":"/api/auth/login","hostname":"127.0.0.1:3003","remoteAddress":"127.0.0.1","remotePort":25410},"msg":"incoming request"}
+{"level":30,"time":1775400756912,"pid":376,"hostname":"ERROR-04","reqId":"req-2","res":{"statusCode":401},"responseTime":239.24009996652603,"msg":"request completed"}
