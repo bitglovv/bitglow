@@ -136,15 +136,15 @@ export default function SignupPage() {
         <AuthLayout
             title="Create account"
         >
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
                 {error ? (
                     <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-center text-sm font-medium text-red-300 animate-in fade-in slide-in-from-top-1">
                         {error}
                     </div>
                 ) : null}
 
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-3.5">
+                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                         <Input
                             label="Username"
                             name="username"
@@ -179,7 +179,7 @@ export default function SignupPage() {
                         required
                     />
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                         <Input
                             label="Password"
                             type={showPassword ? "text" : "password"}
@@ -223,12 +223,12 @@ export default function SignupPage() {
                     </div>
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-1">
                     <Button
                         type="submit"
                         isLoading={loading}
                         disabled={!isFormValid || loading}
-                        className="w-full bg-brand-gradient py-4 text-base text-white shadow-[0_18px_38px_-20px_rgba(126,231,168,0.42)] hover:brightness-110"
+                        className="w-full py-4 text-base shadow-brand"
                     >
                         Create Account
                     </Button>
@@ -237,7 +237,7 @@ export default function SignupPage() {
                 <div className="text-center">
                     <p className="text-sm font-medium text-zinc-500">
                         Already have an account?{" "}
-                        <Link to="/login" className="font-bold text-white transition-colors hover:text-emerald-200">
+                        <Link to="/login" className="font-bold text-zinc-100 transition-colors hover:text-brand">
                             Sign in
                         </Link>
                     </p>

@@ -7,7 +7,7 @@ import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
 import { 
   Settings, X, Edit3, Share2, Send, MessageSquare, 
-  Video, UserPlus, ChevronLeft, MoreVertical, 
+  Video, UserPlus, ArrowLeft, MoreVertical, 
   UserMinus, UserX, Link2 
 } from "lucide-react";
 import clsx from "clsx";
@@ -338,21 +338,21 @@ export default function ProfilePage() {
         {/* Navigation Actions */}
         <div className="absolute top-4 left-4 right-4 md:left-6 md:right-6 flex items-center justify-between z-20">
           <button 
-            onClick={() => navigate(-1)} 
-            className="p-2.5 rounded-2xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-white transition-all hover:bg-white/10"
+            onClick={() => navigate("/")}
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-transparent text-white transition duration-200 hover:-translate-y-[1px] hover:bg-white/[0.04] active:translate-y-[1px]"
             aria-label="Back"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
 
           <div className="flex items-center gap-2">
             {isOwner ? (
               <Link
                 to="/settings"
-                className="p-2.5 rounded-2xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-white transition-all hover:bg-white/10"
+                className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-transparent text-white transition duration-200 hover:-translate-y-[1px] hover:bg-white/[0.04] active:translate-y-[1px]"
                 aria-label="Settings"
               >
-                <Settings className="w-6 h-6" />
+                <Settings className="h-5 w-5" />
               </Link>
             ) : (
               <div className="relative" ref={menuRef}>

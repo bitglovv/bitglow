@@ -35,11 +35,11 @@ export const Avatar: React.FC<AvatarProps> = ({
 
     return (
         <div className={`relative inline-block ${className}`}>
-            <div className={`${sizes[size]} rounded-full overflow-hidden flex items-center justify-center`}>
+            <div className={`${sizes[size]} overflow-hidden rounded-full bg-transparent flex items-center justify-center`}>
                 {src ? (
-                    <img src={src} alt={alt} className="w-full h-full object-cover" />
+                    <img src={src} alt={alt} className="block h-full w-full rounded-full object-cover" />
                 ) : (
-                    <div className="w-full h-full bg-brand/10 text-brand font-bold flex items-center justify-center text-sm">
+                    <div className="flex h-full w-full items-center justify-center rounded-full bg-transparent text-brand font-bold text-sm">
                         {initials}
                     </div>
                 )}

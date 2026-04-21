@@ -172,6 +172,29 @@ async function userRoutes(fastify) {
         }
     });
     /**
+     * DELETE /api/me
+     * Deletes the authenticated user after confirming identifier + password
+     */
+    fastify.delete("/me", async (req, reply) => {
+        const userId = getAuthUserId(req, reply);
+        if (!userId)
+            return;
+        const { identifier, password } = (req.body || {});
+        if (!identifier || !password) {
+            return reply.code(400).send({ message: "Username/email and password are required" });
+        }
+        const dbUser = await db_1.db.findUserByLoginIdentifier(identifier);
+        if (!dbUser || dbUser.id !== userId) {
+            return reply.code(401).send({ message: "Invalid username/email or password" });
+        }
+        const isValidPassword = await db_1.db.comparePassword(password, dbUser.password_hash);
+        if (!isValidPassword) {
+            return reply.code(401).send({ message: "Invalid username/email or password" });
+        }
+        await db_1.db.deleteUserAccount(userId);
+        return { ok: true };
+    });
+    /**
      * GET /api/username/check?u=
      * Check username availability
      */

@@ -2,16 +2,16 @@
 @config "../../tailwind.config.js";
 
 @theme {
-  --color-brand: #ffffff;
-  --color-brand-light: #e5e7eb;
-  --color-brand-dark: #9ca3af;
-  --color-brand-accent: #f8fafc;
+  --color-brand: #10b981;
+  --color-brand-light: #34d399;
+  --color-brand-dark: #102c26;
+  --color-brand-accent: #059669;
 
   --animation-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animation-float: float 6s ease-in-out infinite;
   --animation-glow: glow 2s ease-in-out infinite;
-  --shadow-brand: 0 0 18px rgba(255, 255, 255, 0.2);
-  --shadow-brand-glow: 0 0 24px rgba(255, 255, 255, 0.2);
+  --shadow-brand: 0 0 20px rgba(16, 185, 129, 0.25);
+  --shadow-brand-glow: 0 0 40px rgba(16, 44, 38, 0.4);
 
   @keyframes float {
 
@@ -42,9 +42,14 @@
 
 @layer base {
   :root {
-    --brand: 255 255 255;
-    --zinc-950: 9 9 11;
-    --brand-gradient: linear-gradient(135deg, #c8ffd8 0%, #7ee7a8 38%, #27433a 72%, #050505 100%);
+    --brand: 16 185 129;
+    --zinc-950: 5 5 5;
+    --bg: #050505;
+    --brand-primary: #102c26;
+    --brand-accent: #34d399;
+    --text-main: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.6);
+    --brand-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
   }
 
   html,
@@ -57,9 +62,10 @@
 
   body {
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background-color: #050505;
     background-image:
-      radial-gradient(circle at 0% 0%, rgba(126, 231, 168, 0.08) 0%, transparent 45%),
-      radial-gradient(circle at 100% 100%, rgba(39, 67, 58, 0.14) 0%, transparent 45%);
+      radial-gradient(circle at 50% 0%, rgba(16, 44, 38, 0.4) 0%, transparent 60%),
+      radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
     background-attachment: fixed;
   }
 
@@ -71,27 +77,41 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/[0.03] border border-white/10 backdrop-blur-xl rounded-3xl shadow-2xl;
+    @apply border-white/5 backdrop-blur-3xl rounded-3xl shadow-2xl;
+    background: rgba(16, 44, 38, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.1);
   }
 
   .glass-input {
-    @apply w-full bg-white/[0.03] border border-white/5 rounded-2xl px-4 py-3 text-base md:text-sm transition-all focus:outline-none focus:ring-1 focus:ring-brand/50 focus:bg-white/[0.05] placeholder:text-zinc-500;
+    @apply w-full rounded-2xl px-4 py-3 text-base md:text-sm transition-all focus:outline-none placeholder:text-zinc-500;
+    background: rgba(16, 44, 38, 0.12);
+    border: 1px solid rgba(16, 44, 38, 0.45);
+    color: #ffffff;
+    box-shadow: 0 10px 40px -20px rgba(0, 0, 0, 0.8);
   }
 
   .btn-vnext {
-    @apply relative overflow-hidden bg-white text-black font-semibold px-6 py-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-brand hover:bg-white/90;
+    @apply relative overflow-hidden font-semibold px-6 py-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-brand;
+    background: #10b981;
+    color: #050505;
   }
 
   .btn-vnext-secondary {
-    @apply bg-white/[0.03] backdrop-blur-xl hover:bg-white/10 text-white font-medium px-6 py-3 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 border border-white/10;
+    @apply backdrop-blur-xl font-medium px-6 py-3 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2;
+    background: transparent;
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.4);
   }
 
   .card {
-    @apply bg-[#0c0f16] rounded-xl p-6 transition cursor-pointer border border-white/5;
+    @apply rounded-xl p-6 transition cursor-pointer;
+    background: rgba(16, 44, 38, 0.12);
+    border: 1px solid rgba(16, 44, 38, 0.3);
   }
 
   .desc {
-    @apply block text-sm text-white/60 mt-2;
+    @apply block text-sm mt-2;
+    color: var(--text-muted);
   }
 
   .bg-brand-gradient {
@@ -172,6 +192,6 @@
 
 .auth-mesh-gradient {
   background:
-    radial-gradient(at 0% 0%, rgba(126, 231, 168, 0.18) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(39, 67, 58, 0.14) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, rgba(16, 44, 38, 0.22) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(16, 44, 38, 0.16) 0px, transparent 50%);
 }

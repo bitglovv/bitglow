@@ -267,6 +267,16 @@ export const api = {
             if (!res.ok) throw new Error(await res.text());
             return res.json();
         },
+        deleteAccount: async (identifier: string, password: string): Promise<boolean> => {
+            const res = await fetchWithAuth("/api/me", {
+                method: "DELETE",
+                body: JSON.stringify({ identifier, password }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to delete account"));
+            }
+            return true;
+        },
         follow: async (userId: string, username?: string): Promise<FollowStatus | null> => {
             const res = await fetchWithAuth(`/users/${userId}/follow`, {
                 method: "POST",

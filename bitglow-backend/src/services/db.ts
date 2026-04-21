@@ -217,6 +217,33 @@ export const db = {
         return res.rows[0];
     },
 
+    async deleteUserAccount(userId: string) {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+
+            await client.query("DELETE FROM dm_messages WHERE sender_id = $1", [userId]);
+            await client.query("DELETE FROM dm_messages WHERE conversation_id IN (SELECT id FROM dm_conversations WHERE user_a = $1 OR user_b = $1)", [userId]);
+            await client.query("DELETE FROM dm_conversations WHERE user_a = $1 OR user_b = $1", [userId]);
+
+            await client.query("DELETE FROM live_messages WHERE sender_id = $1", [userId]);
+            await client.query("DELETE FROM live_messages WHERE room_id IN (SELECT id FROM live_rooms WHERE created_by = $1)", [userId]);
+            await client.query("DELETE FROM live_rooms WHERE created_by = $1", [userId]);
+
+            await client.query("DELETE FROM friends WHERE user_id = $1 OR friend_id = $1", [userId]);
+            await client.query("DELETE FROM messages WHERE user_id = $1", [userId]);
+            await client.query("DELETE FROM users WHERE id = $1", [userId]);
+
+            await client.query("COMMIT");
+            return true;
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    },
+
     async createUser(user: any) {
         const query = `
             INSERT INTO users (id, username, display_name, email, password_hash, avatar_url, website, location, bio, followers_count, follows_count, role, is_private)

@@ -19,20 +19,20 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 )}
                 <div className="relative group">
                     {leftIcon && (
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 transition-colors group-focus-within:text-emerald-200">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 transition-colors group-focus-within:text-brand">
                             {leftIcon}
                         </div>
                     )}
                     <input
                         ref={ref}
                         className={`
-              w-full rounded-2xl border border-white/8 bg-white/[0.035] px-4 py-3.5
+              w-full rounded-2xl border border-[#102C26] bg-[#102C26]/15 px-4 py-3.5
               text-sm text-white shadow-[0_10px_30px_-25px_rgba(0,0,0,0.7)] transition-all
-              outline-none placeholder:text-zinc-600 focus:scale-[1.01] focus:border-emerald-200/18
-              focus:bg-white/[0.06] focus:ring-2 focus:ring-emerald-200/12
+              outline-none placeholder:text-zinc-600 focus:scale-[1.01] focus:border-brand/60
+              focus:bg-[#102C26]/25 focus:ring-4 focus:ring-brand/10
               ${leftIcon ? 'pl-11' : ''} 
               ${rightIcon ? 'pr-11' : ''}
-              ${error ? 'border-red-500/45 focus:border-red-400/45 focus:ring-red-500/20' : ''}
+              ${error ? 'border-red-500/40 focus:border-red-400/45 focus:ring-red-500/10' : ''}
               ${className}
             `}
                         {...props}
@@ -43,7 +43,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                         </div>
                     )}
                 </div>
-                {error && <p className="ml-1 text-xs text-red-400">{error}</p>}
+                {error && <p className="ml-1 text-xs text-red-500">{error}</p>}
                 {!error && helperText ? <p className="ml-1 text-xs text-zinc-500">{helperText}</p> : null}
             </div>
         );
