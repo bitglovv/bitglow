@@ -4,7 +4,6 @@ import { useAuth } from "../hooks/useAuth";
 import {
   MessageSquare,
   Send,
-  Clock,
   Heart,
   Share2,
   Bookmark,
@@ -22,16 +21,29 @@ import { Input } from "../components/ui/Input";
 import { Avatar } from "../components/ui/Avatar";
 import { api, Post, Friend } from "../services/api";
 
-const timeAgo = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const diffMs = Date.now() - date.getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+const timeAgo = (dateStr: string): string => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s || 1}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  const w = Math.floor(d / 7);
+  if (d < 30) return `${w}w`;
+  const mo = Math.floor(d / 30);
+  if (d < 365) return `${mo}mo`;
+  return `${Math.floor(d / 365)}y`;
+};
+
+const formatDate = (dateStr: string): string => {
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 function BottomSheet({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) {
@@ -63,9 +75,12 @@ type PostCardProps = {
   onSave: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onUnfollow?: () => void;
+  onBlock?: () => void;
+  onReport?: () => void;
 };
 
-function PostCard({ post, currentUserId, onLike, onComment, onShare, onSave, onEdit, onDelete }: PostCardProps) {
+function PostCard({ post, currentUserId, onLike, onComment, onShare, onSave, onEdit, onDelete, onUnfollow, onBlock, onReport }: PostCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -78,45 +93,59 @@ function PostCard({ post, currentUserId, onLike, onComment, onShare, onSave, onE
           <Avatar alt={post.author.username} size="xs" src={post.author.avatarUrl} />
           <div className="flex-1 space-y-2">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-semibold text-base md:text-lg">{post.author.username}</span>
+                <span className="text-zinc-600 text-xs">•</span>
+                <span className="text-xs text-zinc-500">{timeAgo(post.createdAt || new Date().toISOString())}</span>
               </div>
             </div>
           </div>
         </Link>
-        {currentUserId && currentUserId === post.author.id && (
-          <div className="relative">
-            <button
-              aria-label="Post options"
-              className="ml-auto text-zinc-500 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5"
-              onClick={() => setShowMenu(!showMenu)}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-[90]" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 top-10 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
-                  <button onClick={() => { setShowMenu(false); if (onEdit) onEdit(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                    <Edit3 className="w-4 h-4" /> Edit
-                  </button>
-                  <button onClick={() => { setShowMenu(false); if (onDelete) onDelete(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
-                    <Trash2 className="w-4 h-4" /> Delete
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <div className="relative">
+          <button
+            aria-label="Post options"
+            className="ml-auto text-zinc-500 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5"
+            onClick={() => setShowMenu(!showMenu)}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-[90]" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-10 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
+                {currentUserId === post.author.id ? (
+                  <>
+                    <button onClick={() => { setShowMenu(false); if (onEdit) onEdit(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                      <Edit3 className="w-4 h-4" /> Edit
+                    </button>
+                    <button onClick={() => { setShowMenu(false); if (onDelete) onDelete(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => { setShowMenu(false); if (onUnfollow) onUnfollow(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                      Unfollow
+                    </button>
+                    <button onClick={() => { setShowMenu(false); if (onBlock) onBlock(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                      Block
+                    </button>
+                    <button onClick={() => { setShowMenu(false); if (onReport) onReport(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
+                      Report
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-2 mt-3">
-        {post.title ? <p className="font-semibold text-lg md:text-xl">{post.title}</p> : null}
-        <p className="text-xs text-zinc-500 flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {timeAgo(post.createdAt || new Date().toISOString())}
-        </p>
-      </div>
+      {post.title && (
+        <div className="space-y-2 mt-3">
+          <p className="font-semibold text-lg md:text-xl">{post.title}</p>
+        </div>
+      )}
 
       <p className="text-zinc-200 leading-relaxed text-sm md:text-base mt-2">{post.content}</p>
 
@@ -138,6 +167,11 @@ function PostCard({ post, currentUserId, onLike, onComment, onShare, onSave, onE
           <span>{post.savedByMe ? "Saved" : "Save"}</span>
         </button>
       </div>
+
+      {/* Post date footer */}
+      <p className="text-[10px] text-zinc-600 pt-1.5 mt-1">
+        {formatDate(post.createdAt || new Date().toISOString())}
+      </p>
     </Card>
   );
 }
@@ -179,32 +213,42 @@ function Composer({ user, onPostCreated }: ComposerProps) {
   };
 
   return (
-    <Card variant="dark" padding="md" className="border-transparent md:border-white/10 bg-white/[0.02] md:bg-black/40 shadow-[0_10px_40px_rgba(0,0,0,0.25)] md:shadow-none">
-      <div className="flex gap-3">
-        <Avatar alt={user?.username || "You"} size="xs" src={user?.avatarUrl} />
-        <div className="flex-1 space-y-3">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Post title"
-            className="bg-white/[0.04] md:bg-white/[0.03]"
-          />
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Share your thoughts with everyone following you..."
-            maxLength={maxChars}
-            className="w-full bg-white/[0.04] md:bg-white/[0.03] border border-white/5 rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:bg-white/[0.06] md:focus:bg-white/[0.05] resize-none min-h-[140px]"
-          />
-          <div className="flex items-center justify-between text-sm text-zinc-500">
-            <span className="text-xs text-zinc-600">{charCount}/{maxChars}</span>
-            <Button size="sm" disabled={!canPost || isSubmitting} onClick={handleSubmit} isLoading={isSubmitting}>
-              Post to friends <Send className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
-        </div>
+    <div className="bg-white/[0.02] md:bg-black/40 border border-white/15 rounded-3xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.25)] md:shadow-none">
+
+      {/* Top bar — avatar + name */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-white/[0.04]">
+        <Avatar alt={user?.username || "You"} size="sm" src={user?.avatarUrl} />
+        <span className="text-sm font-semibold text-zinc-300">{user?.username || "You"}</span>
       </div>
-    </Card>
+
+      {/* Title input — edge to edge */}
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Post title (optional)"
+        className="w-full bg-transparent px-4 pt-4 pb-2 text-base font-semibold text-white placeholder:text-zinc-600 focus:outline-none"
+      />
+
+      {/* Body textarea — edge to edge, tall */}
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="What's on your mind? Share with your friends..."
+        maxLength={maxChars}
+        className="w-full bg-transparent px-4 py-2 text-[15px] text-white placeholder:text-zinc-600 focus:outline-none resize-none min-h-[200px] leading-relaxed"
+      />
+
+      {/* Footer row */}
+      <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.04]">
+        <span className={`text-xs font-medium tabular-nums ${charCount > maxChars * 0.9 ? 'text-amber-400' : 'text-zinc-600'}`}>
+          {charCount}/{maxChars}
+        </span>
+        <Button size="sm" disabled={!canPost || isSubmitting} onClick={handleSubmit} isLoading={isSubmitting}>
+          Post to friends <Send className="w-4 h-4 ml-2" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -212,6 +256,10 @@ export default function HomePage() {
   const { user, isLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+
+  useEffect(() => {
+    document.title = "BitGlow \u2022 Home";
+  }, []);
 
   // Modal states
   const [commentingPost, setCommentingPost] = useState<Post | null>(null);
@@ -387,6 +435,18 @@ export default function HomePage() {
                   setEditContent(post.content);
                 }}
                 onDelete={() => handleDelete(post.id)}
+                onUnfollow={async () => {
+                  await api.user.unfollow(post.author.id);
+                  // Refresh feed or remove posts by this user visually
+                  setPosts(prev => prev.filter(p => p.author.id !== post.author.id));
+                }}
+                onBlock={() => {
+                  alert(`Blocked ${post.author.username}`);
+                  setPosts(prev => prev.filter(p => p.author.id !== post.author.id));
+                }}
+                onReport={() => {
+                  alert(`Reported post by ${post.author.username}`);
+                }}
               />
             ))
           )}

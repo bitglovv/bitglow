@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
@@ -18,6 +18,7 @@ type SignupForm = {
 type SignupTouched = Record<keyof SignupForm, boolean>;
 
 export default function SignupPage() {
+    useEffect(() => { document.title = "BitGlow \u2022 Sign Up"; }, []);
     const [form, setForm] = useState<SignupForm>({
         username: "",
         displayName: "",

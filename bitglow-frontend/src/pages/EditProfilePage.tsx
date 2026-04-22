@@ -1,4 +1,4 @@
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
@@ -10,6 +10,7 @@ import { Input } from "../components/ui/Input";
 import clsx from "clsx";
 
 export default function EditProfilePage() {
+    useEffect(() => { document.title = "BitGlow \u2022 Edit Profile"; }, []);
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
 

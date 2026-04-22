@@ -710,6 +710,7 @@ exports.db = {
         return (res.rowCount ?? 0) > 0;
     },
     async getNotifications(userId, limit = 50) {
+        // 1. Likes on your posts
         const likesRes = await pool.query(`SELECT pl.user_id,
                     pl.post_id,
                     pl.created_at,
@@ -720,9 +721,10 @@ exports.db = {
              FROM post_likes pl
              JOIN posts p ON p.id = pl.post_id
              JOIN users u ON u.id = pl.user_id
-             WHERE p.author_id = $1
+             WHERE p.author_id = $1 AND pl.user_id <> $1
              ORDER BY pl.created_at DESC
              LIMIT $2`, [userId, limit]);
+        // 2. Comments on your posts
         const commentsRes = await pool.query(`SELECT pc.author_id as user_id,
                     pc.post_id,
                     pc.created_at,
@@ -734,19 +736,36 @@ exports.db = {
              FROM post_comments pc
              JOIN posts p ON p.id = pc.post_id
              JOIN users u ON u.id = pc.author_id
-             WHERE p.author_id = $1
+             WHERE p.author_id = $1 AND pc.author_id <> $1
              ORDER BY pc.created_at DESC
              LIMIT $2`, [userId, limit]);
-        const followReqRes = await pool.query(`SELECT f.user_id,
+        // 3. Follow requests and New Followers
+        const followsRes = await pool.query(`SELECT f.user_id,
                     f.created_at,
-                    'follow_request' AS type,
+                    f.status,
+                    u.username,
+                    u.display_name,
+                    u.avatar_url,
+                    (SELECT 1 FROM friends f2 WHERE f2.user_id = $1 AND f2.friend_id = f.user_id AND f2.status = 'accepted' LIMIT 1) as "is_mutual"
+             FROM friends f
+             JOIN users u ON u.id = f.user_id
+             WHERE f.friend_id = $1 AND f.user_id <> $1
+             ORDER BY f.created_at DESC
+             LIMIT $2`, [userId, limit]);
+        // 4. New DM Notifications (Last message from others)
+        const dmsRes = await pool.query(`SELECT m.sender_id as user_id,
+                    m.text as content,
+                    m.created_at,
+                    'dm' as type,
                     u.username,
                     u.display_name,
                     u.avatar_url
-             FROM friends f
-             JOIN users u ON u.id = f.user_id
-             WHERE f.friend_id = $1 AND f.status = 'pending'
-             ORDER BY f.created_at DESC
+             FROM dm_messages m
+             JOIN dm_conversations c ON c.id = m.conversation_id
+             JOIN users u ON u.id = m.sender_id
+             WHERE (c.user_a = $1 OR c.user_b = $1)
+               AND m.sender_id <> $1
+             ORDER BY m.created_at DESC
              LIMIT $2`, [userId, limit]);
         const items = [
             ...likesRes.rows.map((r) => ({
@@ -762,9 +781,15 @@ exports.db = {
                 content: r.content,
                 createdAt: r.created_at
             })),
-            ...followReqRes.rows.map((r) => ({
-                type: 'follow_request',
+            ...followsRes.rows.map((r) => ({
+                type: r.status === 'pending' ? 'follow_request' : (r.is_mutual ? 'follow_back' : 'follow'),
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
+                createdAt: r.created_at
+            })),
+            ...dmsRes.rows.map((r) => ({
+                type: 'dm',
+                user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
+                content: r.content,
                 createdAt: r.created_at
             })),
         ];

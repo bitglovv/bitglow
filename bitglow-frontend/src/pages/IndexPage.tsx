@@ -10,6 +10,10 @@ export default function IndexPage() {
     const navigate = useNavigate();
 
     useEffect(() => {
+        document.title = "BitGlow";
+    }, []);
+
+    useEffect(() => {
         if (!isLoading && user) {
             navigate("/home");
         }

@@ -13,6 +13,9 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
     const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
 
+    // Notifications page has its own full-page layout — hide both bars
+    const isNotificationsPage = location.pathname === "/notifications";
+
     useEffect(() => {
         if (!user) return;
 
@@ -43,6 +46,7 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
     }, [user?.id, location.pathname]);
 
     if (!user) return null;
+    if (isNotificationsPage) return null;
 
     const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
     const isHome = isActive("/home");

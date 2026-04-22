@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
@@ -13,6 +13,7 @@ type LoginTouched = {
 };
 
 export default function LoginPage() {
+    useEffect(() => { document.title = "BitGlow \u2022 Login"; }, []);
     const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);

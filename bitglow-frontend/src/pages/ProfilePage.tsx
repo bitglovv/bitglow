@@ -201,6 +201,14 @@ export default function ProfilePage() {
   }, [loggedInUser?.id]);
 
   useEffect(() => {
+    if (profile) {
+      document.title = `BitGlow \u2022 Profile (@${profile.username})`;
+    } else if (!loading) {
+      document.title = "BitGlow \u2022 Profile";
+    }
+  }, [profile, loading]);
+
+  useEffect(() => {
     if (!profile || !loggedInUser) return;
     const isFriend = friends.some((f) => f.id === profile.id);
     const isFollowingUser = following.some((f) => f.id === profile.id);

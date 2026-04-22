@@ -101,7 +101,10 @@ export type Post = {
 export type Notification =
     | { type: "like"; user: User; postId: string; createdAt: string }
     | { type: "comment"; user: User; postId: string; content: string; createdAt: string }
-    | { type: "follow_request"; user: User; createdAt: string };
+    | { type: "follow_request"; user: User; createdAt: string }
+    | { type: "follow"; user: User; createdAt: string }
+    | { type: "follow_back"; user: User; createdAt: string }
+    | { type: "dm"; user: User; content: string; createdAt: string };
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
     const token = localStorage.getItem("token");

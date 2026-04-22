@@ -18,6 +18,8 @@ export default function MessagesPage() {
     const [friendQuery, setFriendQuery] = useState("");
     const [inboxTab, setInboxTab] = useState<"chats"| "requests">("chats");
 
+    useEffect(() => { document.title = "BitGlow \u2022 Messages"; }, []);
+
     useEffect(() => {
         api.dms.list().then(setConversations).catch(console.error);
         api.user.friends().then(setFriends).catch(() => setFriends([]));

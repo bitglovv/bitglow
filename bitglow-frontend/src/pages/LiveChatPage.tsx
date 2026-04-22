@@ -85,6 +85,10 @@ export default function LiveChatPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    document.title = "BitGlow \u2022 Live Chat";
+  }, []);
+
+  useEffect(() => {
     activeRoomIdRef.current = activeRoom?.id ?? null;
     if (activeRoom?.id) {
        localStorage.setItem('bitglow_last_room_id', activeRoom.id);

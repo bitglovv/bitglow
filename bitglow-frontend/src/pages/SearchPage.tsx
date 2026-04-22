@@ -14,6 +14,8 @@ export default function SearchPage() {
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
 
+  useEffect(() => { document.title = "BitGlow \u2022 Search"; }, []);
+
   useEffect(() => {
     let cancelled = false;
     api.user.list().then((list) => {

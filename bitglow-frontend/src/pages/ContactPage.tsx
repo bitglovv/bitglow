@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { LegalLayout } from "../components/landing/LegalLayout";
 
 export default function ContactPage() {
+    useEffect(() => { document.title = "BitGlow \u2022 Contact"; }, []);
     return (
         <LegalLayout
             title="Contact"

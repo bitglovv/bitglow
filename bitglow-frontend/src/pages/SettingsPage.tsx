@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
@@ -8,6 +8,7 @@ import { Button } from "../components/ui/Button";
 import { api } from "../services/api";
 
 export default function SettingsPage() {
+    useEffect(() => { document.title = "BitGlow \u2022 Settings"; }, []);
     const { logout, user } = useAuth();
     const navigate = useNavigate();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
