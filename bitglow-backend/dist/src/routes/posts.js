@@ -1,43 +1,22 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.postRoutes = postRoutes;
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const store_1 = require("../services/store");
 const db_1 = require("../services/db");
+const security_1 = require("../services/security");
+const schemas_1 = require("./schemas");
 async function postRoutes(fastify) {
-    const getAuthUserId = (req, reply) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            reply.code(401).send({ message: "No token provided" });
-            return null;
-        }
-        const token = authHeader.split(" ")[1];
-        if (!token) {
-            reply.code(401).send({ message: "Malformed token" });
-            return null;
-        }
-        try {
-            const decoded = jsonwebtoken_1.default.verify(token, store_1.JWT_SECRET);
-            return decoded.id;
-        }
-        catch {
-            reply.code(401).send({ message: "Invalid token" });
-            return null;
-        }
-    };
-    fastify.post("/posts", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.post("/posts", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.createPostSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { content, title, visibility } = (req.body || {});
         if (!content || typeof content !== "string" || content.trim().length === 0) {
             return reply.code(400).send({ message: "Content is required" });
         }
         const vis = visibility === "public" ? "public" : "friends";
-        const post = await db_1.db.createPost(userId, content.trim(), title?.trim() || undefined, vis);
+        const post = await db_1.db.createPost(userId, (0, security_1.sanitizeText)(content.trim(), 5000), title?.trim() ? (0, security_1.sanitizeText)(title.trim(), 140) : undefined, vis);
         const author = await db_1.db.getUserById(userId);
         return {
             post: {
@@ -55,42 +34,46 @@ async function postRoutes(fastify) {
             }
         };
     });
-    fastify.get("/posts/feed", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.get("/posts/feed", { preHandler: fastify.requireAuth, schema: schemas_1.feedQuerySchema }, async (req, reply) => {
+        const userId = req.auth.id;
         const { limit = "50", offset = "0" } = (req.query || {});
         const l = Math.min(Number(limit) || 50, 100);
         const o = Number(offset) || 0;
         const posts = await db_1.db.getFeedPosts(userId, l, o);
         return { posts };
     });
-    fastify.post("/posts/:id/like", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.post("/posts/:id/like", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { id } = req.params;
         const result = await db_1.db.toggleLike(userId, id);
         return { liked: result.liked, likesCount: result.count };
     });
-    fastify.post("/posts/:id/save", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.post("/posts/:id/save", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { id } = req.params;
         const result = await db_1.db.toggleSave(userId, id);
         return { saved: result.saved, savesCount: result.count };
     });
-    fastify.post("/posts/:id/comment", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.post("/posts/:id/comment", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.postCommentSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { id } = req.params;
         const { content } = (req.body || {});
         if (!content || !content.trim()) {
             return reply.code(400).send({ message: "Comment content required" });
         }
-        const comment = await db_1.db.addComment(userId, id, content.trim());
+        const comment = await db_1.db.addComment(userId, id, (0, security_1.sanitizeText)(content.trim(), 1000));
         const author = await db_1.db.getUserById(userId);
         return {
             comment: {
@@ -106,31 +89,32 @@ async function postRoutes(fastify) {
             },
         };
     });
-    fastify.get("/posts/:id/comments", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.get("/posts/:id/comments", { preHandler: fastify.requireAuth, schema: schemas_1.idParamSchema }, async (req, reply) => {
         const { id } = req.params;
         const comments = await db_1.db.getComments(id);
         return { comments };
     });
-    fastify.put("/posts/:id", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.put("/posts/:id", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.updatePostSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { id } = req.params;
         const { content, title } = (req.body || {});
         if (!content || !content.trim())
             return reply.code(400).send({ message: "Content required" });
-        const updated = await db_1.db.updatePost(id, userId, content.trim(), title?.trim());
+        const updated = await db_1.db.updatePost(id, userId, (0, security_1.sanitizeText)(content.trim(), 5000), title?.trim() ? (0, security_1.sanitizeText)(title.trim(), 140) : undefined);
         if (!updated)
             return reply.code(404).send({ message: "Post not found" });
         return { post: updated };
     });
-    fastify.delete("/posts/:id", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId)
-            return;
+    fastify.delete("/posts/:id", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: schemas_1.idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth.id;
         const { id } = req.params;
         const ok = await db_1.db.deletePost(id, userId);
         if (!ok)

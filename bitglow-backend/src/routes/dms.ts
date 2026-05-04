@@ -1,38 +1,15 @@
 import { FastifyInstance } from "fastify";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../services/store";
 import { db } from "../services/db";
-
-function getAuthUserId(req: any, reply: any): string | null {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        reply.code(401).send({ message: "Authorization required" });
-        return null;
-    }
-
-    const token = authHeader.split(" ")[1];
-    if (!token) {
-        reply.code(401).send({ message: "Malformed token" });
-        return null;
-    }
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        return decoded.id;
-    } catch (err) {
-        reply.code(401).send({ message: "Invalid or expired token" });
-        return null;
-    }
-}
+import { sanitizeText } from "../services/security";
+import { dmSendSchema, dmUserSchema } from "./schemas";
 
 export async function dmRoutes(fastify: FastifyInstance) {
     /**
      * GET /api/dms
      * List conversations for current user
      */
-    fastify.get("/dms", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.get("/dms", { preHandler: fastify.requireAuth }, async (req) => {
+        const userId = req.auth!.id;
 
         const rows = await db.listDMConversations(userId);
         const conversations = rows.map((r: any) => ({
@@ -51,9 +28,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
      * GET /api/dms/:userId
      * Get message history with a specific user
      */
-    fastify.get("/dms/:userId", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.get("/dms/:userId", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
 
         const { userId: otherId } = req.params as { userId: string };
         if (!otherId) {
@@ -80,9 +56,12 @@ export async function dmRoutes(fastify: FastifyInstance) {
      * POST /api/dms/:userId
      * Send a message to a user (friends only)
      */
-    fastify.post("/dms/:userId", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/dms/:userId", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: dmSendSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
 
         const { userId: otherId } = req.params as { userId: string };
         const { text } = req.body as { text?: string };
@@ -96,7 +75,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
         }
 
         const convo = await db.getOrCreateDMConversation(userId, otherId);
-        const saved = await db.saveDMMessage(convo.id, userId, text.trim());
+        const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000));
 
         return {
             id: saved.id,

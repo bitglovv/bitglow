@@ -1,34 +1,10 @@
 import { FastifyInstance } from "fastify";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../services/store";
 import { db } from "../services/db";
-
-function getAuthUserId(req: any, reply: any): string | null {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        reply.code(401).send({ message: "Authorization required" });
-        return null;
-    }
-
-    const token = authHeader.split(" ")[1];
-    if (!token) {
-        reply.code(401).send({ message: "Malformed token" });
-        return null;
-    }
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        return decoded.id;
-    } catch (err) {
-        reply.code(401).send({ message: "Invalid or expired token" });
-        return null;
-    }
-}
+import { liveCreateSchema } from "./schemas";
 
 export async function liveRoutes(fastify: FastifyInstance) {
-    fastify.get("/live/rooms", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.get("/live/rooms", { preHandler: fastify.requireAuth }, async (req) => {
+        const userId = req.auth!.id;
 
         await db.getOrCreateOwnerLiveRoom(userId);
         const rooms = await db.getAccessibleLiveRooms(userId);
@@ -36,9 +12,12 @@ export async function liveRoutes(fastify: FastifyInstance) {
         return { rooms };
     });
 
-    fastify.post("/live/rooms", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/live/rooms", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: liveCreateSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
 
         const { ownerId } = ((req.body as { ownerId?: string } | undefined) ?? {});
         const targetOwnerId = ownerId || userId;

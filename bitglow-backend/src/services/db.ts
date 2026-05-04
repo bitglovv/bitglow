@@ -1,14 +1,12 @@
 import { Pool, PoolClient } from 'pg';
-import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
-
-dotenv.config();
-
-console.log('DATABASE_URL from env:', process.env.DATABASE_URL);
+import { env } from "../config/env";
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:26092008@localhost:5432/bitglow',
+    connectionString: env.DATABASE_URL,
 });
+
+const BCRYPT_ROUNDS = 12;
 
 // Ensure posts + related tables exist for blogging
 const initPostsTable = async () => {
@@ -57,6 +55,53 @@ const initPostsTable = async () => {
     }
 };
 void initPostsTable();
+
+const initSecurityTables = async () => {
+    try {
+        await pool.query(`
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'user_sessions' AND column_name = 'token'
+                ) AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'user_sessions' AND column_name = 'token_hash'
+                ) THEN
+                    ALTER TABLE user_sessions RENAME COLUMN token TO token_hash;
+                END IF;
+            END $$;
+
+            ALTER TABLE user_sessions
+            ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;
+
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
+
+            CREATE TABLE IF NOT EXISTS security_logs (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                event_type TEXT NOT NULL,
+                user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                details JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP DEFAULT now()
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_security_logs_event_type ON security_logs(event_type);
+            CREATE INDEX IF NOT EXISTS idx_security_logs_user_id ON security_logs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_security_logs_created_at ON security_logs(created_at DESC);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure security tables", err);
+    }
+};
+void initSecurityTables();
 
 type Queryable = Pick<PoolClient, 'query'>;
 
@@ -165,12 +210,113 @@ export const db = {
     query: (text: string, params?: any[]) => pool.query(text, params),
 
     async hashPassword(password: string): Promise<string> {
-        const saltRounds = 10;
-        return await bcrypt.hash(password, saltRounds);
+        return await bcrypt.hash(password, BCRYPT_ROUNDS);
     },
 
     async comparePassword(password: string, hashedPassword: string): Promise<boolean> {
         return await bcrypt.compare(password, hashedPassword);
+    },
+
+    async createSession(input: { userId: string; tokenHash: string; ipAddress?: string; userAgent?: string; expiresAt: Date; }) {
+        const res = await pool.query(
+            `INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, user_id, token_hash, ip_address, user_agent, created_at, expires_at`,
+            [input.userId, input.tokenHash, input.ipAddress || null, input.userAgent || null, input.expiresAt]
+        );
+        return res.rows[0];
+    },
+
+    async getActiveSessionByToken(tokenHash: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, token_hash, ip_address, user_agent, created_at, expires_at, revoked_at, last_used_at
+             FROM user_sessions
+             WHERE token_hash = $1
+               AND revoked_at IS NULL
+               AND expires_at > now()
+             LIMIT 1`,
+            [tokenHash]
+        );
+        return res.rows[0];
+    },
+
+    async touchSession(sessionId: string) {
+        await pool.query(
+            `UPDATE user_sessions SET last_used_at = now() WHERE id = $1`,
+            [sessionId]
+        );
+    },
+
+    async revokeSessionByToken(tokenHash: string) {
+        await pool.query(
+            `UPDATE user_sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`,
+            [tokenHash]
+        );
+    },
+
+    async revokeSessionsForUser(userId: string) {
+        await pool.query(
+            `UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+            [userId]
+        );
+    },
+
+    async pruneUserSessions(userId: string, keepLatest = 5) {
+        await pool.query(
+            `UPDATE user_sessions
+             SET revoked_at = now()
+             WHERE user_id = $1
+               AND revoked_at IS NULL
+               AND id NOT IN (
+                   SELECT id
+                   FROM user_sessions
+                   WHERE user_id = $1
+                     AND revoked_at IS NULL
+                   ORDER BY created_at DESC
+                   LIMIT $2
+               )`,
+            [userId, keepLatest]
+        );
+    },
+
+    async insertSecurityLog(input: { eventType: string; userId?: string | null; ipAddress?: string | null; userAgent?: string | null; details?: any; }) {
+        await pool.query(
+            `INSERT INTO security_logs (event_type, user_id, ip_address, user_agent, details)
+             VALUES ($1, $2, $3, $4, $5::jsonb)`,
+            [
+                input.eventType,
+                input.userId || null,
+                input.ipAddress || null,
+                input.userAgent || null,
+                JSON.stringify(input.details || {}),
+            ]
+        );
+    },
+
+    async countSecurityEvents(eventType: string, identifier: string, since: Date) {
+        const res = await pool.query(
+            `SELECT COUNT(*)::int AS count
+             FROM security_logs
+             WHERE event_type = $1
+               AND details->>'identifier' = $2
+               AND created_at >= $3`,
+            [eventType, identifier, since]
+        );
+        return res.rows[0]?.count || 0;
+    },
+
+    async getLatestSecurityEvent(eventType: string, identifier: string, since: Date) {
+        const res = await pool.query(
+            `SELECT id, created_at, details
+             FROM security_logs
+             WHERE event_type = $1
+               AND details->>'identifier' = $2
+               AND created_at >= $3
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [eventType, identifier, since]
+        );
+        return res.rows[0] || null;
     },
 
     async saveMessage(userId: string, username: string, text: string) {

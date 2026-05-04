@@ -3,7 +3,9 @@ const { Client } = require('pg');
 
 async function testConnection() {
     console.log('Testing database connection...');
-    console.log('DATABASE_URL:', process.env.DATABASE_URL);
+    if (!process.env.DATABASE_URL) {
+        throw new Error('Missing DATABASE_URL');
+    }
 
     const client = new Client({
         connectionString: process.env.DATABASE_URL

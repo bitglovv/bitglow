@@ -5,10 +5,11 @@ exports.startWS = startWS;
 const ws_1 = require("ws");
 const crypto_1 = require("crypto");
 const handlers_1 = require("./handlers");
+const db_1 = require("../services/db");
 const clients = new Set();
 function startWS(httpServer) {
     const wss = new ws_1.WebSocketServer({ server: httpServer });
-    wss.on("connection", (socket) => {
+    wss.on("connection", (socket, request) => {
         const userId = (0, crypto_1.randomUUID)();
         // Create client metadata
         const meta = {
@@ -16,7 +17,10 @@ function startWS(httpServer) {
             username: "guest",
             socket,
             isAuth: false,
+            helloReceived: false,
             lastMessageAt: 0,
+            ipAddress: request.socket?.remoteAddress?.toString(),
+            userAgent: request.headers?.["user-agent"]?.toString(),
             rooms: new Set(),
             roomOwners: new Map(),
         };
@@ -28,8 +32,20 @@ function startWS(httpServer) {
         socket.on("message", (raw) => {
             (0, handlers_1.handleMessage)(meta, raw, clients);
         });
+        const helloTimeout = setTimeout(() => {
+            if (!meta.helloReceived) {
+                void db_1.db.insertSecurityLog({
+                    eventType: "ws_auth_rejected",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { reason: "hello_timeout" },
+                });
+                socket.close();
+            }
+        }, 5_000);
         // Handle disconnection
         socket.on("close", () => {
+            clearTimeout(helloTimeout);
             const joinedRooms = Array.from(meta.rooms);
             clients.delete(meta);
             console.log(`❌ Client ${userId} disconnected. Total: ${clients.size}`);
@@ -42,6 +58,10 @@ function startWS(httpServer) {
                     // Broadcast the new accurate count
                     (0, handlers_1.broadcastRoomPresence)(clients, roomId);
                 }
+            }
+            const stillConnectedForUser = Array.from(clients).some((client) => client.userId === meta.userId);
+            if (!stillConnectedForUser) {
+                handlers_1.userMessageTimestamps.delete(meta.userId);
             }
         });
         // Handle errors

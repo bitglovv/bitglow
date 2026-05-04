@@ -3,21 +3,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.roomUsers = void 0;
+exports.userMessageTimestamps = exports.roomUsers = void 0;
 exports.broadcastPresence = broadcastPresence;
 exports.broadcastRoomPresence = broadcastRoomPresence;
 exports.handleMessage = handleMessage;
 /* bitglow-backend/src/ws/handlers.ts */
 const ws_1 = __importDefault(require("ws"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = require("../services/db");
-const store_1 = require("../services/store");
+const security_1 = require("../services/security");
 const RATE_LIMIT_MS = 1_000; // 1 second anti-spam cooldown
 const MESSAGE_TTL = 5 * 60 * 1_000; // 5 minutes — messages expire globally
 const MAX_MESSAGES = 100; // max messages kept in history
 const MAX_LENGTH = 200; // max chars per message
+const USER_RATE_LIMIT_MS = 1_000;
 // STEP 1: GLOBAL MEMORY STORE
 exports.roomUsers = new Map();
+exports.userMessageTimestamps = new Map();
 function broadcastPresence(clients) {
     const message = JSON.stringify({
         type: "server:presence",
@@ -67,33 +68,64 @@ async function handleMessage(meta, raw, clients) {
     switch (msg.type) {
         case "client:hello": {
             const m = msg;
-            // If token provided, try to authorize
-            if (m.token) {
-                try {
-                    const decoded = jsonwebtoken_1.default.verify(m.token, store_1.JWT_SECRET);
-                    meta.userId = decoded.id;
-                    meta.username = decoded.username;
-                    meta.isAuth = true;
-                    // Fetch user for avatarUrl
-                    const user = await db_1.db.getUserById(meta.userId);
-                    if (user)
-                        meta.avatarUrl = user.avatarUrl;
-                    // Welcome back specifically
-                    meta.socket.send(JSON.stringify({
-                        type: "server:welcome",
-                        userId: meta.userId,
-                        username: meta.username,
-                        avatarUrl: meta.avatarUrl,
-                        ts: Date.now()
-                    }));
+            meta.helloReceived = true;
+            if (!m.token) {
+                await db_1.db.insertSecurityLog({
+                    eventType: "ws_auth_rejected",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { reason: "missing_token" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication required",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
+                return;
+            }
+            try {
+                const tokenHash = (0, security_1.hashToken)(m.token);
+                const decoded = (0, security_1.verifyAccessToken)(m.token);
+                const session = await db_1.db.getActiveSessionByToken(tokenHash);
+                if (!session || session.user_id !== decoded.id) {
+                    throw new Error("session revoked");
                 }
-                catch (err) {
-                    meta.socket.send(JSON.stringify({
-                        type: "server:error",
-                        message: "Invalid or expired token",
-                        ts: Date.now()
-                    }));
-                }
+                meta.userId = decoded.id;
+                meta.username = decoded.username;
+                meta.isAuth = true;
+                const user = await db_1.db.getUserById(meta.userId);
+                if (user)
+                    meta.avatarUrl = user.avatar_url || user.avatarUrl;
+                await db_1.db.touchSession(session.id);
+                meta.socket.send(JSON.stringify({
+                    type: "server:welcome",
+                    userId: meta.userId,
+                    username: meta.username,
+                    avatarUrl: meta.avatarUrl,
+                    ts: Date.now()
+                }));
+            }
+            catch (err) {
+                await db_1.db.insertSecurityLog({
+                    eventType: "ws_auth_rejected",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { reason: "invalid_token" }
+                });
+                await db_1.db.insertSecurityLog({
+                    eventType: "security_alert",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "ws_auth_rejected", reason: "invalid_token" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Invalid or expired token",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
+                return;
             }
             // Always respond with current presence
             meta.socket.send(JSON.stringify({
@@ -110,6 +142,7 @@ async function handleMessage(meta, raw, clients) {
                     message: "Authentication required",
                     ts: Date.now()
                 }));
+                meta.socket.close();
                 return;
             }
             const m = msg;
@@ -211,8 +244,23 @@ async function handleMessage(meta, raw, clients) {
         case "client:typing": {
             const m = msg;
             const roomId = String(m.roomId || "");
-            if (!roomId || !meta.rooms.has(roomId))
+            if (!meta.isAuth) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication required",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
                 return;
+            }
+            if (!roomId || !meta.rooms.has(roomId)) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Join the room before typing",
+                    ts: Date.now()
+                }));
+                return;
+            }
             const payload = JSON.stringify({
                 type: "server:room:typing",
                 roomId,
@@ -235,11 +283,19 @@ async function handleMessage(meta, raw, clients) {
                     message: "Authentication required",
                     ts: Date.now()
                 }));
+                meta.socket.close();
                 return;
             }
             // RATE LIMITING
             const now = Date.now();
             if (now - meta.lastMessageAt < RATE_LIMIT_MS) {
+                await db_1.db.insertSecurityLog({
+                    eventType: "ws_rate_limited",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "socket_cooldown" }
+                });
                 meta.socket.send(JSON.stringify({
                     type: "server:error",
                     message: "Rate limit exceeded. Please slow down.",
@@ -248,6 +304,30 @@ async function handleMessage(meta, raw, clients) {
                 return;
             }
             meta.lastMessageAt = now;
+            const previousUserMessageAt = exports.userMessageTimestamps.get(meta.userId) || 0;
+            if (now - previousUserMessageAt < USER_RATE_LIMIT_MS) {
+                await db_1.db.insertSecurityLog({
+                    eventType: "ws_rate_limited",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "user_cooldown" }
+                });
+                await db_1.db.insertSecurityLog({
+                    eventType: "security_alert",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "ws_rate_limited" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Rate limit exceeded. Please slow down.",
+                    ts: Date.now()
+                }));
+                return;
+            }
+            exports.userMessageTimestamps.set(meta.userId, now);
             const m = msg;
             const roomId = String(m.roomId || "");
             // STEP 5b: Enforce MAX_LENGTH

@@ -57,13 +57,34 @@ CREATE TABLE user_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
 
-  token TEXT UNIQUE NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
   ip_address TEXT,
   user_agent TEXT,
 
   created_at TIMESTAMP DEFAULT now(),
-  expires_at TIMESTAMP
+  expires_at TIMESTAMP,
+  revoked_at TIMESTAMP,
+  last_used_at TIMESTAMP
 );
+
+CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX idx_user_sessions_token_hash ON user_sessions(token_hash);
+CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
+CREATE INDEX idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
+
+CREATE TABLE security_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_type TEXT NOT NULL,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  details JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX idx_security_logs_event_type ON security_logs(event_type);
+CREATE INDEX idx_security_logs_user_id ON security_logs(user_id);
+CREATE INDEX idx_security_logs_created_at ON security_logs(created_at DESC);
 
 -- =====================================================
 -- CHAT ROOMS (LIVE / GROUP CHAT)

@@ -1,33 +1,15 @@
 import { FastifyInstance } from "fastify";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../services/store";
 import { db } from "../services/db";
+import { sanitizeText } from "../services/security";
+import { createPostSchema, feedQuerySchema, idParamSchema, postCommentSchema, updatePostSchema } from "./schemas";
 
 export async function postRoutes(fastify: FastifyInstance) {
-    const getAuthUserId = (req: any, reply: any): string | null => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            reply.code(401).send({ message: "No token provided" });
-            return null;
-        }
-        const token = authHeader.split(" ")[1];
-        if (!token) {
-            reply.code(401).send({ message: "Malformed token" });
-            return null;
-        }
-
-        try {
-            const decoded = jwt.verify(token, JWT_SECRET) as any;
-            return decoded.id;
-        } catch {
-            reply.code(401).send({ message: "Invalid token" });
-            return null;
-        }
-    };
-
-    fastify.post("/posts", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/posts", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: createPostSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
 
         const { content, title, visibility } = (req.body || {}) as { content?: string; title?: string; visibility?: string };
 
@@ -36,7 +18,7 @@ export async function postRoutes(fastify: FastifyInstance) {
         }
 
         const vis = visibility === "public" ? "public" : "friends";
-        const post = await db.createPost(userId, content.trim(), title?.trim() || undefined, vis);
+        const post = await db.createPost(userId, sanitizeText(content.trim(), 5000), title?.trim() ? sanitizeText(title.trim(), 140) : undefined, vis);
         const author = await db.getUserById(userId);
 
         return {
@@ -56,9 +38,8 @@ export async function postRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get("/posts/feed", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.get("/posts/feed", { preHandler: fastify.requireAuth, schema: feedQuerySchema }, async (req, reply) => {
+        const userId = req.auth!.id;
 
         const { limit = "50", offset = "0" } = (req.query || {}) as { limit?: string; offset?: string };
         const l = Math.min(Number(limit) || 50, 100);
@@ -68,31 +49,40 @@ export async function postRoutes(fastify: FastifyInstance) {
         return { posts };
     });
 
-    fastify.post("/posts/:id/like", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/posts/:id/like", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const result = await db.toggleLike(userId, id);
         return { liked: result.liked, likesCount: result.count };
     });
 
-    fastify.post("/posts/:id/save", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/posts/:id/save", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const result = await db.toggleSave(userId, id);
         return { saved: result.saved, savesCount: result.count };
     });
 
-    fastify.post("/posts/:id/comment", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.post("/posts/:id/comment", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: postCommentSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const { content } = (req.body || {}) as { content?: string };
         if (!content || !content.trim()) {
             return reply.code(400).send({ message: "Comment content required" });
         }
-        const comment = await db.addComment(userId, id, content.trim());
+        const comment = await db.addComment(userId, id, sanitizeText(content.trim(), 1000));
         const author = await db.getUserById(userId);
         return {
             comment: {
@@ -109,28 +99,32 @@ export async function postRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get("/posts/:id/comments", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.get("/posts/:id/comments", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const comments = await db.getComments(id);
         return { comments };
     });
 
-    fastify.put("/posts/:id", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.put("/posts/:id", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: updatePostSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const { content, title } = (req.body || {}) as { content?: string; title?: string };
         if (!content || !content.trim()) return reply.code(400).send({ message: "Content required" });
-        const updated = await db.updatePost(id, userId, content.trim(), title?.trim());
+        const updated = await db.updatePost(id, userId, sanitizeText(content.trim(), 5000), title?.trim() ? sanitizeText(title.trim(), 140) : undefined);
         if (!updated) return reply.code(404).send({ message: "Post not found" });
         return { post: updated };
     });
 
-    fastify.delete("/posts/:id", async (req, reply) => {
-        const userId = getAuthUserId(req, reply);
-        if (!userId) return;
+    fastify.delete("/posts/:id", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const ok = await db.deletePost(id, userId);
         if (!ok) return reply.code(404).send({ message: "Post not found" });

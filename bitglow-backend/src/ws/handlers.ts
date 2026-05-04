@@ -1,17 +1,17 @@
 /* bitglow-backend/src/ws/handlers.ts */
 import WebSocket from "ws";
-import jwt from "jsonwebtoken";
 import { WSMessage, ClientHello } from "./types";
 import { db } from "../services/db";
-
-import { JWT_SECRET } from "../services/store";
+import { hashToken, verifyAccessToken } from "../services/security";
 const RATE_LIMIT_MS    = 1_000;          // 1 second anti-spam cooldown
 const MESSAGE_TTL      = 5 * 60 * 1_000; // 5 minutes — messages expire globally
 const MAX_MESSAGES     = 100;            // max messages kept in history
 const MAX_LENGTH       = 200;            // max chars per message
+const USER_RATE_LIMIT_MS = 1_000;
 
 // STEP 1: GLOBAL MEMORY STORE
 export const roomUsers = new Map<string, Set<string>>();
+export const userMessageTimestamps = new Map<string, number>();
 // roomId -> Set(userId)
 
 /**
@@ -23,7 +23,10 @@ export type ClientMeta = {
     avatarUrl?: string;
     socket: WebSocket;
     isAuth: boolean;
+    helloReceived: boolean;
     lastMessageAt: number;
+    ipAddress?: string;
+    userAgent?: string;
     rooms: Set<string>;
     roomOwners: Map<string, string>;
 };
@@ -91,34 +94,67 @@ export async function handleMessage(
     switch (msg.type) {
         case "client:hello": {
             const m = msg as ClientHello;
+            meta.helloReceived = true;
 
-            // If token provided, try to authorize
-            if (m.token) {
-                try {
-                    const decoded = jwt.verify(m.token, JWT_SECRET) as any;
-                    meta.userId = decoded.id;
-                    meta.username = decoded.username;
-                    meta.isAuth = true;
+            if (!m.token) {
+                await db.insertSecurityLog({
+                    eventType: "ws_auth_rejected",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { reason: "missing_token" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication required",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
+                return;
+            }
 
-                    // Fetch user for avatarUrl
-                    const user = await db.getUserById(meta.userId);
-                    if (user) meta.avatarUrl = user.avatarUrl;
-
-                    // Welcome back specifically
-                    meta.socket.send(JSON.stringify({
-                        type: "server:welcome",
-                        userId: meta.userId,
-                        username: meta.username,
-                        avatarUrl: meta.avatarUrl,
-                        ts: Date.now()
-                    }));
-                } catch (err) {
-                    meta.socket.send(JSON.stringify({
-                        type: "server:error",
-                        message: "Invalid or expired token",
-                        ts: Date.now()
-                    }));
+            try {
+                const tokenHash = hashToken(m.token);
+                const decoded = verifyAccessToken(m.token);
+                const session = await db.getActiveSessionByToken(tokenHash);
+                if (!session || session.user_id !== decoded.id) {
+                    throw new Error("session revoked");
                 }
+
+                meta.userId = decoded.id;
+                meta.username = decoded.username;
+                meta.isAuth = true;
+
+                const user = await db.getUserById(meta.userId);
+                if (user) meta.avatarUrl = user.avatar_url || user.avatarUrl;
+                await db.touchSession(session.id);
+
+                meta.socket.send(JSON.stringify({
+                    type: "server:welcome",
+                    userId: meta.userId,
+                    username: meta.username,
+                    avatarUrl: meta.avatarUrl,
+                    ts: Date.now()
+                }));
+            } catch (err) {
+                await db.insertSecurityLog({
+                    eventType: "ws_auth_rejected",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { reason: "invalid_token" }
+                });
+                await db.insertSecurityLog({
+                    eventType: "security_alert",
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "ws_auth_rejected", reason: "invalid_token" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Invalid or expired token",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
+                return;
             }
 
             // Always respond with current presence
@@ -139,6 +175,7 @@ export async function handleMessage(
                     message: "Authentication required",
                     ts: Date.now()
                 }));
+                meta.socket.close();
                 return;
             }
 
@@ -252,7 +289,23 @@ export async function handleMessage(
         case "client:typing": {
             const m = msg as any;
             const roomId = String(m.roomId || "");
-            if (!roomId || !meta.rooms.has(roomId)) return;
+            if (!meta.isAuth) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication required",
+                    ts: Date.now()
+                }));
+                meta.socket.close();
+                return;
+            }
+            if (!roomId || !meta.rooms.has(roomId)) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Join the room before typing",
+                    ts: Date.now()
+                }));
+                return;
+            }
 
             const payload = JSON.stringify({
                 type: "server:room:typing",
@@ -278,12 +331,20 @@ export async function handleMessage(
                     message: "Authentication required",
                     ts: Date.now()
                 }));
+                meta.socket.close();
                 return;
             }
 
             // RATE LIMITING
             const now = Date.now();
             if (now - meta.lastMessageAt < RATE_LIMIT_MS) {
+                await db.insertSecurityLog({
+                    eventType: "ws_rate_limited",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "socket_cooldown" }
+                });
                 meta.socket.send(JSON.stringify({
                     type: "server:error",
                     message: "Rate limit exceeded. Please slow down.",
@@ -292,6 +353,30 @@ export async function handleMessage(
                 return;
             }
             meta.lastMessageAt = now;
+            const previousUserMessageAt = userMessageTimestamps.get(meta.userId) || 0;
+            if (now - previousUserMessageAt < USER_RATE_LIMIT_MS) {
+                await db.insertSecurityLog({
+                    eventType: "ws_rate_limited",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "user_cooldown" }
+                });
+                await db.insertSecurityLog({
+                    eventType: "security_alert",
+                    userId: meta.userId,
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent,
+                    details: { type: "ws_rate_limited" }
+                });
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Rate limit exceeded. Please slow down.",
+                    ts: Date.now()
+                }));
+                return;
+            }
+            userMessageTimestamps.set(meta.userId, now);
 
             const m = msg as any;
             const roomId = String(m.roomId || "");

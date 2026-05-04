@@ -2,8 +2,11 @@ const { Client } = require('pg');
 require('dotenv').config();
 
 async function runMigration() {
+    if (!process.env.DATABASE_URL) {
+        throw new Error('Missing DATABASE_URL');
+    }
     const client = new Client({
-        connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/bitglow'
+        connectionString: process.env.DATABASE_URL
     });
 
     try {

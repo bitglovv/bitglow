@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JWT_SECRET = exports.users = void 0;
+exports.users = void 0;
 // In-memory store shared across routes
 exports.users = [
     {
@@ -40,4 +40,3 @@ exports.users = [
         followsCount: 1,
     }
 ];
-exports.JWT_SECRET = "bitglow-secret-key-change-me";

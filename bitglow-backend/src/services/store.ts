@@ -37,4 +37,3 @@ export const users: any[] = [
         followsCount: 1,
     }
 ];
-export const JWT_SECRET = "bitglow-secret-key-change-me";
