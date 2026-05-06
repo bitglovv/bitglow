@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
 import { hashToken, parseBearerToken, verifyAccessToken } from "../services/security";
 import { db } from "../services/db";
 import type { RequestActor } from "../services/security";
@@ -18,23 +19,25 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
     fastify.decorate("requireAuth", async (request: any, reply: any) => {
         const token = parseBearerToken(request.headers.authorization);
+
         if (!token) {
             return reply.code(401).send({ message: "Authorization required" });
         }
 
         try {
             const decoded = verifyAccessToken(token);
+
             const session = await db.getActiveSessionByToken(hashToken(token));
             if (!session || session.user_id !== decoded.id) {
                 return reply.code(401).send({ message: "Session expired or revoked" });
             }
 
-            await db.touchSession(session.id);
-
             const user = await db.getUserById(decoded.id);
             if (!user) {
                 return reply.code(401).send({ message: "User not found" });
             }
+
+            await db.touchSession(session.id);
 
             request.auth = {
                 id: decoded.id,
@@ -42,7 +45,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
                 sessionId: session.id,
                 role: user.role,
             };
-        } catch {
+        } catch (err) {
             return reply.code(401).send({ message: "Invalid or expired token" });
         }
     });
@@ -56,4 +59,4 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     });
 };
 
-export default authPlugin;
+export default fp(authPlugin);

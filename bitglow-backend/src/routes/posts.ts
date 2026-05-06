@@ -9,7 +9,14 @@ export async function postRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
         schema: createPostSchema,
     }, async (req, reply) => {
-        const userId = req.auth!.id;
+        console.log("AUTH:", req.auth);
+        console.log("HEADERS:", req.headers.authorization);
+
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+
+        const userId = req.auth.id;
 
         const { content, title, visibility } = (req.body || {}) as { content?: string; title?: string; visibility?: string };
 

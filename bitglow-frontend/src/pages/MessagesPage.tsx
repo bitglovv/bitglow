@@ -4,6 +4,7 @@ import Header from "../components/common/Header";
 import { Avatar } from "../components/ui/Avatar";
 import MessageInput from "../components/chat/MessageInput";
 import { api, Conversation, DMMessage, Friend } from "../services/api";
+import LiveMessageList from "../components/chat/LiveMessageList";
 import { useAuth } from "../hooks/useAuth";
 import { ArrowLeft, MessageSquare, Search, MoreVertical, Edit3, ShieldAlert } from "lucide-react";
 import clsx from "clsx";
@@ -106,9 +107,9 @@ export default function MessagesPage() {
     });
 
     return (
-        <div className="h-screen bg-black flex flex-col text-white selection:bg-brand/30 overflow-hidden">
+        <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden">
             {/* Header with Top Bar hidden for pure messaging app feel, keeping bottom nav intact */}
-            <Header showTop={false} />
+            <Header showTop={false} hideBottomNav />
 
             <main className="flex-1 w-full flex overflow-hidden">
 
@@ -154,7 +155,7 @@ export default function MessagesPage() {
                         )}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar pb-[90px] md:pb-0">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar md:pb-0">
                         {friendQuery.trim() ? (
                             // Search Mode
                             <div className="py-2">
@@ -236,7 +237,7 @@ export default function MessagesPage() {
 
                 {/* Chat Area */}
                 <div className={clsx(
-                    "flex-1 flex flex-col relative",
+                    "flex-1 flex flex-col min-h-0",
                     view === "inbox" ? "hidden md:flex" : "flex"
                 )}>
                     {selectedId ? (
@@ -264,34 +265,55 @@ export default function MessagesPage() {
                             </div>
 
                             {/* Message Feed */}
-                            <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 custom-scrollbar">
-                                {messages.map(m => (
-                                    <div key={m.id} className={clsx(
-                                        "flex group animate-in slide-in-from-bottom-2 duration-300",
-                                        m.senderId === user?.id ? "justify-end" : "justify-start"
-                                    )}>
-                                        <div className={clsx(
-                                            "max-w-[75%] md:max-w-[60%] space-y-1.5",
-                                            m.senderId === user?.id ? "items-end" : "items-start"
-                                        )}>
-                                            <div className={clsx(
-                                                "px-5 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm",
-                                                m.senderId === user?.id
-                                                    ? "bg-brand text-black font-semibold rounded-br-sm"
-                                                    : "bg-zinc-900 border border-white/5 text-white rounded-bl-sm"
-                                            )}>
-                                                {m.text}
-                                            </div>
-                                            <span className={clsx("text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 opacity-0 group-hover:opacity-100 transition-opacity", m.senderId === user?.id ? "block text-right" : "block text-left")}>
-                                                Delivered
-                                            </span>
-                                        </div>
+                            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 md:px-8 custom-scrollbar">
+                                {messages.length === 0 ? (
+                                    <div className="flex min-h-full flex-col items-center justify-center text-center px-6">
+                                        <Avatar
+                                            src={activeChatUser?.avatarUrl}
+                                            alt={activeChatUser?.username}
+                                            size="xl"
+                                            className="mb-4"
+                                        />
+
+                                        <h2 className="text-2xl font-bold">
+                                            {activeChatUser?.username}
+                                        </h2>
+
+                                        <p className="text-zinc-500 mt-1">
+                                            @{activeChatUser?.username}
+                                        </p>
+
+                                        <Link
+                                            to={`/profile/${activeChatUser?.username}`}
+                                            className="mt-5 px-5 py-2 rounded-xl bg-zinc-900 border border-white/5 text-sm font-semibold"
+                                        >
+                                            View Profile
+                                        </Link>
                                     </div>
-                                ))}
+                                ) : (
+                                    <LiveMessageList
+                                        messages={messages.map(m => ({
+                                            id: m.id,
+                                            userId: m.senderId,
+                                            username:
+                                                m.senderId === user?.id
+                                                    ? user.username
+                                                    : activeChatUser?.username || "User",
+                                            text: m.text,
+                                            ts: new Date(m.createdAt).getTime(),
+                                            avatarUrl:
+                                                m.senderId === user?.id
+                                                    ? user.avatarUrl
+                                                    : activeChatUser?.avatarUrl,
+                                            type: "chat"
+                                        }))}
+                                        selfId={user?.id || null}
+                                    />
+                                )}
                             </div>
 
                             {/* Input Area */}
-                            <div className="p-4 border-t border-white/5 bg-black/80 backdrop-blur-xl pb-[90px] md:pb-4">
+                            <div className="shrink-0 border-t border-white/5 bg-black/90 backdrop-blur-xl px-4 py-3">
                                 <MessageInput onSend={handleSend} />
                             </div>
                         </>

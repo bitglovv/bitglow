@@ -10,6 +10,11 @@ async function postRoutes(fastify) {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
         schema: schemas_1.createPostSchema,
     }, async (req, reply) => {
+        console.log("AUTH:", req.auth);
+        console.log("HEADERS:", req.headers.authorization);
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
         const userId = req.auth.id;
         const { content, title, visibility } = (req.body || {});
         if (!content || typeof content !== "string" || content.trim().length === 0) {

@@ -8,8 +8,12 @@ export async function dmRoutes(fastify: FastifyInstance) {
      * GET /api/dms
      * List conversations for current user
      */
-    fastify.get("/dms", { preHandler: fastify.requireAuth }, async (req) => {
-        const userId = req.auth!.id;
+    fastify.get("/dms", { preHandler: fastify.requireAuth }, async (req, reply) => {
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+
+        const userId = req.auth.id;
 
         const rows = await db.listDMConversations(userId);
         const conversations = rows.map((r: any) => ({
@@ -29,7 +33,11 @@ export async function dmRoutes(fastify: FastifyInstance) {
      * Get message history with a specific user
      */
     fastify.get("/dms/:userId", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
-        const userId = req.auth!.id;
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+
+        const userId = req.auth.id;
 
         const { userId: otherId } = req.params as { userId: string };
         if (!otherId) {
@@ -61,7 +69,11 @@ export async function dmRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
         schema: dmSendSchema,
     }, async (req, reply) => {
-        const userId = req.auth!.id;
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+
+        const userId = req.auth.id;
 
         const { userId: otherId } = req.params as { userId: string };
         const { text } = req.body as { text?: string };

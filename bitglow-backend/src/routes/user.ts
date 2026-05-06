@@ -9,7 +9,11 @@ export async function userRoutes(fastify: FastifyInstance) {
      * Returns the authenticated user from DB
      */
     fastify.get("/me", { preHandler: fastify.requireAuth }, async (req, reply) => {
-        const dbUser = await db.getUserById(req.auth!.id);
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+
+        const dbUser = await db.getUserById(req.auth.id);
         if (!dbUser) {
             return reply.code(404).send({ message: "User not found" });
         }

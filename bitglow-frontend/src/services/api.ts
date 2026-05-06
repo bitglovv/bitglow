@@ -131,11 +131,6 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
         headers,
     });
 
-    if (res.status === 401) {
-        localStorage.removeItem("token");
-        window.location.href = "/login";
-    }
-
     return res;
 }
 
@@ -167,6 +162,21 @@ async function performLoginRequest(payload: Record<string, string>) {
     });
 }
 
+async function readAuthResponse(res: Response): Promise<{ token: string; user: User }> {
+    const data = await res.json();
+    const token = data?.token;
+    const user = data?.user;
+
+    if (!token || !user) {
+        throw new Error("Login response missing token or user");
+    }
+
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+
+    return { token, user };
+}
+
 async function resolveEmailFromUsername(username: string): Promise<string | null> {
     const res = await fetch(`${API_URL}/profile/${encodeURIComponent(username)}`);
     if (!res.ok) return null;
@@ -188,7 +198,7 @@ export const api = {
             });
 
             if (res.ok) {
-                return res.json();
+                return readAuthResponse(res);
             }
 
             const primaryError = await readErrorMessage(res, "Login failed");
@@ -199,7 +209,7 @@ export const api = {
             });
 
             if (res.ok) {
-                return res.json();
+                return readAuthResponse(res);
             }
 
             if (!normalizedIdentifier.includes("@")) {
@@ -211,7 +221,7 @@ export const api = {
                     });
 
                     if (res.ok) {
-                        return res.json();
+                        return readAuthResponse(res);
                     }
                 }
             }
@@ -227,7 +237,7 @@ export const api = {
             if (!res.ok) {
                 throw new Error(await readErrorMessage(res, "Signup failed"));
             }
-            return res.json();
+            return readAuthResponse(res);
         },
         me: async (): Promise<User> => {
             console.log("API: Calling /api/me");

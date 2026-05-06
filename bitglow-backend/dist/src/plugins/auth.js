@@ -1,5 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+const fastify_plugin_1 = __importDefault(require("fastify-plugin"));
 const security_1 = require("../services/security");
 const db_1 = require("../services/db");
 const authPlugin = async (fastify) => {
@@ -15,11 +19,11 @@ const authPlugin = async (fastify) => {
             if (!session || session.user_id !== decoded.id) {
                 return reply.code(401).send({ message: "Session expired or revoked" });
             }
-            await db_1.db.touchSession(session.id);
             const user = await db_1.db.getUserById(decoded.id);
             if (!user) {
                 return reply.code(401).send({ message: "User not found" });
             }
+            await db_1.db.touchSession(session.id);
             request.auth = {
                 id: decoded.id,
                 username: decoded.username,
@@ -27,7 +31,7 @@ const authPlugin = async (fastify) => {
                 role: user.role,
             };
         }
-        catch {
+        catch (err) {
             return reply.code(401).send({ message: "Invalid or expired token" });
         }
     });
@@ -40,4 +44,4 @@ const authPlugin = async (fastify) => {
         }
     });
 };
-exports.default = authPlugin;
+exports.default = (0, fastify_plugin_1.default)(authPlugin);
