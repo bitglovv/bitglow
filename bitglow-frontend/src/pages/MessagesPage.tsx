@@ -1,334 +1,114 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import Header from "../components/common/Header";
-import { Avatar } from "../components/ui/Avatar";
-import MessageInput from "../components/chat/MessageInput";
-import { api, Conversation, DMMessage, Friend } from "../services/api";
-import LiveMessageList from "../components/chat/LiveMessageList";
 import { useAuth } from "../hooks/useAuth";
-import { ArrowLeft, MessageSquare, Search, MoreVertical, Edit3, ShieldAlert } from "lucide-react";
-import clsx from "clsx";
+import { InboxSidebar } from "../components/chat/InboxSidebar";
+import { ChatWindow } from "../components/chat/ChatWindow";
+import { EmptyChatState } from "../components/chat/EmptyChatState";
+import { useChatStore } from "../store/chatStore";
 
 export default function MessagesPage() {
-    const { user } = useAuth();
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<DMMessage[]>([]);
-    const [view, setView] = useState<"inbox" | "chat">("inbox");
-    const [friends, setFriends] = useState<Friend[]>([]);
-    const [friendQuery, setFriendQuery] = useState("");
-    const [inboxTab, setInboxTab] = useState<"chats"| "requests">("chats");
+  const { user } = useAuth();
+  const {
+    conversations,
+    friends,
+    messages,
+    activeConversationId,
+    isLoadingConversations,
+    isLoadingMessages,
+    typingUsers,
+    onlineUsers,
+    fetchConversationsAndFriends,
+    setActiveConversation,
+    openFriendConversation,
+    sendMessage,
+  } = useChatStore();
 
-    useEffect(() => { document.title = "BitGlow \u2022 Messages"; }, []);
+  const [mobileView, setMobileView] = useState<"inbox" | "chat">("inbox");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
 
-    useEffect(() => {
-        api.dms.list().then(setConversations).catch(console.error);
-        api.user.friends().then(setFriends).catch(() => setFriends([]));
-    }, []);
+  useEffect(() => {
+    document.title = "BitGlow - Messages";
+  }, []);
 
-    useEffect(() => {
-        const pendingId = sessionStorage.getItem("bitglow:dmUserId");
-        if (pendingId) {
-            setSelectedId(pendingId);
-            sessionStorage.removeItem("bitglow:dmUserId");
-        }
-    }, []);
+  useEffect(() => {
+    fetchConversationsAndFriends();
+  }, [fetchConversationsAndFriends]);
 
-    useEffect(() => {
-        if (selectedId) {
-            api.dms.history(selectedId).then(setMessages).catch((err) => {
-                console.error(err);
-                setMessages([]);
-            });
-            setView("chat");
-        } else {
-            setView("inbox");
-        }
-    }, [selectedId]);
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.userId === activeConversationId) ?? null,
+    [conversations, activeConversationId]
+  );
 
-    const handleSelect = (id: string) => {
-        setFriendQuery(""); // Clear search when selecting friend to chat
-        setSelectedId(id);
-    };
+  const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
-    const handleBack = () => {
-        setSelectedId(null);
-    };
+  const handleSelectConversation = (userId: string) => {
+    setActiveConversation(userId);
+    setMobileView("chat");
+  };
 
-    const handleSend = async (text: string) => {
-        if (!selectedId) return;
-        const sent = await api.dms.send(selectedId, text);
-        if (!sent) return;
+  const handleOpenFromFriend = (friend: any) => {
+    openFriendConversation(friend);
+    setSearchTerm("");
+    setMobileView("chat");
+  };
 
-        setMessages((prev) => [...prev, sent]);
+  const handleSendMessage = async (text: string) => {
+    if (!activeConversationId || !user) return;
+    await sendMessage(activeConversationId, text, user.id);
+  };
 
-        setConversations((prev) => {
-            const exists = prev.find((c) => c.userId === selectedId);
-            if (exists) {
-                return prev.map((c) =>
-                    c.userId === selectedId
-                        ? { ...c, lastMessage: sent.text }
-                        : c
-                );
-            }
-            return prev;
-        });
+  const showMobileInbox = mobileView === "inbox";
 
-        const alreadyInList = conversations.some((c) => c.userId === selectedId);
-        if (!alreadyInList) {
-            try {
-                const u = await api.user.get(selectedId);
-                setConversations((prev) => [
-                    {
-                        userId: u.id,
-                        username: u.username,
-                        displayName: u.displayName || u.username,
-                        avatarUrl: u.avatarUrl,
-                        lastMessage: sent.text,
-                        unreadCount: 0
-                    },
-                    ...prev
-                ]);
-            } catch (err) {
-                console.error(err);
-            }
-        }
-    };
-
-    const currentConv = conversations.find(c => c.userId === selectedId);
-    
-    // If not in conversations, maybe it's a new friend chat
-    const activeChatUser = currentConv || friends.find(f => f.id === selectedId);
-
-    const filteredFriends = friends.filter((f) => {
-        if (!friendQuery.trim()) return true;
-        const q = friendQuery.toLowerCase();
-        return f.username?.toLowerCase().includes(q);
-    });
-
-    return (
-        <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden">
-            {/* Header with Top Bar hidden for pure messaging app feel, keeping bottom nav intact */}
-            <Header showTop={false} hideBottomNav />
-
-            <main className="flex-1 w-full flex overflow-hidden">
-
-                {/* Inbox List Area */}
-                <div className={clsx(
-                    "w-full md:w-[400px] flex-shrink-0 flex flex-col border-r border-white/5 transition-all duration-300",
-                    view === "chat" ? "hidden md:flex" : "flex"
-                )}>
-                    {/* Top Bar Flush */}
-                    <div className="pt-6 md:pt-8 px-6 pb-2 space-y-4 border-b border-white/5 bg-zinc-950/50">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-2xl font-black tracking-tight">Messages</h2>
-                            <button className="p-2 hover:bg-white/5 rounded-full text-zinc-400 hover:text-white transition-colors">
-                                <Edit3 className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="relative group">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-brand transition-colors" />
-                            <input
-                                className="w-full bg-white/[0.04] border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:bg-white/[0.06] transition-all"
-                                placeholder="Search friends..."
-                                value={friendQuery}
-                                onChange={(e) => setFriendQuery(e.target.value)}
-                            />
-                        </div>
-
-                        {/* Tabs */}
-                        {!friendQuery.trim() && (
-                            <div className="flex items-center gap-6 text-[15px] font-semibold pt-1">
-                                <button 
-                                    onClick={() => setInboxTab("chats")}
-                                    className={clsx("pb-2.5 border-b-2 transition-all duration-300", inboxTab === "chats" ? "border-brand text-white" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-                                >
-                                    Chats
-                                </button>
-                                <button 
-                                    onClick={() => setInboxTab("requests")}
-                                    className={clsx("pb-2.5 border-b-2 transition-all duration-300 flex items-center gap-1.5", inboxTab === "requests" ? "border-brand text-white" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-                                >
-                                    Requests
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar md:pb-0">
-                        {friendQuery.trim() ? (
-                            // Search Mode
-                            <div className="py-2">
-                                <div className="px-6 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Friends</div>
-                                {filteredFriends.length === 0 ? (
-                                    <div className="p-12 text-center text-zinc-600 text-sm font-medium">No friends found</div>
-                                ) : (
-                                    filteredFriends.map(f => (
-                                        <button
-                                            key={f.id}
-                                            onClick={() => handleSelect(f.id)}
-                                            className="w-full flex items-center gap-4 px-6 py-3 transition-all text-left hover:bg-white/[0.03]"
-                                        >
-                                            <Avatar src={f.avatarUrl} alt={f.username} size="md" />
-                                            <span className="font-semibold text-sm text-white flex-1">{f.username}</span>
-                                        </button>
-                                    ))
-                                )}
-                            </div>
-                        ) : inboxTab === "chats" ? (
-                            // Chats Mode
-                            <>
-                                {conversations.map(conv => (
-                                    <button
-                                        key={conv.userId}
-                                        onClick={() => handleSelect(conv.userId)}
-                                        className={clsx(
-                                            "w-full flex items-center gap-4 px-6 py-4 transition-all text-left relative",
-                                            selectedId === conv.userId
-                                                ? "bg-white/[0.05]"
-                                                : "hover:bg-white/[0.02]"
-                                        )}
-                                    >
-                                        {selectedId === conv.userId && (
-                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand" />
-                                        )}
-                                        <div className="shrink-0 pointer-events-none">
-                                            <Avatar src={conv.avatarUrl} alt={conv.username} size="md" status="online" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-baseline mb-1">
-                                                <div className="flex items-center gap-2 overflow-hidden">
-                                                    <span className="font-semibold text-[15px] text-white truncate">
-                                                        {conv.username}
-                                                    </span>
-                                                    {(conv.unreadCount ?? 0) > 0 && selectedId !== conv.userId && (
-                                                        <div className="w-2 h-2 rounded-full bg-brand shadow-[0_0_8px_rgba(16,185,129,0.5)] flex-shrink-0" />
-                                                    )}
-                                                </div>
-                                                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest shrink-0 ml-2">2m ago</span>
-                                            </div>
-                                            <p className={clsx(
-                                                "text-sm truncate",
-                                                (conv.unreadCount ?? 0) > 0 && selectedId !== conv.userId ? "text-white font-semibold" : "text-zinc-500"
-                                            )}>
-                                                {conv.lastMessage || "Start a conversation"}
-                                            </p>
-                                        </div>
-                                    </button>
-                                ))}
-                                {conversations.length === 0 && (
-                                    <div className="p-12 text-center text-zinc-600">
-                                        <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                                        <p className="text-[15px] font-medium text-white/40">No active chats.</p>
-                                        <p className="text-sm mt-1">Search friends to start one.</p>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            // Requests Mode
-                            <div className="p-12 text-center text-zinc-600">
-                                <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                                <p className="text-[15px] font-medium text-white/40">No message requests.</p>
-                                <p className="text-sm mt-1">Messages from non-friends will appear here.</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Chat Area */}
-                <div className={clsx(
-                    "flex-1 flex flex-col min-h-0",
-                    view === "inbox" ? "hidden md:flex" : "flex"
-                )}>
-                    {selectedId ? (
-                        <>
-                            {/* Chat Header Flush Top */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-zinc-950/80 backdrop-blur-xl z-10 md:pt-6">
-                                <div className="flex items-center gap-4">
-                                    <button onClick={handleBack} className="md:hidden p-2 -ml-2 text-zinc-400 hover:text-white transition-colors">
-                                        <ArrowLeft className="w-5 h-5" />
-                                    </button>
-                                    <Link to={`/profile/${activeChatUser?.username ?? ""}`} className="shrink-0 group">
-                                        <Avatar src={activeChatUser?.avatarUrl} alt={activeChatUser?.username} size="sm" status="online" />
-                                    </Link>
-                                    <div className="flex flex-col">
-                                        <Link to={`/profile/${activeChatUser?.username ?? ""}`} className="font-bold text-[15px] leading-tight hover:underline">
-                                            {activeChatUser?.username || "Unknown File"}
-                                        </Link>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button className="p-2.5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors">
-                                        <MoreVertical className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Message Feed */}
-                            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 md:px-8 custom-scrollbar">
-                                {messages.length === 0 ? (
-                                    <div className="flex min-h-full flex-col items-center justify-center text-center px-6">
-                                        <Avatar
-                                            src={activeChatUser?.avatarUrl}
-                                            alt={activeChatUser?.username}
-                                            size="xl"
-                                            className="mb-4"
-                                        />
-
-                                        <h2 className="text-2xl font-bold">
-                                            {activeChatUser?.username}
-                                        </h2>
-
-                                        <p className="text-zinc-500 mt-1">
-                                            @{activeChatUser?.username}
-                                        </p>
-
-                                        <Link
-                                            to={`/profile/${activeChatUser?.username}`}
-                                            className="mt-5 px-5 py-2 rounded-xl bg-zinc-900 border border-white/5 text-sm font-semibold"
-                                        >
-                                            View Profile
-                                        </Link>
-                                    </div>
-                                ) : (
-                                    <LiveMessageList
-                                        messages={messages.map(m => ({
-                                            id: m.id,
-                                            userId: m.senderId,
-                                            username:
-                                                m.senderId === user?.id
-                                                    ? user.username
-                                                    : activeChatUser?.username || "User",
-                                            text: m.text,
-                                            ts: new Date(m.createdAt).getTime(),
-                                            avatarUrl:
-                                                m.senderId === user?.id
-                                                    ? user.avatarUrl
-                                                    : activeChatUser?.avatarUrl,
-                                            type: "chat"
-                                        }))}
-                                        selfId={user?.id || null}
-                                    />
-                                )}
-                            </div>
-
-                            {/* Input Area */}
-                            <div className="shrink-0 border-t border-white/5 bg-black/90 backdrop-blur-xl px-4 py-3">
-                                <MessageInput onSend={handleSend} />
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-zinc-950/20">
-                            <div className="w-24 h-24 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center mb-6">
-                                <MessageSquare className="w-10 h-10 text-white/20" />
-                            </div>
-                            <h3 className="text-2xl font-black mb-3 text-white">Your Messages</h3>
-                            <p className="text-zinc-500 text-[15px] max-w-sm">Chat securely with friends or check your direct requests from other users.</p>
-                        </div>
-                    )}
-                </div>
-
-            </main>
+  return (
+    <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden">
+      <Header showTop={false} hideBottomNav={mobileView === "chat"} />
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-black">
+        {/* Inbox sidebar: shown on mobile inbox view or always on md+ */}
+        <div
+          className={
+            showMobileInbox
+              ? "flex flex-1 min-h-0 md:flex-none md:w-[360px] lg:w-[400px] xl:w-[420px] pb-[72px] md:pb-0 animate-chat-pane-in"
+              : "hidden md:flex md:w-[360px] lg:w-[400px] xl:w-[420px]"
+          }
+        >
+          <InboxSidebar
+            conversations={conversations}
+            friends={friends}
+            activeConversationId={activeConversationId}
+            searchTerm={searchTerm}
+            onSearchTermChange={setSearchTerm}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onSelectConversation={handleSelectConversation}
+            onSelectFriend={handleOpenFromFriend}
+            isLoading={isLoadingConversations}
+            onlineUsers={onlineUsers}
+          />
         </div>
-    );
+
+        <div
+          className={
+            showMobileInbox ? "hidden md:flex md:flex-1 md:min-h-0" : "flex flex-1 min-h-0 animate-chat-pane-in"
+          }
+        >
+          {activeConversation ? (
+            <ChatWindow
+              conversation={activeConversation}
+              messages={activeMessages}
+              currentUserId={user?.id || ""}
+              isTyping={activeConversationId ? typingUsers.has(activeConversationId) : false}
+              onBack={() => setMobileView("inbox")}
+              onSendMessage={handleSendMessage}
+              onTyping={() => {}}
+              isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}
+              isLoadingMessages={isLoadingMessages}
+            />
+          ) : (
+            <EmptyChatState />
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

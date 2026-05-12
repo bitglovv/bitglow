@@ -8,6 +8,56 @@ const pool = new Pool({
 
 const BCRYPT_ROUNDS = 12;
 
+const initCoreTables = async () => {
+    try {
+        await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                avatar_url TEXT,
+                website TEXT,
+                location TEXT,
+                bio TEXT,
+                followers_count INTEGER DEFAULT 0,
+                follows_count INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user',
+                is_private BOOLEAN DEFAULT false,
+                created_at TIMESTAMP DEFAULT now(),
+                updated_at TIMESTAMP DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                expires_at TIMESTAMP NOT NULL,
+                revoked_at TIMESTAMP,
+                last_used_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS friends (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                friend_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'blocked')),
+                created_at TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (user_id, friend_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id);
+            CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure core tables", err);
+    }
+};
+void initCoreTables();
+
 // Ensure posts + related tables exist for blogging
 const initPostsTable = async () => {
     try {
@@ -102,6 +152,99 @@ const initSecurityTables = async () => {
     }
 };
 void initSecurityTables();
+ 
+const initDMTables = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS dm_conversations (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT now(),
+                UNIQUE(user_a, user_b)
+            );
+            CREATE INDEX IF NOT EXISTS idx_dm_conv_user_a ON dm_conversations(user_a);
+            CREATE INDEX IF NOT EXISTS idx_dm_conv_user_b ON dm_conversations(user_b);
+
+            CREATE TABLE IF NOT EXISTS dm_messages (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
+                sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'read_at'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN read_at TIMESTAMP;
+                    UPDATE dm_messages SET read_at = created_at WHERE read_at IS NULL;
+                END IF;
+            END $$;
+            CREATE INDEX IF NOT EXISTS idx_dm_msg_conv ON dm_messages(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_dm_msg_created ON dm_messages(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_dm_msg_unread ON dm_messages(conversation_id, sender_id, read_at);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure DM tables", err);
+    }
+};
+void initDMTables();
+ 
+const initLiveTables = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS live_rooms (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_live_rooms_owner ON live_rooms(created_by);
+
+            CREATE TABLE IF NOT EXISTS live_room_members (
+                room_id UUID NOT NULL REFERENCES live_rooms(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                joined_at TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (room_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS live_messages (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                room_id UUID NOT NULL REFERENCES live_rooms(id) ON DELETE CASCADE,
+                sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_live_msg_room ON live_messages(room_id);
+            CREATE INDEX IF NOT EXISTS idx_live_msg_created ON live_messages(created_at DESC);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure Live tables", err);
+    }
+};
+void initLiveTables();
+
+const initLegacyMessagesTable = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure legacy messages table", err);
+    }
+};
+void initLegacyMessagesTable();
 
 type Queryable = Pick<PoolClient, 'query'>;
 
@@ -844,7 +987,8 @@ export const db = {
                     u.display_name as other_display_name,
                     u.avatar_url as other_avatar_url,
                     m.text as last_message,
-                    m.created_at as last_message_at
+                    m.created_at as last_message_at,
+                    COALESCE(unread.count, 0)::int as unread_count
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              LEFT JOIN LATERAL (
@@ -854,6 +998,13 @@ export const db = {
                 ORDER BY created_at DESC
                 LIMIT 1
              ) m ON true
+             LEFT JOIN LATERAL (
+                SELECT COUNT(*)::int as count
+                FROM dm_messages
+                WHERE conversation_id = c.id
+                  AND sender_id <> $1
+                  AND read_at IS NULL
+             ) unread ON true
              WHERE c.user_a = $1 OR c.user_b = $1
              ORDER BY m.created_at DESC NULLS LAST, c.created_at DESC`,
             [userId]
@@ -881,6 +1032,18 @@ export const db = {
             [conversationId, senderId, text]
         );
         return res.rows[0];
+    },
+
+    async markDMConversationRead(conversationId: string, readerId: string) {
+        const res = await pool.query(
+            `UPDATE dm_messages
+             SET read_at = now()
+             WHERE conversation_id = $1
+               AND sender_id <> $2
+               AND read_at IS NULL`,
+            [conversationId, readerId]
+        );
+        return res.rowCount ?? 0;
     },
 
     async isFollowing(userId: string, otherId: string) {

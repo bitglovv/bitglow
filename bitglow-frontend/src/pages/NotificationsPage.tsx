@@ -149,7 +149,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pb-24 space-y-10">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 space-y-10">
         
         {/* All caught up status */}
         {!loading && (

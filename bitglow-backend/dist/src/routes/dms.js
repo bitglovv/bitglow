@@ -21,7 +21,8 @@ async function dmRoutes(fastify) {
             displayName: r.other_display_name || r.other_username,
             avatarUrl: r.other_avatar_url,
             lastMessage: r.last_message || "",
-            unreadCount: 0
+            lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
+            unreadCount: Number(r.unread_count || 0)
         }));
         return conversations;
     });
@@ -38,12 +39,10 @@ async function dmRoutes(fastify) {
         if (!otherId) {
             return reply.code(400).send({ message: "Invalid user" });
         }
-        const allowed = await db_1.db.isMutual(userId, otherId);
-        if (!allowed) {
-            return reply.code(403).send({ message: "You can only message friends" });
-        }
+        // Open messaging enabled
         const convo = await db_1.db.getOrCreateDMConversation(userId, otherId);
         const messages = await db_1.db.getDMHistory(convo.id, 200);
+        await db_1.db.markDMConversationRead(convo.id, userId);
         return messages.map((m) => ({
             id: m.id,
             senderId: m.sender_id,
@@ -69,10 +68,7 @@ async function dmRoutes(fastify) {
         if (!otherId || !text || !text.trim()) {
             return reply.code(400).send({ message: "Invalid message" });
         }
-        const allowed = await db_1.db.isMutual(userId, otherId);
-        if (!allowed) {
-            return reply.code(403).send({ message: "You can only message friends" });
-        }
+        // Open messaging enabled
         const convo = await db_1.db.getOrCreateDMConversation(userId, otherId);
         const saved = await db_1.db.saveDMMessage(convo.id, userId, (0, security_1.sanitizeText)(text.trim(), 2000));
         return {
@@ -81,5 +77,25 @@ async function dmRoutes(fastify) {
             text: saved.text,
             createdAt: new Date(saved.created_at).toISOString()
         };
+    });
+    /**
+     * POST /api/dms/:userId/read
+     * Mark all incoming messages in this conversation as read.
+     */
+    fastify.post("/dms/:userId/read", { preHandler: fastify.requireAuth, schema: schemas_1.dmUserSchema }, async (req, reply) => {
+        if (!req.auth) {
+            return reply.code(401).send({ message: "Not authenticated" });
+        }
+        const userId = req.auth.id;
+        const { userId: otherId } = req.params;
+        if (!otherId) {
+            return reply.code(400).send({ message: "Invalid user" });
+        }
+        const convo = await db_1.db.getDMConversation(userId, otherId);
+        if (!convo) {
+            return { ok: true, readCount: 0 };
+        }
+        const readCount = await db_1.db.markDMConversationRead(convo.id, userId);
+        return { ok: true, readCount };
     });
 }

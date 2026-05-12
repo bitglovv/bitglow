@@ -20,6 +20,7 @@ import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Avatar } from "../components/ui/Avatar";
 import { api, Post, Friend } from "../services/api";
+import { ComposerSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 
 const timeAgo = (dateStr: string): string => {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -408,13 +409,16 @@ export default function HomePage() {
 
       <Header />
 
-      <main className="relative z-10 flex-1 w-full px-3 sm:px-6 pb-[90px] md:pb-6 pt-6 space-y-6 md:max-w-4xl md:mx-auto overflow-y-auto custom-scrollbar">
+      <main className="relative z-10 flex-1 w-full px-3 sm:px-6 md:pb-6 pt-6 space-y-6 md:max-w-4xl md:mx-auto overflow-y-auto custom-scrollbar">
         <div className="space-y-4" id="compose">
           <Composer user={user} onPostCreated={(p) => setPosts((prev) => [p, ...prev])} />
           {isLoading || isLoadingFeed ? (
-            <Card padding="md" className="bg-white/[0.02] border-transparent md:border-white/10 text-zinc-500 text-sm">
-              Loading feed...
-            </Card>
+            <div className="space-y-4">
+              <ComposerSkeleton />
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+            </div>
           ) : posts.length === 0 ? (
             <Card padding="md" className="bg-white/[0.02] border-transparent md:border-white/10 text-zinc-400 text-sm">
               No posts yet. Share something with your friends.

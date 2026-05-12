@@ -55,6 +55,7 @@ export type Conversation = {
     displayName: string;
     avatarUrl?: string;
     lastMessage?: string;
+    lastMessageAt?: string | null;
     unreadCount?: number;
     pinned?: boolean;
 };
@@ -381,6 +382,12 @@ export const api = {
             });
             if (!res.ok) return null;
             return res.json();
+        },
+        markRead: async (userId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/dms/${userId}/read`, {
+                method: "POST",
+            });
+            return res.ok;
         }
     },
     posts: {

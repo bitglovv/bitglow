@@ -1,84 +1,127 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import MessageBubble from "./MessageBubble";
 
-// Must match backend MESSAGE_TTL
-const MESSAGE_TTL = 5 * 60 * 1_000; // 5 minutes
-
 type ChatMessage = {
-    id: number | string;
-    userId?: string;
-    username?: string;
-    text: string;
-    ts: number;
-    avatarUrl?: string;
-    type?: "chat" | "system";
+  id: number | string;
+  userId?: string;
+  username?: string;
+  text: string;
+  ts: number;
+  avatarUrl?: string;
+  type?: "chat" | "system";
 };
 
 type RoomUser = {
-    id: string;
-    username: string;
-    avatarUrl?: string;
+  id: string;
+  username: string;
+  avatarUrl?: string;
 };
 
 type Props = {
-    messages: ChatMessage[];
-    selfId: string | null;
-    participants?: RoomUser[];
+  messages: ChatMessage[];
+  selfId: string | null;
+  participants?: RoomUser[];
 };
 
-export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
-    // Sync lookup: always use the latest known avatar/username for a user ID
-    const userMap = useRef<Record<string, RoomUser>>({});
-    
-    // Update map with fresh presence data
-    participants.forEach(p => {
-        userMap.current[p.id] = p;
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function formatDateSeparator(date: Date): string {
+  const now = new Date();
+  const ageMs = now.getTime() - date.getTime();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+  if (ageMs > sevenDaysMs) {
+    const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
+    const time = date.toLocaleTimeString("en-GB", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: false,
     });
+    return `${weekday} ${time}`;
+  }
 
-    return (
-        <div className="flex flex-col gap-0.5 mt-2">
-            {messages.map((m, i) => {
-                const isSystem = m.type === "system";
+  const day = date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const time = date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
-                if (isSystem) {
-                  return (
-                    <div key={m.id} className="flex justify-center my-4 animate-in fade-in duration-700">
-                      <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-600 bg-zinc-900 px-3 py-1 rounded-full border border-white/5">
-                        {m.text}
-                      </span>
-                    </div>
-                  );
-                }
+  return `${day}, ${time}`;
+}
 
-                const prev = messages[i - 1];
-                const next = messages[i + 1];
+export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
+  const userMap = useRef<Record<string, RoomUser>>({});
 
-                const isFirst = !prev || prev.type === "system" || prev.userId !== m.userId;
-                const isLast = !next || next.type === "system" || next.userId !== m.userId;
+  participants.forEach((p) => {
+    userMap.current[p.id] = p;
+  });
 
-                // Pick LATEST known info, falling back to message-time info
-                const latestInfo = m.userId ? userMap.current[m.userId] : null;
-                const activeUn = latestInfo?.username || m.username || "User";
-                const activeAv = latestInfo?.avatarUrl || m.avatarUrl;
+  return (
+    <div className="flex flex-col gap-px animate-chat-fade">
+      {messages.map((m, i) => {
+        const prev = messages[i - 1];
+        const next = messages[i + 1];
+        const currDate = new Date(m.ts);
+        const prevDate = prev ? new Date(prev.ts) : null;
+        const showDateSep = !prevDate || !isSameDay(prevDate, currDate);
+        const isSystem = m.type === "system";
+        const isFirst =
+          !prev || prev.type === "system" || prev.userId !== m.userId || showDateSep;
+        const isLast =
+          !next ||
+          next.type === "system" ||
+          next.userId !== m.userId ||
+          (next ? !isSameDay(currDate, new Date(next.ts)) : true);
+        const latestInfo = m.userId ? userMap.current[m.userId] : null;
+        const activeUn = latestInfo?.username || m.username || "User";
+        const activeAv = latestInfo?.avatarUrl || m.avatarUrl;
 
-                return (
-                    <div key={m.id} className={`relative ${isFirst ? 'mt-3' : 'mt-0'}`}>
-                        <MessageBubble
-                            text={m.text}
-                            username={activeUn}
-                            isSelf={!!m.userId && m.userId === selfId}
-                            avatarUrl={activeAv}
-                            timestamp={new Date(m.ts).toLocaleTimeString('en-US', { 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true 
-                            })}
-                            isFirstInGroup={isFirst}
-                            isLastInGroup={isLast}
-                        />
-                    </div>
-                );
-            })}
-        </div>
-    );
+        return (
+          <div
+            key={m.id}
+            className="animate-message-in"
+            style={{ animationDelay: `${Math.min(i, 8) * 18}ms` }}
+          >
+            {showDateSep && (
+              <div className="flex items-center justify-center py-2.5 md:py-2">
+                <span className="rounded-full border border-white/[0.06] bg-zinc-950/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+                  {formatDateSeparator(currDate)}
+                </span>
+              </div>
+            )}
+
+            {isSystem ? (
+              <div className="flex justify-center py-1.5 animate-chat-fade">
+                <span className="rounded-full border border-white/5 bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                  {m.text}
+                </span>
+              </div>
+            ) : (
+              <div className={isFirst ? "mt-0.5" : "mt-0"}>
+                <MessageBubble
+                  text={m.text}
+                  username={activeUn}
+                  isSelf={!!m.userId && m.userId === selfId}
+                  avatarUrl={activeAv}
+                  isFirstInGroup={isFirst}
+                  isLastInGroup={isLast}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }

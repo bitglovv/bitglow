@@ -41,7 +41,7 @@ export default function SettingsPage() {
         <div className="h-screen bg-black text-white flex flex-col overflow-hidden selection:bg-brand/30">
             <Header showTop={false} />
 
-            <main className="flex-1 max-w-2xl mx-auto w-full p-6 pt-8 relative overflow-y-auto custom-scrollbar pb-[90px] md:pb-8">
+            <main className="flex-1 max-w-2xl mx-auto w-full p-6 pt-8 relative overflow-y-auto custom-scrollbar md:pb-8">
                 <div className="relative z-10 mb-8 flex items-center gap-2">
                     <button
                         type="button"

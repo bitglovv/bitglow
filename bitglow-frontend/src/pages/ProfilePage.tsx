@@ -11,6 +11,7 @@ import {
   UserMinus, UserX, Link2 
 } from "lucide-react";
 import clsx from "clsx";
+import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 
 // ... (CountButton and ListModal remain same but we can move them or keep them)
 
@@ -318,10 +319,15 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="h-screen bg-black text-white flex flex-col overflow-hidden">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-10 h-10 border-2 border-brand/20 border-t-brand rounded-full animate-spin" />
-        </div>
+        <Header showTop={false} />
+        <main className="relative flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 pt-16 pb-8 overflow-y-auto custom-scrollbar md:pb-8">
+          <ProfileHeaderSkeleton />
+          <div className="mt-10 space-y-4">
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+          </div>
+        </main>
       </div>
     );
   }
@@ -341,7 +347,7 @@ export default function ProfilePage() {
     <div className="h-screen bg-black text-[#e6e6eb] flex flex-col overflow-hidden">
       <Header showTop={false} />
 
-      <main className="relative flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 pt-16 pb-8 overflow-y-auto custom-scrollbar pb-[90px] md:pb-8">
+      <main className="relative flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 pt-16 pb-8 overflow-y-auto custom-scrollbar md:pb-8">
         
         {/* Navigation Actions */}
         <div className="absolute top-4 left-4 right-4 md:left-6 md:right-6 flex items-center justify-between z-20">
