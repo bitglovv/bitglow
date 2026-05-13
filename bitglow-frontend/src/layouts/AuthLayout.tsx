@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { navigateBack } from "../utils/navigateBack";
 
 type Props = {
     title?: string;
@@ -12,7 +13,7 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
     const navigate = useNavigate();
 
     const handleBack = () => {
-        navigate("/");
+        navigateBack(navigate, "/");
     };
 
     return (

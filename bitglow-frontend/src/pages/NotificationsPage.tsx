@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Avatar } from "../components/ui/Avatar";
 import { useAuth } from "../hooks/useAuth";
 import clsx from "clsx";
+import { navigateBack } from "../utils/navigateBack";
 
 const BITGLOW_NOTIFICATIONS = [
   {
@@ -139,7 +140,7 @@ export default function NotificationsPage() {
       <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md">
         <div className="flex items-center gap-6 px-4 py-6 max-w-2xl mx-auto">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigateBack(navigate, "/home")}
             className="text-white hover:opacity-70 transition-all active:scale-95"
             aria-label="Go back"
           >

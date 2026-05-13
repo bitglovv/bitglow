@@ -8,6 +8,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import clsx from "clsx";
+import { navigateBack } from "../utils/navigateBack";
 
 export default function EditProfilePage() {
     useEffect(() => { document.title = "BitGlow \u2022 Edit Profile"; }, []);
@@ -170,7 +171,12 @@ export default function EditProfilePage() {
                         <Button
                             type="button"
                             variant="secondary"
-                            onClick={() => window.history.back()}
+                            onClick={() =>
+                                navigateBack(
+                                    navigate,
+                                    user?.username ? `/profile/${user.username}` : "/profile"
+                                )
+                            }
                             className="bg-transparent border-0 px-3 h-12 shadow-none hover:bg-white/5"
                         >
                             <ArrowLeft className="w-6 h-6" />
@@ -280,7 +286,12 @@ export default function EditProfilePage() {
                         </Button>
                         <Button
                             variant="secondary"
-                            onClick={() => window.history.back()}
+                            onClick={() =>
+                                navigateBack(
+                                    navigate,
+                                    user?.username ? `/profile/${user.username}` : "/profile"
+                                )
+                            }
                             className="bg-white/5 border-white/5 h-14 px-10"
                         >
                             Cancel

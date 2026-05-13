@@ -6,16 +6,22 @@ type Props = {
   conversation: Conversation;
   isOnline: boolean;
   onBack: () => void;
+  /** When false, back is hidden (e.g. split inbox + chat on wide screens). */
+  showBackButton?: boolean;
 };
 
-export const ChatHeader = ({ conversation, isOnline, onBack }: Props) => {
+export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true }: Props) => {
   return (
-    <div className="shrink-0 bg-black px-3 py-2.5 md:px-4">
+    <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
       <div className="flex min-w-0 items-center gap-3">
         <button
+          type="button"
           onClick={onBack}
           aria-label="Back to inbox"
-          className="-ml-1 rounded-full p-2 text-white transition-all duration-300 hover:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-white/20 active:scale-95 md:hidden"
+          className={[
+            "-ml-1 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-2 text-white transition-all duration-300 hover:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-white/20 active:scale-95 touch-manipulation",
+            showBackButton ? "" : "hidden",
+          ].join(" ")}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>

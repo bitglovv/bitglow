@@ -6,6 +6,7 @@ import { Lock, Shield, LogOut, ChevronRight, Trash2, Mail, ArrowLeft } from "luc
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { api } from "../services/api";
+import { navigateBack } from "../utils/navigateBack";
 
 export default function SettingsPage() {
     useEffect(() => { document.title = "BitGlow \u2022 Settings"; }, []);
@@ -45,7 +46,12 @@ export default function SettingsPage() {
                 <div className="relative z-10 mb-8 flex items-center gap-2">
                     <button
                         type="button"
-                        onClick={() => navigate("/profile")}
+                        onClick={() =>
+                            navigateBack(
+                                navigate,
+                                user?.username ? `/profile/${user.username}` : "/profile"
+                            )
+                        }
                         className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-transparent text-white transition duration-200 hover:-translate-y-[1px] hover:bg-white/[0.04] active:translate-y-[1px]"
                         aria-label="Back"
                     >

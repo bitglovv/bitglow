@@ -9,15 +9,15 @@ type Props = {
   onSelect: (userId: string) => void;
 };
 
-export const ConversationItem = ({ conversation, onSelect }: Props) => {
+export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, onSelect }: Props) => {
   const isUnread = (conversation.unreadCount ?? 0) > 0;
 
   return (
     <button
       onClick={() => onSelect(conversation.userId)}
       className={clsx(
-        "group relative w-full overflow-hidden rounded-[16px] border border-transparent py-2 pl-2.5 pr-8 text-left transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15",
-        isUnread ? "bg-white/[0.045]" : "bg-transparent"
+        "group relative w-full overflow-hidden rounded-[16px] border border-transparent py-2 pl-2.5 pr-7 text-left transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15",
+        isActive ? "border-white/[0.08] bg-white/[0.05]" : "bg-transparent"
       )}
     >
       <div className="relative flex items-center gap-3">
@@ -27,12 +27,7 @@ export const ConversationItem = ({ conversation, onSelect }: Props) => {
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span
-              className={clsx(
-                "truncate text-[14px] leading-5 transition-colors duration-300",
-                isUnread ? "font-black text-white" : "font-bold text-zinc-100"
-              )}
-            >
+            <span className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300">
               {conversation.displayName || conversation.username}
             </span>
           </div>
@@ -41,7 +36,7 @@ export const ConversationItem = ({ conversation, onSelect }: Props) => {
             <p
               className={clsx(
                 "min-w-0 truncate text-[13px] leading-5 transition-colors duration-300",
-                isUnread ? "font-bold text-white" : "font-normal text-zinc-500"
+                isUnread ? "font-bold text-zinc-200" : "font-normal text-zinc-500"
               )}
             >
               {conversation.lastMessage || "Start a conversation"}
@@ -53,7 +48,7 @@ export const ConversationItem = ({ conversation, onSelect }: Props) => {
       {isUnread && (
         <span
           aria-label={`${conversation.unreadCount} unread message${conversation.unreadCount === 1 ? "" : "s"}`}
-          className="absolute right-3 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-brand shadow-[0_0_14px_rgba(16,185,129,0.9)]"
+          className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-[#050505] shadow-[0_0_6px_rgba(16,185,129,0.45)]"
         />
       )}
     </button>

@@ -93,10 +93,10 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
                                 "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all group hover:text-white",
                                 isActive('/messages') ? "bg-brand text-black shadow-lg shadow-brand/20" : "text-zinc-500"
                             )}>
-                                <div className="relative">
+                                <div className="relative inline-flex">
                                     <Send className="w-3 h-3" />
                                     {hasUnreadMessages && !isActive('/messages') && (
-                                        <div className="absolute -top-1.5 -right-1.5 w-2 h-2 bg-brand rounded-full border border-black" />
+                                        <span className="pointer-events-none absolute bottom-0 right-0 h-1.5 w-1.5 translate-x-[2px] -translate-y-[2px] rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_5px_rgba(16,185,129,0.55)]" aria-hidden />
                                     )}
                                 </div>
                                 <span>Messages</span>
@@ -159,11 +159,20 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
                                 className={clsx("w-10 h-10 transition-all", isActive('/live') ? "brightness-100" : "opacity-50 grayscale brightness-75")}
                             />
                         </Link>
-                        <Link to="/messages" className={clsx("p-2 transition-all relative", isActive('/messages') ? "text-white" : "text-zinc-500")}>
-                            <Send className="w-6 h-6" />
-                            {hasUnreadMessages && !isActive('/messages') && (
-                                <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-brand rounded-full border-0 border-black shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                            )}
+                        <Link
+                            to="/messages"
+                            className={clsx("relative inline-flex p-2 transition-all", isActive('/messages') ? "text-white" : "text-zinc-500")}
+                            aria-label="Messages"
+                        >
+                            <span className="relative inline-flex">
+                                <Send className="w-6 h-6" />
+                                {hasUnreadMessages && !isActive('/messages') && (
+                                    <span
+                                        className="pointer-events-none absolute bottom-0 right-0 h-1.5 w-1.5 translate-x-[1px] -translate-y-[3px] rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_5px_rgba(16,185,129,0.55)]"
+                                        aria-hidden
+                                    />
+                                )}
+                            </span>
                         </Link>
                         <Link to={`/profile/${user.username}`} className="flex items-center justify-center">
                             <div className={clsx(

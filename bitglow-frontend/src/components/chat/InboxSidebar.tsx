@@ -43,7 +43,7 @@ export const InboxSidebar = ({
 
   return (
     <aside className="flex flex-1 min-h-0 flex-col border-r border-white/[0.06] bg-[#050505]">
-      <div className="border-b border-white/[0.06] px-4 pt-3.5 pb-3">
+      <div className="px-4 pt-3.5 pb-3">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tight">Messages</h1>
           <button
@@ -103,23 +103,29 @@ export const InboxSidebar = ({
                   key={friend.id}
                   onClick={() => onSelectFriend(friend)}
                   className={clsx(
-                    "relative flex w-full items-center gap-3 rounded-[16px] border border-transparent py-2.5 pl-2.5 pr-8 transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15",
-                    isUnread ? "bg-white/[0.045]" : "bg-transparent"
+                    "relative flex w-full items-center gap-3 rounded-[16px] border border-transparent bg-transparent py-2.5 pl-2.5 pr-7 transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15"
                   )}
                 >
-                  <Avatar src={friend.avatarUrl} alt={friend.username} size="md" />
+                  <div className="relative shrink-0">
+                    <Avatar src={friend.avatarUrl} alt={friend.username} size="md" />
+                  </div>
                   <div className="min-w-0 flex-1 text-left">
-                    <p className={clsx("truncate text-white", isUnread ? "font-black" : "font-semibold")}>
+                    <p className="truncate font-semibold text-white">
                       {friend.displayName || friend.username}
                     </p>
-                    <p className={clsx("truncate text-xs leading-5", isUnread ? "font-semibold text-zinc-100" : "text-zinc-500")}>
+                    <p
+                      className={clsx(
+                        "truncate text-xs leading-5 transition-colors",
+                        isUnread ? "font-bold text-zinc-200" : "font-normal text-zinc-500"
+                      )}
+                    >
                       {latestMessage}
                     </p>
                   </div>
                   {isUnread && (
                     <span
                       aria-label={`${existingConversation?.unreadCount} unread message${existingConversation?.unreadCount === 1 ? "" : "s"}`}
-                      className="absolute right-3 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-brand shadow-[0_0_14px_rgba(16,185,129,0.9)]"
+                      className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-[#050505] shadow-[0_0_6px_rgba(16,185,129,0.45)]"
                     />
                   )}
                 </button>

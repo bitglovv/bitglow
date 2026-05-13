@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
-
-// ... (CountButton and ListModal remain same but we can move them or keep them)
+import { navigateBack } from "../utils/navigateBack";
 
 function CountButton({
   label,
@@ -352,7 +351,8 @@ export default function ProfilePage() {
         {/* Navigation Actions */}
         <div className="absolute top-4 left-4 right-4 md:left-6 md:right-6 flex items-center justify-between z-20">
           <button 
-            onClick={() => navigate("/")}
+            type="button"
+            onClick={() => navigateBack(navigate, "/home")}
             className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-transparent text-white transition duration-200 hover:-translate-y-[1px] hover:bg-white/[0.04] active:translate-y-[1px]"
             aria-label="Back"
           >

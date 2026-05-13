@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
 import { InboxSidebar } from "../components/chat/InboxSidebar";
@@ -6,8 +6,16 @@ import { ChatWindow } from "../components/chat/ChatWindow";
 import { EmptyChatState } from "../components/chat/EmptyChatState";
 import { useChatStore } from "../store/chatStore";
 
+const STACKED_MAX_PX = 767;
+
+function isStackedMessagesLayout() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(`(max-width: ${STACKED_MAX_PX}px)`).matches;
+}
+
 export default function MessagesPage() {
   const { user } = useAuth();
+  const dmChatPushedRef = useRef(false);
   const {
     conversations,
     friends,
@@ -26,6 +34,25 @@ export default function MessagesPage() {
   const [mobileView, setMobileView] = useState<"inbox" | "chat">("inbox");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
+  const [isStackedLayout, setIsStackedLayout] = useState(isStackedMessagesLayout);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${STACKED_MAX_PX}px)`);
+    const apply = () => setIsStackedLayout(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (window.location.pathname !== "/messages") return;
+      dmChatPushedRef.current = false;
+      setMobileView("inbox");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     document.title = "BitGlow - Messages";
@@ -42,15 +69,33 @@ export default function MessagesPage() {
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
+  const pushMobileDmHistory = () => {
+    if (!isStackedMessagesLayout()) return;
+    window.history.pushState({ bitglowDmChat: true }, "", window.location.pathname);
+    dmChatPushedRef.current = true;
+  };
+
   const handleSelectConversation = (userId: string) => {
+    const fromInbox = mobileView === "inbox";
     setActiveConversation(userId);
     setMobileView("chat");
+    if (fromInbox) pushMobileDmHistory();
   };
 
   const handleOpenFromFriend = (friend: any) => {
+    const fromInbox = mobileView === "inbox";
     openFriendConversation(friend);
     setSearchTerm("");
     setMobileView("chat");
+    if (fromInbox) pushMobileDmHistory();
+  };
+
+  const handleChatBack = () => {
+    setMobileView("inbox");
+    if (dmChatPushedRef.current) {
+      dmChatPushedRef.current = false;
+      window.history.back();
+    }
   };
 
   const handleSendMessage = async (text: string) => {
@@ -98,7 +143,8 @@ export default function MessagesPage() {
               messages={activeMessages}
               currentUserId={user?.id || ""}
               isTyping={activeConversationId ? typingUsers.has(activeConversationId) : false}
-              onBack={() => setMobileView("inbox")}
+              onBack={handleChatBack}
+              showHeaderBack={isStackedLayout && mobileView === "chat"}
               onSendMessage={handleSendMessage}
               onTyping={() => {}}
               isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}

@@ -1,5 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import { Link } from "react-router-dom";
+import { useVisualViewportBottomInset } from "../../hooks/useVisualViewportBottomInset";
 import { Conversation, DMMessage } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { Avatar } from "../ui/Avatar";
@@ -14,6 +16,8 @@ interface ChatWindowProps {
   currentUserId: string;
   isTyping: boolean;
   onBack: () => void;
+  /** Hide header back on wide split layouts (inbox + chat visible). */
+  showHeaderBack?: boolean;
   onSendMessage: (text: string) => void;
   onTyping: (isTyping: boolean) => void;
   isOnline: boolean;
@@ -26,6 +30,7 @@ export const ChatWindow = ({
   currentUserId,
   isTyping,
   onBack,
+  showHeaderBack = true,
   onSendMessage,
   onTyping,
   isOnline,
@@ -33,6 +38,28 @@ export const ChatWindow = ({
 }: ChatWindowProps) => {
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const keyboardInset = useVisualViewportBottomInset();
+  const [isNarrow, setIsNarrow] = useState(false);
+  const [composerPad, setComposerPad] = useState(68);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = footerRef.current;
+    if (!el || !isNarrow) return;
+    const ro = new ResizeObserver(() => {
+      setComposerPad(Math.ceil(el.getBoundingClientRect().height));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isNarrow, conversation?.userId]);
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
 
@@ -53,12 +80,18 @@ export const ChatWindow = ({
   if (!conversation) return null;
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-black animate-chat-pane-in">
-      <ChatHeader conversation={conversation} isOnline={isOnline} onBack={onBack} />
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-black animate-chat-pane-in">
+      <ChatHeader
+        conversation={conversation}
+        isOnline={isOnline}
+        onBack={onBack}
+        showBackButton={showHeaderBack}
+      />
 
       <div
         ref={scrollRef}
         className="custom-scrollbar flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth bg-black"
+        style={{ paddingBottom: isNarrow ? composerPad : undefined }}
       >
         {isLoadingMessages ? (
           <div className="flex h-full items-center justify-center text-sm text-zinc-500 animate-chat-fade">
@@ -124,7 +157,14 @@ export const ChatWindow = ({
         )}
       </div>
 
-      <div className="shrink-0 bg-black px-3 py-2 md:px-4 md:py-2.5">
+      <div
+        ref={footerRef}
+        className={clsx(
+          "shrink-0 bg-black px-3 pt-1.5 pb-2",
+          isNarrow ? "fixed left-0 right-0 z-50" : "md:px-4 md:py-2.5 md:pb-[max(10px,env(safe-area-inset-bottom))]"
+        )}
+        style={isNarrow ? { bottom: keyboardInset } : undefined}
+      >
         <MessageInput compact onSendMessage={onSendMessage} onTyping={onTyping} />
       </div>
     </div>

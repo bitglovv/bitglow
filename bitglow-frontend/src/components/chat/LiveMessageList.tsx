@@ -31,33 +31,41 @@ function isSameDay(a: Date, b: Date) {
   );
 }
 
+function formatTime12h(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/** Month like "May", day, optional year — 12h time (e.g. "May 8 · 3:45 PM"). */
 function formatDateSeparator(date: Date): string {
   const now = new Date();
-  const ageMs = now.getTime() - date.getTime();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const time = formatTime12h(date);
 
-  if (ageMs > sevenDaysMs) {
-    const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
-    const time = date.toLocaleTimeString("en-GB", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return `${weekday} ${time}`;
+  if (msgDay.getTime() === today.getTime()) {
+    return `Today · ${time}`;
+  }
+  if (msgDay.getTime() === yesterday.getTime()) {
+    return `Yesterday · ${time}`;
   }
 
-  const day = date.toLocaleDateString("en-GB", {
-    day: "numeric",
+  if (date.getFullYear() === now.getFullYear()) {
+    const monthDay = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${monthDay} · ${time}`;
+  }
+
+  const monthDayYear = date.toLocaleDateString("en-US", {
     month: "short",
+    day: "numeric",
     year: "numeric",
   });
-  const time = date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  return `${day}, ${time}`;
+  return `${monthDayYear} · ${time}`;
 }
 
 export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
@@ -95,7 +103,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
           >
             {showDateSep && (
               <div className="flex items-center justify-center py-2.5 md:py-2">
-                <span className="rounded-full border border-white/[0.06] bg-zinc-950/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+                <span className="text-[11px] font-medium tracking-wide text-zinc-500">
                   {formatDateSeparator(currDate)}
                 </span>
               </div>
