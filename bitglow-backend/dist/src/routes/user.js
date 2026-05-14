@@ -197,6 +197,8 @@ async function userRoutes(fastify) {
             return reply.code(400).send({ message: "Invalid user" });
         }
         const result = await db_1.db.followUser(userId, friendId);
+        const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
+        pushSocialActivity(friendId);
         return { status: result.status };
     });
     // List incoming follow requests (for private accounts)
@@ -213,6 +215,8 @@ async function userRoutes(fastify) {
         const userId = req.auth.id;
         const { id } = req.params;
         await db_1.db.acceptFollow(userId, id);
+        const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
+        pushSocialActivity(id);
         return { ok: true };
     });
     /**

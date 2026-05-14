@@ -4,8 +4,13 @@ import { Avatar } from "../ui/Avatar";
 import { Send, Bell, User, House, Search } from "lucide-react";
 import clsx from "clsx";
 import LiveChatIcon from "../../assets/icons/live-chat.svg";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../services/api";
+import {
+    isActivityNotification,
+    notificationStableId,
+    NOTIFICATIONS_UPDATED_EVENT,
+} from "../../utils/notificationFeed";
 
 export default function Header({ showTop = true, hideActions = false, hideBottomNav = false }: { showTop?: boolean; hideActions?: boolean; hideBottomNav?: boolean }) {
     const { user } = useAuth();
@@ -16,34 +21,36 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
     // Notifications page has its own full-page layout — hide both bars
     const isNotificationsPage = location.pathname === "/notifications";
 
+    const checkStatus = useCallback(async () => {
+        if (!user) return;
+        try {
+            const convs = await api.dms.list();
+            setHasUnreadMessages(convs.some((c) => (c.unreadCount ?? 0) > 0));
+
+            const notes = await api.notifications.list();
+            const seenStr = localStorage.getItem("bitglow:seen_notifications");
+            const seenIds = new Set(seenStr ? JSON.parse(seenStr) : []);
+
+            const activityNotes = notes.filter((n) => isActivityNotification(n));
+            const hasUnseen = activityNotes.some((n) => !seenIds.has(notificationStableId(n)));
+            setHasUnreadNotifications(hasUnseen);
+        } catch (e) {
+            console.error("Failed to check status", e);
+        }
+    }, [user]);
+
     useEffect(() => {
         if (!user) return;
-
-        const checkStatus = async () => {
-            try {
-                // Check messages
-                const convs = await api.dms.list();
-                setHasUnreadMessages(convs.some(c => (c.unreadCount ?? 0) > 0));
-
-                // Check notifications
-                const notes = await api.notifications.list();
-                const seenStr = localStorage.getItem("bitglow:seen_notifications");
-                const seenIds = new Set(seenStr ? JSON.parse(seenStr) : []);
-
-                const hasUnseen = notes.some(n => {
-                    const id = `${n.type}-${n.user.id}-${new Date(n.createdAt).getTime()}`;
-                    return !seenIds.has(id);
-                });
-                setHasUnreadNotifications(hasUnseen);
-            } catch (e) {
-                console.error("Failed to check status", e);
-            }
-        };
-
-        checkStatus();
-        const interval = setInterval(checkStatus, 30000); // Check every 30s
+        void checkStatus();
+        const interval = setInterval(() => void checkStatus(), 30000);
         return () => clearInterval(interval);
-    }, [user?.id, location.pathname]);
+    }, [user?.id, location.pathname, checkStatus]);
+
+    useEffect(() => {
+        const onUpdate = () => void checkStatus();
+        window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, onUpdate);
+        return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, onUpdate);
+    }, [checkStatus]);
 
     if (!user) return null;
     if (isNotificationsPage) return null;

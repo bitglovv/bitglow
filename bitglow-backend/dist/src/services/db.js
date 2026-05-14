@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.db = void 0;
+exports.activityNotifStableId = activityNotifStableId;
 const pg_1 = require("pg");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const env_1 = require("../config/env");
@@ -198,6 +199,23 @@ const initDMTables = async () => {
     }
 };
 void initDMTables();
+const initActivityNotificationReads = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS activity_notification_reads (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                notif_key TEXT NOT NULL,
+                read_at TIMESTAMPTZ DEFAULT now(),
+                PRIMARY KEY (user_id, notif_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_activity_notif_reads_user ON activity_notification_reads(user_id);
+        `);
+    }
+    catch (e) {
+        console.error("Failed to ensure activity_notification_reads", e);
+    }
+};
+void initActivityNotificationReads();
 const initLiveTables = async () => {
     try {
         await pool.query(`
@@ -325,6 +343,34 @@ async function getCanonicalLiveRoomByRequestedId(client, roomId) {
         return null;
     }
     return mapLiveRoom(row);
+}
+function activityNotifStableId(item) {
+    const ca = new Date(item.createdAt).toISOString();
+    if (item.type === "like")
+        return `like:${item.user.id}:${item.postId}:${ca}`;
+    if (item.type === "comment" && item.commentId)
+        return `comment:${item.commentId}`;
+    return `${item.type}:${item.user.id}:${ca}`;
+}
+async function hydrateActivityReadFlags(userId, items) {
+    if (items.length === 0)
+        return [];
+    const keys = items.map(activityNotifStableId);
+    const res = await pool.query(`SELECT notif_key FROM activity_notification_reads
+         WHERE user_id = $1 AND notif_key = ANY($2::text[])`, [userId, keys]);
+    const read = new Set(res.rows.map((r) => r.notif_key));
+    return items.map((it) => {
+        const createdAt = typeof it.createdAt === "string"
+            ? it.createdAt
+            : new Date(it.createdAt).toISOString();
+        const id = activityNotifStableId({ ...it, createdAt });
+        return {
+            ...it,
+            createdAt,
+            id,
+            read: read.has(id),
+        };
+    });
 }
 exports.db = {
     query: (text, params) => pool.query(text, params),
@@ -979,37 +1025,41 @@ exports.db = {
         const res = await pool.query(`DELETE FROM posts WHERE id = $1 AND author_id = $2`, [postId, authorId]);
         return (res.rowCount ?? 0) > 0;
     },
+    async getPostAuthorId(postId) {
+        const res = await pool.query(`SELECT author_id FROM posts WHERE id = $1`, [postId]);
+        return res.rows[0]?.author_id ?? null;
+    },
     async getNotifications(userId, limit = 50) {
-        // 1. Likes on your posts
         const likesRes = await pool.query(`SELECT pl.user_id,
                     pl.post_id,
                     pl.created_at,
                     'like' AS type,
                     u.username,
                     u.display_name,
-                    u.avatar_url
+                    u.avatar_url,
+                    (SELECT left(trim(regexp_replace(p2.content, E'\\s+', ' ', 'g')), 140) FROM posts p2 WHERE p2.id = pl.post_id) AS post_preview
              FROM post_likes pl
              JOIN posts p ON p.id = pl.post_id
              JOIN users u ON u.id = pl.user_id
              WHERE p.author_id = $1 AND pl.user_id <> $1
              ORDER BY pl.created_at DESC
              LIMIT $2`, [userId, limit]);
-        // 2. Comments on your posts
-        const commentsRes = await pool.query(`SELECT pc.author_id as user_id,
+        const commentsRes = await pool.query(`SELECT pc.id AS comment_id,
+                    pc.author_id AS user_id,
                     pc.post_id,
                     pc.created_at,
                     pc.content,
                     'comment' AS type,
                     u.username,
                     u.display_name,
-                    u.avatar_url
+                    u.avatar_url,
+                    (SELECT left(trim(regexp_replace(p2.content, E'\\s+', ' ', 'g')), 140) FROM posts p2 WHERE p2.id = pc.post_id) AS post_preview
              FROM post_comments pc
              JOIN posts p ON p.id = pc.post_id
              JOIN users u ON u.id = pc.author_id
              WHERE p.author_id = $1 AND pc.author_id <> $1
              ORDER BY pc.created_at DESC
              LIMIT $2`, [userId, limit]);
-        // 3. Follow requests and New Followers
         const followsRes = await pool.query(`SELECT f.user_id,
                     f.created_at,
                     f.status,
@@ -1022,49 +1072,60 @@ exports.db = {
              WHERE f.friend_id = $1 AND f.user_id <> $1
              ORDER BY f.created_at DESC
              LIMIT $2`, [userId, limit]);
-        // 4. New DM Notifications (Last message from others)
-        const dmsRes = await pool.query(`SELECT m.sender_id as user_id,
-                    m.text as content,
-                    m.created_at,
-                    'dm' as type,
-                    u.username,
-                    u.display_name,
-                    u.avatar_url
-             FROM dm_messages m
-             JOIN dm_conversations c ON c.id = m.conversation_id
-             JOIN users u ON u.id = m.sender_id
-             WHERE (c.user_a = $1 OR c.user_b = $1)
-               AND m.sender_id <> $1
-             ORDER BY m.created_at DESC
-             LIMIT $2`, [userId, limit]);
+        const typePri = {
+            follow_request: 4,
+            comment: 3,
+            follow: 2,
+            follow_back: 2,
+            like: 1,
+        };
         const items = [
             ...likesRes.rows.map((r) => ({
-                type: 'like',
+                type: "like",
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
-                createdAt: r.created_at
+                postPreview: r.post_preview,
+                createdAt: r.created_at,
             })),
             ...commentsRes.rows.map((r) => ({
-                type: 'comment',
+                type: "comment",
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
+                postPreview: r.post_preview,
                 content: r.content,
-                createdAt: r.created_at
+                commentId: r.comment_id,
+                createdAt: r.created_at,
             })),
             ...followsRes.rows.map((r) => ({
-                type: r.status === 'pending' ? 'follow_request' : (r.is_mutual ? 'follow_back' : 'follow'),
+                type: (r.status === "pending" ? "follow_request" : r.is_mutual ? "follow_back" : "follow"),
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
-                createdAt: r.created_at
-            })),
-            ...dmsRes.rows.map((r) => ({
-                type: 'dm',
-                user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
-                content: r.content,
-                createdAt: r.created_at
+                createdAt: r.created_at,
             })),
         ];
-        return items
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, limit);
-    }
+        items.sort((a, b) => {
+            const tb = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            if (tb !== 0)
+                return tb;
+            return (typePri[b.type] || 0) - (typePri[a.type] || 0);
+        });
+        const sliced = items.slice(0, limit);
+        return await hydrateActivityReadFlags(userId, sliced);
+    },
+    async markActivityNotificationsRead(userId, keys) {
+        if (!keys.length)
+            return;
+        await pool.query(`INSERT INTO activity_notification_reads (user_id, notif_key)
+             SELECT $1, unnest($2::text[])
+             ON CONFLICT (user_id, notif_key) DO NOTHING`, [userId, keys]);
+    },
+    async markAllActivityNotificationsRead(userId) {
+        const items = await this.getNotifications(userId, 250);
+        const keys = items.map((i) => i.id).filter(Boolean);
+        if (keys.length)
+            await this.markActivityNotificationsRead(userId, keys);
+    },
+    async getUnreadActivityNotificationCount(userId) {
+        const items = await this.getNotifications(userId, 100);
+        return items.filter((i) => !i.read).length;
+    },
 };

@@ -46,6 +46,8 @@ export type DMMessage = {
     id: string;
     senderId: string;
     text: string;
+    type: 'text' | 'post';
+    postId?: string;
     createdAt: string;
 };
 
@@ -105,6 +107,7 @@ export type Notification =
     | { type: "follow_request"; user: User; createdAt: string }
     | { type: "follow"; user: User; createdAt: string }
     | { type: "follow_back"; user: User; createdAt: string }
+    | { type: "mention"; user: User; postId?: string; createdAt: string }
     | { type: "dm"; user: User; content: string; createdAt: string };
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
@@ -375,10 +378,10 @@ export const api = {
             if (!res.ok) return [];
             return res.json();
         },
-        send: async (userId: string, text: string): Promise<DMMessage | null> => {
+        send: async (userId: string, text: string, type: 'text' | 'post' = 'text', postId?: string): Promise<DMMessage | null> => {
             const res = await fetchWithAuth(`/dms/${userId}`, {
                 method: "POST",
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({ text, type, postId }),
             });
             if (!res.ok) return null;
             return res.json();
@@ -408,6 +411,25 @@ export const api = {
                     savedByMe: p.savedByMe ?? !!p.saved_by_me,
                 };
             });
+        },
+        get: async (postId: string): Promise<Post | null> => {
+            console.log(`API: fetching /posts/${postId}`);
+            const res = await fetchWithAuth(`/posts/${postId}`);
+            if (!res.ok) {
+                const error = await readErrorMessage(res, "Post not found");
+                throw new Error(error);
+            }
+            const data = await res.json();
+            const p = data.post;
+            if (!p) return null;
+            return {
+                ...p,
+                likesCount: Number(p.likesCount ?? p.likes_count ?? 0),
+                commentsCount: Number(p.commentsCount ?? p.comments_count ?? 0),
+                savesCount: Number(p.savesCount ?? p.saves_count ?? 0),
+                likedByMe: p.likedByMe ?? !!p.liked_by_me,
+                savedByMe: p.savedByMe ?? !!p.saved_by_me,
+            };
         },
         create: async (payload: { title?: string; content: string; visibility?: "public" | "friends" }): Promise<Post | null> => {
             const res = await fetchWithAuth("/posts", {

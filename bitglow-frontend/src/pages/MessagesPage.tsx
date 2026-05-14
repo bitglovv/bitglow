@@ -49,6 +49,7 @@ export default function MessagesPage() {
       if (window.location.pathname !== "/messages") return;
       dmChatPushedRef.current = false;
       setMobileView("inbox");
+      setActiveConversation(null);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -92,6 +93,7 @@ export default function MessagesPage() {
 
   const handleChatBack = () => {
     setMobileView("inbox");
+    setActiveConversation(null);
     if (dmChatPushedRef.current) {
       dmChatPushedRef.current = false;
       window.history.back();
@@ -106,14 +108,14 @@ export default function MessagesPage() {
   const showMobileInbox = mobileView === "inbox";
 
   return (
-    <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden">
+    <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden pt-[env(safe-area-inset-top,0px)]">
       <Header showTop={false} hideBottomNav={mobileView === "chat"} />
-      <div className="flex flex-1 min-h-0 overflow-hidden bg-black">
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-black relative">
         {/* Inbox sidebar: shown on mobile inbox view or always on md+ */}
         <div
           className={
             showMobileInbox
-              ? "flex flex-1 min-h-0 md:flex-none md:w-[360px] lg:w-[400px] xl:w-[420px] pb-[72px] md:pb-0 animate-chat-pane-in"
+              ? "flex flex-1 min-h-0 md:flex-none md:w-[360px] lg:w-[400px] xl:w-[420px] pb-[84px] md:pb-0 animate-chat-pane-in"
               : "hidden md:flex md:w-[360px] lg:w-[400px] xl:w-[420px]"
           }
         >
@@ -134,7 +136,7 @@ export default function MessagesPage() {
 
         <div
           className={
-            showMobileInbox ? "hidden md:flex md:flex-1 md:min-h-0" : "flex flex-1 min-h-0 animate-chat-pane-in"
+            showMobileInbox ? "hidden md:flex md:flex-1 md:min-h-0" : "flex flex-1 min-h-0 animate-chat-pane-in pt-[env(safe-area-inset-top,0px)]"
           }
         >
           {activeConversation ? (

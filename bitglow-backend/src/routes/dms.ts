@@ -56,6 +56,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
             id: m.id,
             senderId: m.sender_id,
             text: m.text,
+            type: m.type || 'text',
+            postId: m.post_id,
             createdAt: new Date(m.created_at).toISOString()
         }));
     });
@@ -75,7 +77,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         const userId = req.auth.id;
         const { userId: otherId } = req.params as { userId: string };
-        const { text } = req.body as { text?: string };
+        const { text, type, postId } = req.body as { text?: string; type?: 'text' | 'post'; postId?: string };
 
         if (!otherId || !text || !text.trim()) {
             return reply.code(400).send({ message: "Invalid message" });
@@ -83,12 +85,14 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         // Open messaging enabled
         const convo = await db.getOrCreateDMConversation(userId, otherId);
-        const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000));
+        const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000), type || 'text', postId);
 
         return {
             id: saved.id,
             senderId: saved.sender_id,
             text: saved.text,
+            type: saved.type,
+            postId: saved.post_id,
             createdAt: new Date(saved.created_at).toISOString()
         };
     });

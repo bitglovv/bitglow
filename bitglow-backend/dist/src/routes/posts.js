@@ -55,6 +55,13 @@ async function postRoutes(fastify) {
         const userId = req.auth.id;
         const { id } = req.params;
         const result = await db_1.db.toggleLike(userId, id);
+        if (result.liked) {
+            const authorId = await db_1.db.getPostAuthorId(id);
+            if (authorId && authorId !== userId) {
+                const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
+                pushSocialActivity(authorId);
+            }
+        }
         return { liked: result.liked, likesCount: result.count };
     });
     fastify.post("/posts/:id/save", {
@@ -80,6 +87,11 @@ async function postRoutes(fastify) {
         }
         const comment = await db_1.db.addComment(userId, id, (0, security_1.sanitizeText)(content.trim(), 1000));
         const author = await db_1.db.getUserById(userId);
+        const postAuthorId = await db_1.db.getPostAuthorId(id);
+        if (postAuthorId && postAuthorId !== userId) {
+            const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
+            pushSocialActivity(postAuthorId);
+        }
         return {
             comment: {
                 id: comment.id,

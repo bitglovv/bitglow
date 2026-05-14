@@ -8,7 +8,8 @@ type ChatMessage = {
   text: string;
   ts: number;
   avatarUrl?: string;
-  type?: "chat" | "system";
+  type?: "chat" | "system" | "post";
+  postId?: string;
 };
 
 type RoomUser = {
@@ -42,30 +43,15 @@ function formatTime12h(date: Date): string {
 /** Month like "May", day, optional year — 12h time (e.g. "May 8 · 3:45 PM"). */
 function formatDateSeparator(date: Date): string {
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const time = formatTime12h(date);
 
-  if (msgDay.getTime() === today.getTime()) {
-    return `Today · ${time}`;
-  }
-  if (msgDay.getTime() === yesterday.getTime()) {
-    return `Yesterday · ${time}`;
+  const monthOptions: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (date.getFullYear() !== now.getFullYear()) {
+    monthOptions.year = "numeric";
   }
 
-  if (date.getFullYear() === now.getFullYear()) {
-    const monthDay = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${monthDay} · ${time}`;
-  }
-
-  const monthDayYear = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${monthDayYear} · ${time}`;
+  const monthDay = date.toLocaleDateString("en-US", monthOptions);
+  return `${monthDay} · ${time}`;
 }
 
 export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
@@ -111,7 +97,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
 
             {isSystem ? (
               <div className="flex justify-center py-1.5 animate-chat-fade">
-                <span className="rounded-full border border-white/5 bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
                   {m.text}
                 </span>
               </div>
@@ -124,6 +110,8 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
                   avatarUrl={activeAv}
                   isFirstInGroup={isFirst}
                   isLastInGroup={isLast}
+                  type={m.type}
+                  postId={m.postId}
                 />
               </div>
             )}

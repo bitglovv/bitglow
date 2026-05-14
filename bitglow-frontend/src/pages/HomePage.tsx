@@ -22,160 +22,8 @@ import { Avatar } from "../components/ui/Avatar";
 import { api, Post, Friend } from "../services/api";
 import { ComposerSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 
-const timeAgo = (dateStr: string): string => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s || 1}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  const w = Math.floor(d / 7);
-  if (d < 30) return `${w}w`;
-  const mo = Math.floor(d / 30);
-  if (d < 365) return `${mo}mo`;
-  return `${Math.floor(d / 365)}y`;
-};
-
-const formatDate = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-function BottomSheet({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center p-0 sm:p-4 touch-none">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-zinc-950 sm:rounded-2xl rounded-t-3xl border-t sm:border border-white/10 flex flex-col max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-8 duration-300 pointer-events-auto">
-        <div className="flex items-center justify-between p-4 border-b border-white/5">
-          <h3 className="font-bold text-lg text-white">{title}</h3>
-          <button onClick={onClose} className="p-2 -mr-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/5 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col p-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type PostCardProps = {
-  post: Post;
-  currentUserId?: string;
-  onLike: () => void;
-  onComment: () => void;
-  onShare: () => void;
-  onSave: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  onUnfollow?: () => void;
-  onBlock?: () => void;
-  onReport?: () => void;
-};
-
-function PostCard({ post, currentUserId, onLike, onComment, onShare, onSave, onEdit, onDelete, onUnfollow, onBlock, onReport }: PostCardProps) {
-  const [showMenu, setShowMenu] = useState(false);
-
-  return (
-    <Card
-      padding="md"
-      className="hover:border-brand/30 transition-colors bg-white/[0.02] border-transparent md:border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.25)] md:shadow-none"
-    >
-      <div className="flex gap-3">
-        <Link to={`/profile/${post.author.username}`} className="flex items-start gap-3 flex-1 group">
-          <Avatar alt={post.author.username} size="xs" src={post.author.avatarUrl} />
-          <div className="flex-1 space-y-2">
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-semibold text-base md:text-lg">{post.author.username}</span>
-                <span className="text-zinc-600 text-xs">•</span>
-                <span className="text-xs text-zinc-500">{timeAgo(post.createdAt || new Date().toISOString())}</span>
-              </div>
-            </div>
-          </div>
-        </Link>
-        <div className="relative">
-          <button
-            aria-label="Post options"
-            className="ml-auto text-zinc-500 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5"
-            onClick={() => setShowMenu(!showMenu)}
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-[90]" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-10 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
-                {currentUserId === post.author.id ? (
-                  <>
-                    <button onClick={() => { setShowMenu(false); if (onEdit) onEdit(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      <Edit3 className="w-4 h-4" /> Edit
-                    </button>
-                    <button onClick={() => { setShowMenu(false); if (onDelete) onDelete(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => { setShowMenu(false); if (onUnfollow) onUnfollow(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      Unfollow
-                    </button>
-                    <button onClick={() => { setShowMenu(false); if (onBlock) onBlock(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      Block
-                    </button>
-                    <button onClick={() => { setShowMenu(false); if (onReport) onReport(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
-                      Report
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {post.title && (
-        <div className="space-y-2 mt-3">
-          <p className="font-semibold text-lg md:text-xl">{post.title}</p>
-        </div>
-      )}
-
-      <p className="text-zinc-200 leading-relaxed text-sm md:text-base mt-2">{post.content}</p>
-
-      <div className="flex items-center gap-4 text-sm text-zinc-500 pt-2">
-        <button className="inline-flex items-center gap-1 hover:text-white transition-colors" aria-label="Like" onClick={onLike}>
-          <Heart className={clsx("w-4 h-4", post.likedByMe ? "fill-rose-500 text-rose-500" : "")} />
-          <span>{post.likesCount ?? 0}</span>
-        </button>
-        <button className="inline-flex items-center gap-1 hover:text-white transition-colors" aria-label="Comment" onClick={onComment}>
-          <MessageSquare className="w-4 h-4" />
-          <span>{post.commentsCount ?? 0}</span>
-        </button>
-        <button className="inline-flex items-center gap-1 hover:text-white transition-colors" aria-label="Share" onClick={onShare}>
-          <Share2 className="w-4 h-4" />
-          <span>Share</span>
-        </button>
-        <button className="ml-auto inline-flex items-center gap-1 hover:text-white transition-colors" aria-label="Save" onClick={onSave}>
-          <Bookmark className={clsx("w-4 h-4", post.savedByMe ? "fill-brand text-brand" : "")} />
-          <span>{post.savedByMe ? "Saved" : "Save"}</span>
-        </button>
-      </div>
-
-      {/* Post date footer */}
-      <p className="text-[10px] text-zinc-600 pt-1.5 mt-1">
-        {formatDate(post.createdAt || new Date().toISOString())}
-      </p>
-    </Card>
-  );
-}
+import { PostCard } from "../components/posts/PostCard";
+import { BottomSheet } from "../components/ui/BottomSheet";
 
 type ComposerProps = { user: any; onPostCreated: (post: Post) => void };
 
@@ -264,8 +112,22 @@ export default function HomePage() {
 
   // Modal states
   const [commentingPost, setCommentingPost] = useState<Post | null>(null);
+  const [comments, setComments] = useState<any[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
+
+  useEffect(() => {
+    if (commentingPost) {
+      setIsLoadingComments(true);
+      api.posts.comments(commentingPost.id)
+        .then(setComments)
+        .catch(console.error)
+        .finally(() => setIsLoadingComments(false));
+    } else {
+      setComments([]);
+    }
+  }, [commentingPost]);
 
   const [sharingPost, setSharingPost] = useState<Post | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -331,12 +193,12 @@ export default function HomePage() {
     setIsCommenting(true);
     const res = await api.posts.comment(commentingPost.id, commentText.trim());
     if (res?.comment) {
+      setComments(prev => [res.comment, ...prev]);
       updatePostLocally(commentingPost.id, (p) => ({
         ...p,
         commentsCount: (p.commentsCount || 0) + 1,
       }));
       setCommentText("");
-      setCommentingPost(null);
     }
     setIsCommenting(false);
   };
@@ -345,9 +207,15 @@ export default function HomePage() {
     if (!sharingPost || isSharing) return;
     setIsSharing(true);
     try {
-      const dm = await api.dms.send(friendId, `Check this post: ${window.location.origin}/posts/${sharingPost.id}`);
+      const dm = await api.dms.send(
+        friendId, 
+        `Shared a post`,
+        'post',
+        sharingPost.id
+      );
       if (dm) {
         setSharingPost(null);
+        alert("Shared successfully!");
       }
     } catch (e) {
       console.error(e);
@@ -409,7 +277,7 @@ export default function HomePage() {
 
       <Header />
 
-      <main className="relative z-10 flex-1 w-full px-3 sm:px-6 md:pb-6 pt-6 space-y-6 md:max-w-4xl md:mx-auto overflow-y-auto custom-scrollbar">
+      <main className="relative z-10 flex-1 w-full px-3 sm:px-6 pt-6 pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-8 space-y-6 md:max-w-4xl md:mx-auto overflow-y-auto custom-scrollbar">
         <div className="space-y-4" id="compose">
           <Composer user={user} onPostCreated={(p) => setPosts((prev) => [p, ...prev])} />
           {isLoading || isLoadingFeed ? (
@@ -459,9 +327,35 @@ export default function HomePage() {
 
       {/* Modals */}
       <BottomSheet isOpen={!!commentingPost} onClose={() => setCommentingPost(null)} title="Comments">
-        <div className="flex-1 flex flex-col pt-2 items-center justify-center min-h-[120px] text-zinc-500 mb-6">
-          <MessageSquare className="w-8 h-8 opacity-20 mb-2" />
-          <p className="text-sm">Comments are loaded via a separate API route if needed.</p>
+        <div className="flex-1 overflow-y-auto min-h-[300px] max-h-[60vh] custom-scrollbar py-2">
+          {isLoadingComments ? (
+            <div className="flex flex-col items-center justify-center py-10 opacity-30">
+              <div className="w-6 h-6 border-2 border-white/20 border-t-brand rounded-full animate-spin mb-3" />
+              <p className="text-xs font-bold uppercase tracking-widest">Loading comments...</p>
+            </div>
+          ) : comments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+              <MessageSquare className="w-10 h-10 opacity-10 mb-3" />
+              <p className="text-sm">No comments yet. Be the first to reply!</p>
+            </div>
+          ) : (
+            <div className="space-y-4 px-1">
+              {comments.map((c) => (
+                <div key={c.id} className="flex gap-3 group">
+                  <Avatar src={c.author?.avatarUrl} alt={c.author?.username} size="xs" />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">{c.author?.username}</span>
+                      <span className="text-[10px] text-zinc-600">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed">{c.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="mt-auto border-t border-white/5 pt-4 bg-zinc-950 pb-2">
           <div className="flex gap-2">

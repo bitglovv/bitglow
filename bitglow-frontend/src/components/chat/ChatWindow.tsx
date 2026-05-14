@@ -141,10 +141,11 @@ export const ChatWindow = ({
                     ? user?.username || "You"
                     : conversation.username || "User",
                 text: m.text,
+                type: m.type as any || "chat",
+                postId: m.postId,
                 ts: new Date(m.createdAt).getTime(),
                 avatarUrl:
                   m.senderId === currentUserId ? user?.avatarUrl : conversation.avatarUrl,
-                type: "chat" as const,
               }))}
               selfId={currentUserId || null}
             />

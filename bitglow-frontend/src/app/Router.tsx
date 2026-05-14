@@ -12,6 +12,7 @@ import ProfilePage from "../pages/ProfilePage";
 import EditProfilePage from "../pages/EditProfilePage";
 import SearchPage from "../pages/SearchPage";
 import NotificationsPage from "../pages/NotificationsPage";
+import PostPage from "../pages/PostPage";
 import SettingsPage from "../pages/SettingsPage";
 import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
@@ -44,6 +45,7 @@ export default function Router() {
                     <Route path="/live" element={<LiveChatPage />} />
                     <Route path="/messages" element={<MessagesPage />} />
                     <Route path="/notifications" element={<NotificationsPage />} />
+                    <Route path="/posts/:postId" element={<PostPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/profile" element={<MyProfileRedirect />} />
                     <Route path="/profile/:username" element={<ProfilePage />} />

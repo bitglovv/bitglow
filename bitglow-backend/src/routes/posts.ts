@@ -137,4 +137,16 @@ export async function postRoutes(fastify: FastifyInstance) {
         if (!ok) return reply.code(404).send({ message: "Post not found" });
         return { ok: true };
     });
+
+    fastify.get("/posts/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id } = req.params as { id: string };
+        console.log(`ROUTE: GET /posts/${id} by user ${userId}`);
+        const post = await db.getPostById(id, userId);
+        if (!post) {
+            console.log(`ROUTE: Post ${id} NOT FOUND for user ${userId}`);
+            return reply.code(404).send({ message: `Post not found (ID: ${id}, User: ${userId})` });
+        }
+        return { post };
+    });
 }

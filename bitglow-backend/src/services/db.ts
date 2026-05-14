@@ -171,6 +171,8 @@ const initDMTables = async () => {
                 conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
                 sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 text TEXT NOT NULL,
+                type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post')),
+                post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
                 created_at TIMESTAMP DEFAULT now()
             );
             DO $$
@@ -183,6 +185,16 @@ const initDMTables = async () => {
                 ) THEN
                     ALTER TABLE dm_messages ADD COLUMN read_at TIMESTAMP;
                     UPDATE dm_messages SET read_at = created_at WHERE read_at IS NULL;
+                END IF;
+                
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'type'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post'));
+                    ALTER TABLE dm_messages ADD COLUMN post_id UUID REFERENCES posts(id) ON DELETE SET NULL;
                 END IF;
             END $$;
             CREATE INDEX IF NOT EXISTS idx_dm_msg_conv ON dm_messages(conversation_id);
@@ -1014,7 +1026,7 @@ export const db = {
 
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
-            `SELECT id, sender_id, text, created_at
+            `SELECT id, sender_id, text, type, post_id, created_at
              FROM dm_messages
              WHERE conversation_id = $1
              ORDER BY created_at ASC
@@ -1024,12 +1036,12 @@ export const db = {
         return res.rows;
     },
 
-    async saveDMMessage(conversationId: string, senderId: string, text: string) {
+    async saveDMMessage(conversationId: string, senderId: string, text: string, type: 'text' | 'post' = 'text', postId?: string) {
         const res = await pool.query(
-            `INSERT INTO dm_messages (conversation_id, sender_id, text)
-             VALUES ($1, $2, $3)
-             RETURNING id, sender_id, text, created_at`,
-            [conversationId, senderId, text]
+            `INSERT INTO dm_messages (conversation_id, sender_id, text, type, post_id)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, sender_id, text, type, post_id, created_at`,
+            [conversationId, senderId, text, type, postId || null]
         );
         return res.rows[0];
     },
@@ -1315,6 +1327,64 @@ export const db = {
         return items
             .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime())
             .slice(0, limit);
+    },
+
+    async getPostById(postId: string, userId: string) {
+        console.log(`DB: getPostById called for postId=${postId}, userId=${userId}`);
+        const res = await pool.query(
+            `
+            SELECT p.id,
+                   p.content,
+                   p.title,
+                   p.visibility,
+                   p.created_at,
+                   u.id   AS author_id,
+                   u.username,
+                   u.display_name,
+                   u.avatar_url,
+                   COALESCE(l.count, 0) AS "likesCount",
+                   COALESCE(c.count, 0) AS "commentsCount",
+                   COALESCE(s.count, 0) AS "savesCount",
+                   (SELECT 1 FROM post_likes pl2 WHERE pl2.user_id = $2 AND pl2.post_id = p.id LIMIT 1) AS "likedByMe",
+                   (SELECT 1 FROM post_saves ps2 WHERE ps2.user_id = $2 AND ps2.post_id = p.id LIMIT 1) AS "savedByMe"
+            FROM posts p
+            JOIN users u ON u.id = p.author_id
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+            ) l ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+            ) c ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+            ) s ON true
+            WHERE p.id = $1
+            `,
+            [postId, userId]
+        );
+        console.log(`DB: getPostById result rowCount=${res.rowCount}`);
+
+        if (res.rowCount === 0) return null;
+
+        const row = res.rows[0];
+        return {
+            id: row.id,
+            content: row.content,
+            title: row.title,
+            visibility: row.visibility,
+            createdAt: row.created_at,
+            author: {
+                id: row.author_id,
+                username: row.username,
+                displayName: row.display_name,
+                avatarUrl: row.avatar_url
+            },
+            likesCount: row.likesCount,
+            commentsCount: row.commentsCount,
+            savesCount: row.savesCount,
+            likedByMe: !!row.likedByMe,
+            savedByMe: !!row.savedByMe,
+        };
     }
 };
 

@@ -90,7 +90,7 @@ export default function SearchPage() {
 
       <Header showTop={false} />
 
-      <main className="relative z-10 flex w-full flex-1 flex-col gap-7 bg-black px-4 pt-5 md:mx-auto md:max-w-xl md:px-5 md:pt-7">
+      <main className="relative z-10 flex w-full flex-1 flex-col gap-7 bg-black px-4 pt-5 pb-[calc(80px+env(safe-area-inset-bottom))] md:mx-auto md:max-w-xl md:px-5 md:pt-7 md:pb-12">
         <div className="flex flex-col gap-3">
           <div className="relative group">
             <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">

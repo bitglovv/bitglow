@@ -64,12 +64,12 @@ export const InboxSidebar = ({
           />
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-white/[0.035] p-1">
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-white/[0.035] p-1.5 border border-white/[0.05]">
           <button
             onClick={() => onTabChange("chats")}
             className={clsx(
-              "rounded-full py-2 text-sm font-semibold transition-colors duration-200 focus:outline-none",
-              activeTab === "chats" ? "bg-white/[0.08] text-white" : "text-zinc-500 hover:text-zinc-300"
+              "rounded-full py-2.5 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center whitespace-nowrap",
+              activeTab === "chats" ? "bg-white/[0.1] text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
             )}
           >
             Chats
@@ -77,8 +77,8 @@ export const InboxSidebar = ({
           <button
             onClick={() => onTabChange("requests")}
             className={clsx(
-              "rounded-full py-2 text-sm font-semibold transition-colors duration-200 focus:outline-none",
-              activeTab === "requests" ? "bg-white/[0.08] text-white" : "text-zinc-500 hover:text-zinc-300"
+              "rounded-full py-2.5 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center whitespace-nowrap",
+              activeTab === "requests" ? "bg-white/[0.1] text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
             )}
           >
             Requests
