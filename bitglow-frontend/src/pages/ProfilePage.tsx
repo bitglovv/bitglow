@@ -104,10 +104,12 @@ export default function ProfilePage() {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [followers, setFollowers] = useState<Friend[]>([]);
-  const [following, setFollowing] = useState<Friend[]>([]);
+  const [following, setFollowing] = useState<any[]>([]);
+  const [pendingFollows, setPendingFollows] = useState<any[]>([]);
   const [shareLabel, setShareLabel] = useState("Share Profile");
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
@@ -184,17 +186,20 @@ export default function ProfilePage() {
     Promise.all([
       api.user.friends(),
       api.user.followers(),
-      api.user.following()
-    ]).then(([friendsList, followersList, followingList]) => {
+      api.user.following(),
+      api.user.pendingFollows()
+    ]).then(([friendsList, followersList, followingList, pendingList]) => {
       if (cancelled) return;
       setFriends(friendsList || []);
       setFollowers(followersList || []);
       setFollowing(followingList || []);
+      setPendingFollows(pendingList || []);
     }).catch(() => {
       if (!cancelled) {
         setFriends([]);
         setFollowers([]);
         setFollowing([]);
+        setPendingFollows([]);
       }
     });
     return () => { cancelled = true; };
@@ -212,24 +217,34 @@ export default function ProfilePage() {
     if (!profile || !loggedInUser) return;
     const isFriend = friends.some((f) => f.id === profile.id);
     const isFollowingUser = following.some((f) => f.id === profile.id);
+    const isPendingUser = pendingFollows.some((f) => f.id === profile.id);
     setIsFollowing(isFollowingUser || isFriend);
-  }, [friends, following, profile, loggedInUser]);
+    setIsPending(isPendingUser);
+  }, [friends, following, pendingFollows, profile, loggedInUser]);
 
   const handleFollowToggle = async () => {
     if (!profile || !loggedInUser || isOwner) return;
     setIsFollowLoading(true);
     try {
       const isFriend = friends.some((f) => f.id === profile.id);
-      if (isFollowing) {
+      if (isFollowing || isPending) {
         const success = await api.user.unfollow(profile.id);
         if (success) {
           setIsFollowing(false);
+          setIsPending(false);
           setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
           setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+          setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
         }
       } else {
         const status = await api.user.follow(profile.id, profile.username);
-        if (status) {
+        if (status === 'pending') {
+          setIsPending(true);
+          setPendingFollows((prev) => {
+            if (prev.some((f) => f.id === profile.id)) return prev;
+            return [...prev, { id: profile.id, username: profile.username, displayName: profile.displayName, avatarUrl: profile.avatarUrl }];
+          });
+        } else if (status === 'accepted' || status === true) {
           setIsFollowing(true);
           if (!isFriend) {
             setFollowing((prev) => {
@@ -489,12 +504,12 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <Button
-                    variant={isMutualFriend || isFollowing ? "secondary" : "primary"}
+                    variant={isMutualFriend || isFollowing || isPending ? "secondary" : "primary"}
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
                   >
-                    {isMutualFriend || isFollowing ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                    {isMutualFriend ? "Friends" : isFollowing ? "Requested" : "Follow"}
+                    {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
                   </Button>
                   <Button
                     variant="secondary"

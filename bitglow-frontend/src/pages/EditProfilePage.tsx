@@ -11,7 +11,7 @@ import clsx from "clsx";
 import { navigateBack } from "../utils/navigateBack";
 
 export default function EditProfilePage() {
-    useEffect(() => { document.title = "BitGlow \u2022 Edit Profile"; }, []);
+    useEffect(() => { document.title = "BitGlow"; }, []);
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
 
@@ -132,8 +132,24 @@ export default function EditProfilePage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex flex-col selection:bg-brand/30">
-            <Header showTop={false} />
+        <div className="min-h-screen bg-black text-white flex flex-col selection:bg-brand/30">
+            <Header
+                leftContent={
+                    <button
+                        type="button"
+                        onClick={() =>
+                            navigateBack(
+                                navigate,
+                                user?.username ? `/profile/${user.username}` : "/profile"
+                            )
+                        }
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.04] text-white transition duration-200 hover:bg-white/[0.08]"
+                        aria-label="Back"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                    </button>
+                }
+            />
 
             <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 pt-6 pb-12 relative">
                 {message && (
@@ -167,21 +183,6 @@ export default function EditProfilePage() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-10">
-                    <div className="flex items-center justify-between mb-4 -mt-2 -ml-1">
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() =>
-                                navigateBack(
-                                    navigate,
-                                    user?.username ? `/profile/${user.username}` : "/profile"
-                                )
-                            }
-                            className="bg-transparent border-0 px-3 h-12 shadow-none hover:bg-white/5"
-                        >
-                            <ArrowLeft className="w-6 h-6" />
-                        </Button>
-                    </div>
 
                     <div className="space-y-8 bg-transparent">
                         <div className="flex flex-col items-center gap-3">

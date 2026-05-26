@@ -8,8 +8,9 @@ type ChatMessage = {
   text: string;
   ts: number;
   avatarUrl?: string;
-  type?: "chat" | "system" | "post";
+  type?: "chat" | "system" | "post" | "profile";
   postId?: string;
+  profileId?: string;
 };
 
 type RoomUser = {
@@ -37,21 +38,35 @@ function formatTime12h(date: Date): string {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  });
+  }).toLowerCase();
 }
 
-/** Month like "May", day, optional year — 12h time (e.g. "May 8 · 3:45 PM"). */
+function formatWeekday(date: Date): string {
+  return date.toLocaleDateString("en-US", { weekday: "short" });
+}
+
+function formatMonthName(date: Date): string {
+  const month = date.toLocaleDateString("en-US", { month: "long" }).toLowerCase();
+  return month.charAt(0).toUpperCase() + month.slice(1);
+}
+
 function formatDateSeparator(date: Date): string {
   const now = new Date();
   const time = formatTime12h(date);
+  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+  const isWithinWeek = now.getTime() - date.getTime() < oneWeekMs;
 
-  const monthOptions: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  if (date.getFullYear() !== now.getFullYear()) {
-    monthOptions.year = "numeric";
+  if (isWithinWeek) {
+    return `${formatWeekday(date)} ${time}`;
   }
 
-  const monthDay = date.toLocaleDateString("en-US", monthOptions);
-  return `${monthDay} · ${time}`;
+  const monthDay = `${formatMonthName(date)} ${date.getDate()}`;
+
+  if (date.getFullYear() !== now.getFullYear()) {
+    return `${monthDay}, ${date.getFullYear()} ${time}`;
+  }
+
+  return `${monthDay} ${time}`;
 }
 
 export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
@@ -112,6 +127,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
                   isLastInGroup={isLast}
                   type={m.type}
                   postId={m.postId}
+                  profileId={m.profileId}
                 />
               </div>
             )}

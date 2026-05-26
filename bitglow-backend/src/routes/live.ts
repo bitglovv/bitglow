@@ -30,7 +30,7 @@ export async function liveRoutes(fastify: FastifyInstance) {
 
             const isFriend = await db.isMutual(userId, targetOwnerId);
             if (!isFriend) {
-                return reply.code(403).send({ message: "Mutual friends only" });
+                return reply.code(403).send({ message: "Only friends have access to Live Space" });
             }
         }
 
@@ -38,7 +38,7 @@ export async function liveRoutes(fastify: FastifyInstance) {
         const accessibleRoom = await db.getAccessibleOwnerRoom(userId, room.id);
 
         if (!accessibleRoom) {
-            return reply.code(403).send({ message: "Mutual friends only" });
+            return reply.code(403).send({ message: "Only friends have access to Live Space" });
         }
 
         return {

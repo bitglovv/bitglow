@@ -41,6 +41,8 @@ CREATE TABLE users (
   role VARCHAR(20) DEFAULT 'user', -- user | admin | moderator
   is_verified BOOLEAN DEFAULT false,
   is_banned BOOLEAN DEFAULT false,
+  is_private BOOLEAN DEFAULT false,
+  online_status_visible BOOLEAN DEFAULT true,
 
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now(),

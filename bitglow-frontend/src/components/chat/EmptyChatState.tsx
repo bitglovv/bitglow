@@ -2,7 +2,7 @@ import { MessageSquare, Search } from "lucide-react";
 
 export const EmptyChatState = () => {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-[#050505] p-8 text-center animate-chat-fade">
+    <div className="flex flex-1 flex-col items-center justify-center bg-black p-8 text-center animate-chat-fade">
       <div className="relative mb-6">
         <div className="absolute inset-0 rounded-full bg-brand/20 blur-3xl animate-pulse-slow" />
         <div className="absolute inset-[-18px] rounded-full bg-[radial-gradient(circle,rgba(16,185,129,0.16),transparent_62%)]" />

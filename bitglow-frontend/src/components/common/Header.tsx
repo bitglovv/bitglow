@@ -12,15 +12,24 @@ import {
     NOTIFICATIONS_UPDATED_EVENT,
 } from "../../utils/notificationFeed";
 
-export default function Header({ showTop = true, hideActions = false, hideBottomNav = false }: { showTop?: boolean; hideActions?: boolean; hideBottomNav?: boolean }) {
+export default function Header({
+    showTop = true,
+    hideActions = false,
+    hideBottomNav = false,
+    leftContent,
+    rightContent
+}: {
+    showTop?: boolean;
+    hideActions?: boolean;
+    hideBottomNav?: boolean;
+    leftContent?: React.ReactNode;
+    rightContent?: React.ReactNode;
+}) {
     const { user } = useAuth();
     const location = useLocation();
     const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
-
-    // Notifications page has its own full-page layout — hide both bars
-    const isNotificationsPage = location.pathname === "/notifications";
-
+ 
     const checkStatus = useCallback(async () => {
         if (!user) return;
         try {
@@ -53,7 +62,6 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
     }, [checkStatus]);
 
     if (!user) return null;
-    if (isNotificationsPage) return null;
 
     const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
     const isHome = isActive("/home");
@@ -61,18 +69,22 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
     return (
         <>
             {showTop && (
-                <header className="bg-black/95 backdrop-blur-xl sticky top-0 z-[100] w-full">
+                <header className="bg-black/95 backdrop-blur-xl sticky top-0 z-[100] w-full pt-[env(safe-area-inset-top,0px)]">
                     <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-1.5">
-                        <Link to="/home" className="flex items-center gap-2.5 group">
-                            {isHome && (
+                        <div className="flex items-center gap-4">
+                            <Link to="/home" className={clsx(
+                                "items-center gap-2.5 group",
+                                isHome ? "flex" : "hidden md:flex"
+                            )}>
                                 <span
                                     className="text-3xl font-semibold tracking-tight bg-gradient-to-r from-emerald-500 to-blue-600 bg-clip-text text-transparent group-hover:opacity-90 transition-opacity"
                                     style={{ fontFamily: "'Billabong','Pacifico','Brush Script MT',cursive" }}
                                 >
                                     BitGlow
                                 </span>
-                            )}
-                        </Link>
+                            </Link>
+                            {leftContent}
+                        </div>
 
                         <nav className="hidden md:flex items-center gap-2 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
                             <Link to="/home" className={clsx(
@@ -114,7 +126,7 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
                             )}>
                                 <div className={clsx(
                                     "relative shrink-0 rounded-full transition-all",
-                                    isActive('/profile') ? "ring-1 ring-black ring-offset-1 ring-offset-brand" : "ring-1 ring-white/5"
+                                    isActive('/profile') ? "ring-0 ring-black ring-offset-0 ring-offset-brand" : "ring-1 ring-white/5"
                                 )}>
                                     <Avatar src={user.avatarUrl} alt={user.username} size="xs" className="block mx-auto" />
                                 </div>
@@ -122,31 +134,26 @@ export default function Header({ showTop = true, hideActions = false, hideBottom
                             </Link>
                         </nav>
 
-                        {location.pathname === "/search" || hideActions || !isHome ? null : (
-                            <div className="flex items-center gap-2">
-                                {location.pathname === "/live" && (
+                        <div className="flex items-center gap-4">
+                            {!hideActions && (
+                                <div className={clsx(
+                                    "items-center gap-2",
+                                    isHome ? "flex" : "hidden md:flex"
+                                )}>
                                     <Link
-                                        to="/live"
-                                        className="p-2.5 rounded-xl transition-all text-zinc-500 hover:text-white hover:bg-white/5 flex items-center gap-2"
-                                        aria-label="Live Chat"
+                                        to="/notifications"
+                                        className="p-2.5 rounded-xl transition-all text-white hover:bg-white/5 relative"
+                                        aria-label="Notifications"
                                     >
-                                        <img src={LiveChatIcon} alt="Live" className="live-icon-lg" />
-                                        <span className="hidden md:inline text-sm font-semibold">Live Chat</span>
+                                        <Bell className="w-6 h-6" />
+                                        {hasUnreadNotifications && !isActive('/notifications') && (
+                                            <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-brand rounded-full border-2 border-zinc-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                        )}
                                     </Link>
-                                )}
-                                <Link
-                                    to="/notifications"
-                                    className="p-2.5 rounded-xl transition-all text-zinc-500 hover:text-white hover:bg-white/5 relative"
-                                    aria-label="Notifications"
-                                >
-                                    <Bell className="w-6 h-6" />
-                                    {hasUnreadNotifications && !isActive('/notifications') && (
-                                        <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-brand rounded-full border-2 border-zinc-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                    )}
-                                </Link>
-                            </div>
-                        )}
-
+                                </div>
+                            )}
+                            {rightContent}
+                        </div>
                     </div>
                 </header>
             )}

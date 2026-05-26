@@ -35,7 +35,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoadingConversations: true });
     try {
       const [convs, friendList] = await Promise.all([api.dms.list(), api.user.friends()]);
-      set({ conversations: convs, friends: friendList });
+      
+      const restrictedStr = localStorage.getItem("bitglow:restricted_users") || "[]";
+      let restricted = new Set<string>();
+      try {
+          restricted = new Set(JSON.parse(restrictedStr));
+      } catch (e) {}
+
+      const filteredConvs = convs.filter(c => !restricted.has(c.userId));
+
+      set({ conversations: filteredConvs, friends: friendList });
     } finally {
       set({ isLoadingConversations: false });
     }

@@ -67,7 +67,7 @@ export default function NotificationsPage() {
     });
 
     useEffect(() => {
-        document.title = "Notifications";
+        document.title = "BitGlow";
     }, []);
 
     useEffect(() => {
@@ -296,6 +296,14 @@ export default function NotificationsPage() {
             case "follow_request":
                 content = <><UserLink user={primaryUser} /> requested to follow you.</>;
                 break;
+            case "comment_like":
+                content = (
+                    <>
+                        <UserLink user={primaryUser} />
+                        {" "}liked your <PostText text="comment" />: <span className="text-zinc-400 text-[13px]">&ldquo;{(item.content || "").slice(0, 60)}{(item.content?.length ?? 0) > 60 ? "…" : ""}&rdquo;</span>
+                    </>
+                );
+                break;
             case "mention":
                 content = <><UserLink user={primaryUser} /> mentioned you in a <PostText text="post" />.</>;
                 break;
@@ -349,7 +357,7 @@ export default function NotificationsPage() {
                                     </h2>
                                     <div className="mt-1">
                                         {sectionItems.map((item) => {
-                                            const isPostAction = item.type === "like" || item.type === "comment" || (item.type === "mention" && item.postId);
+                                            const isPostAction = item.type === "like" || item.type === "comment" || item.type === "comment_like" || (item.type === "mention" && item.postId);
                                             const targetUrl = isPostAction && item.postId 
                                                 ? `/posts/${item.postId}` 
                                                 : `/profile/${item.users[0].username}`;
@@ -386,7 +394,7 @@ export default function NotificationsPage() {
                                                                 />
                                                             )}
                                                             {item.isUnread && (
-                                                                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-blue-500 ring-2 ring-black" />
+                                                                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-black" />
                                                             )}
                                                         </div>
                                                         <div className="min-w-0 flex-1">

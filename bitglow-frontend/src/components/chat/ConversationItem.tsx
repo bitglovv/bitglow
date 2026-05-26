@@ -48,7 +48,7 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
       {isUnread && (
         <span
           aria-label={`${conversation.unreadCount} unread message${conversation.unreadCount === 1 ? "" : "s"}`}
-          className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-[#050505] shadow-[0_0_6px_rgba(16,185,129,0.45)]"
+          className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_6px_rgba(16,185,129,0.45)]"
         />
       )}
     </button>

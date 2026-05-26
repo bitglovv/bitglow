@@ -35,6 +35,13 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
   const [isStackedLayout, setIsStackedLayout] = useState(isStackedMessagesLayout);
+  const [acceptedRequests, setAcceptedRequests] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("bitglow:accepted_requests") || "[]"));
+    } catch (e) {
+      return new Set();
+    }
+  });
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${STACKED_MAX_PX}px)`);
@@ -56,12 +63,39 @@ export default function MessagesPage() {
   }, []);
 
   useEffect(() => {
-    document.title = "BitGlow - Messages";
+    document.title = "BitGlow";
   }, []);
 
   useEffect(() => {
     fetchConversationsAndFriends();
   }, [fetchConversationsAndFriends]);
+
+  const [hasProcessedInitialDm, setHasProcessedInitialDm] = useState(false);
+
+  useEffect(() => {
+    if (isLoadingConversations || hasProcessedInitialDm) return;
+
+    const dmUserId = sessionStorage.getItem("bitglow:dmUserId");
+    if (dmUserId) {
+      setHasProcessedInitialDm(true);
+      const dmUsername = sessionStorage.getItem("bitglow:dmUsername") || "";
+      const dmDisplayName = sessionStorage.getItem("bitglow:dmDisplayName") || "";
+      const dmAvatarUrl = sessionStorage.getItem("bitglow:dmAvatarUrl") || undefined;
+      
+      sessionStorage.removeItem("bitglow:dmUserId");
+      sessionStorage.removeItem("bitglow:dmUsername");
+      sessionStorage.removeItem("bitglow:dmDisplayName");
+      sessionStorage.removeItem("bitglow:dmAvatarUrl");
+
+      openFriendConversation({
+        id: dmUserId,
+        username: dmUsername,
+        displayName: dmDisplayName,
+        avatarUrl: dmAvatarUrl,
+      });
+      setMobileView("chat");
+    }
+  }, [isLoadingConversations, hasProcessedInitialDm, openFriendConversation]);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.userId === activeConversationId) ?? null,
@@ -108,14 +142,14 @@ export default function MessagesPage() {
   const showMobileInbox = mobileView === "inbox";
 
   return (
-    <div className="h-[100dvh] bg-black flex flex-col text-white overflow-hidden pt-[env(safe-area-inset-top,0px)]">
-      <Header showTop={false} hideBottomNav={mobileView === "chat"} />
-      <div className="flex flex-1 min-h-0 overflow-hidden bg-black relative">
+    <div className="fixed inset-0 bg-black flex flex-col text-white overflow-hidden">
+      <Header hideBottomNav={mobileView === "chat"} />
+      <div className="flex-1 min-h-0 flex overflow-hidden bg-black relative">
         {/* Inbox sidebar: shown on mobile inbox view or always on md+ */}
         <div
           className={
             showMobileInbox
-              ? "flex flex-1 min-h-0 md:flex-none md:w-[360px] lg:w-[400px] xl:w-[420px] pb-[84px] md:pb-0 animate-chat-pane-in"
+              ? "flex flex-col w-full md:flex-none md:w-[360px] lg:w-[400px] xl:w-[420px] animate-chat-pane-in"
               : "hidden md:flex md:w-[360px] lg:w-[400px] xl:w-[420px]"
           }
         >
@@ -131,12 +165,13 @@ export default function MessagesPage() {
             onSelectFriend={handleOpenFromFriend}
             isLoading={isLoadingConversations}
             onlineUsers={onlineUsers}
+            currentUserId={user?.id || null}
           />
         </div>
 
         <div
           className={
-            showMobileInbox ? "hidden md:flex md:flex-1 md:min-h-0" : "flex flex-1 min-h-0 animate-chat-pane-in pt-[env(safe-area-inset-top,0px)]"
+            showMobileInbox ? "hidden md:flex md:flex-1 md:min-h-0" : "flex flex-1 min-h-0 animate-chat-pane-in"
           }
         >
           {activeConversation ? (
@@ -151,6 +186,48 @@ export default function MessagesPage() {
               onTyping={() => {}}
               isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}
               isLoadingMessages={isLoadingMessages}
+              isRequest={activeConversationId ? (
+                !friends.some(f => f.id === activeConversationId) && 
+                activeConversation?.lastMessageSenderId !== user?.id &&
+                !!activeConversation?.lastMessageSenderId &&
+                !acceptedRequests.has(activeConversationId)
+              ) : false}
+              onAcceptRequest={async () => {
+                if (activeConversationId) {
+                  try {
+                    // 1. Follow back so it forms a path to mutual follow
+                    await api.user.follow(activeConversationId, activeConversation.username);
+                    // 2. Also try accepting their follow request in case they already tried following us
+                    await api.user.acceptFollow(activeConversationId).catch(() => {});
+
+                    // 3. Mark as accepted in localStorage to move out of requests instantly
+                    const accepted = new Set(JSON.parse(localStorage.getItem("bitglow:accepted_requests") || "[]"));
+                    accepted.add(activeConversationId);
+                    localStorage.setItem("bitglow:accepted_requests", JSON.stringify([...accepted]));
+                    setAcceptedRequests(accepted);
+
+                    await fetchConversationsAndFriends();
+                  } catch (e) {
+                    console.error("Failed to accept request", e);
+                  }
+                }
+              }}
+              onRejectRequest={async () => {
+                if (activeConversationId) {
+                  try {
+                    await api.dms.deleteConversation(activeConversationId);
+                    // Add them to restricted local storage list so they can't message again (front-end hack)
+                    const restricted = new Set(JSON.parse(localStorage.getItem("bitglow:restricted_users") || "[]"));
+                    restricted.add(activeConversationId);
+                    localStorage.setItem("bitglow:restricted_users", JSON.stringify([...restricted]));
+                    
+                    await fetchConversationsAndFriends();
+                    handleChatBack();
+                  } catch (e) {
+                    console.error("Failed to reject request", e);
+                  }
+                }
+              }}
             />
           ) : (
             <EmptyChatState />

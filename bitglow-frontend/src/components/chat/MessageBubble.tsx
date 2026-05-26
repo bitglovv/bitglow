@@ -11,8 +11,9 @@ interface DMBubbleProps {
     text: string; 
     createdAt: string; 
     senderId: string; 
-    type?: "text" | "post"; 
+    type?: "text" | "post" | "profile"; 
     postId?: string;
+    profileId?: string;
   };
   isMe: boolean;
 }
@@ -24,11 +25,14 @@ interface LiveBubbleProps {
   avatarUrl?: string;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
-  type?: "chat" | "system" | "post";
+  type?: "chat" | "system" | "post" | "profile";
   postId?: string;
+  profileId?: string;
 }
 
 type MessageBubbleProps = DMBubbleProps | LiveBubbleProps;
+
+import { SharedProfileCard } from "./SharedProfileCard";
 
 function PostPreview({ postId }: { postId: string }) {
   const [post, setPost] = useState<Post | null>(null);
@@ -89,6 +93,7 @@ export function MessageBubble(props: MessageBubbleProps) {
   const text = "message" in props ? props.message.text : (props as LiveBubbleProps).text;
   const type = "message" in props ? props.message.type : (props as LiveBubbleProps).type;
   const postId = "message" in props ? props.message.postId : (props as LiveBubbleProps).postId;
+  const profileId = "message" in props ? props.message.profileId : (props as LiveBubbleProps).profileId;
   
   const { 
     username, 
@@ -99,7 +104,8 @@ export function MessageBubble(props: MessageBubbleProps) {
     ? { username: props.isMe ? "You" : "Other", avatarUrl: undefined } 
     : props;
 
-  const isPost = type === "post" || (type === "chat" && !!postId);
+  const isPost = type === "post" || (type === "chat" && !!postId) || (!type && !!postId);
+  const isProfile = type === "profile" || (!type && !!profileId);
 
   return (
     <div
@@ -112,7 +118,13 @@ export function MessageBubble(props: MessageBubbleProps) {
     >
       {!isMe && isFirstInGroup && (
         <div className="mr-2.5 shrink-0 pt-1">
-          <Avatar src={avatarUrl} alt={username} size="xs" />
+          {username && username !== "User" && username !== "Other" ? (
+            <Link to={`/profile/${username}`} className="block transition-transform hover:scale-105">
+              <Avatar src={avatarUrl} alt={username} size="xs" />
+            </Link>
+          ) : (
+            <Avatar src={avatarUrl} alt={username} size="xs" />
+          )}
         </div>
       )}
       {!isMe && !isFirstInGroup && <div className="mr-2.5 w-7 shrink-0" />}
@@ -120,22 +132,32 @@ export function MessageBubble(props: MessageBubbleProps) {
       <div className={clsx("flex max-w-[85%] flex-col md:max-w-[65%] xl:max-w-[55%]", isMe ? "items-end" : "items-start")}>
         <div
           className={clsx(
-            "px-4 py-2.5 text-[14.5px] leading-[1.45] shadow-xl transition-all duration-300 ease-out relative group/bubble",
-            isMe
-              ? "bg-brand text-black shadow-[0_12px_32px_rgba(16,185,129,0.18)] font-medium"
-              : "border border-white/[0.08] bg-zinc-900/90 text-white backdrop-blur-sm shadow-[0_12px_32px_rgba(0,0,0,0.25)]",
-            isMe && isFirstInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[24px] rounded-tr-[4px]",
-            isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[24px] rounded-r-[4px]",
-            isMe && isLastInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[4px] rounded-tr-[4px]",
-            !isMe && isFirstInGroup && "rounded-tr-[24px] rounded-br-[24px] rounded-bl-[24px] rounded-tl-[4px]",
-            !isMe && !isFirstInGroup && !isLastInGroup && "rounded-r-[24px] rounded-l-[4px]",
-            !isMe && isLastInGroup && "rounded-tr-[24px] rounded-br-[4px] rounded-bl-[24px] rounded-tl-[4px]"
+            "transition-all duration-300 ease-out relative group/bubble",
+            // Only apply bubble styling for text messages
+            !isPost && !isProfile
+              ? clsx(
+                  "px-4 py-2.5 text-[14.5px] leading-[1.45] shadow-xl",
+                  isMe
+                    ? "bg-brand text-black shadow-[0_12px_32px_rgba(16,185,129,0.18)] font-medium"
+                    : "border border-white/[0.08] bg-zinc-900/90 text-white backdrop-blur-sm shadow-[0_12px_32px_rgba(0,0,0,0.25)]",
+                  isMe && isFirstInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[24px] rounded-tr-[4px]",
+                  isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[24px] rounded-r-[4px]",
+                  isMe && isLastInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[4px] rounded-tr-[4px]",
+                  !isMe && isFirstInGroup && "rounded-tr-[24px] rounded-br-[24px] rounded-bl-[24px] rounded-tl-[4px]",
+                  !isMe && !isFirstInGroup && !isLastInGroup && "rounded-r-[24px] rounded-l-[4px]",
+                  !isMe && isLastInGroup && "rounded-tr-[24px] rounded-br-[4px] rounded-bl-[24px] rounded-tl-[4px]"
+                )
+              : ""
           )}
         >
-          {(!isPost || text !== "Shared a post") && (
+          {!isPost && !isProfile && (
             <p className="whitespace-pre-wrap break-words">{text}</p>
           )}
           {isPost && postId && <PostPreview postId={postId} />}
+          {isProfile && profileId && <SharedProfileCard profileId={profileId} />}
+          {isProfile && !profileId && (
+            <p className="whitespace-pre-wrap break-words text-zinc-400 italic text-sm">Shared a profile</p>
+          )}
         </div>
       </div>
     </div>

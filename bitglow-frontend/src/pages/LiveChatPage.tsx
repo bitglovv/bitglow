@@ -36,7 +36,7 @@ export default function LiveChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = "BitGlow • Live Chat";
+    document.title = "BitGlow";
   }, []);
 
   // Restore scroll on mount
@@ -134,34 +134,27 @@ export default function LiveChatPage() {
       ) : (
         // Live Chat Screen
         <>
-          <header className="fixed top-0 left-0 right-0 z-[100] h-14 bg-black/80 backdrop-blur-3xl border-b border-white/[0.03] px-5 flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex flex-col min-w-0">
-                <h2 className="text-[13px] font-black text-white truncate max-w-[120px] sm:max-w-xs leading-tight tracking-tight">
-                  {roomTitle}
-                </h2>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/5 border border-emerald-500/10 rounded-full">
-                    <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-[8px] font-black tracking-widest text-emerald-500 uppercase leading-none">{roomOnline} Online</span>
-                  </div>
+          <Header
+            rightContent={
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981] animate-pulse" />
+                  <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase leading-none">{roomOnline}</span>
                 </div>
+                <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981] animate-pulse" />
+                  <span className="text-[9px] font-black tracking-tighter text-emerald-400 uppercase">LIVE</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLeave}
+                  className="h-9 px-4 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-[10px] font-black tracking-widest transition-all text-white shadow-lg shadow-red-600/20 uppercase"
+                >
+                  LEAVE
+                </button>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981] animate-pulse" />
-                <span className="text-[9px] font-black tracking-tighter text-emerald-400 uppercase">LIVE</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleLeave}
-                className="h-9 px-4 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-[10px] font-black tracking-widest transition-all text-white shadow-lg shadow-red-600/20 uppercase"
-              >
-                LEAVE
-              </button>
-            </div>
-          </header>
+            }
+          />
 
           <main className="flex-1 flex flex-col h-[calc(100vh-56px)] mt-14 overflow-hidden relative">
             <div

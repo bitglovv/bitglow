@@ -19,11 +19,24 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Avatar } from "../components/ui/Avatar";
+import { Toast } from "../components/ui/Toast";
 import { api, Post, Friend } from "../services/api";
 import { ComposerSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 
 import { PostCard } from "../components/posts/PostCard";
 import { BottomSheet } from "../components/ui/BottomSheet";
+import { ReportSheet } from "../components/common/ReportSheet";
+import { timeAgo } from "../utils/time";
+import { Comment } from "../services/api";
+
+const POST_REPORT_OPTIONS = [
+  "Spam or misleading content",
+  "Hate speech or symbols",
+  "Bullying or harassment",
+  "Violence or dangerous content",
+  "Nudity or sexual content",
+  "False information",
+];
 
 type ComposerProps = { user: any; onPostCreated: (post: Post) => void };
 
@@ -107,12 +120,12 @@ export default function HomePage() {
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
 
   useEffect(() => {
-    document.title = "BitGlow \u2022 Home";
+    document.title = "BitGlow";
   }, []);
 
   // Modal states
   const [commentingPost, setCommentingPost] = useState<Post | null>(null);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
@@ -135,6 +148,8 @@ export default function HomePage() {
   const [isSharing, setIsSharing] = useState(false);
 
   const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [reportingPost, setReportingPost] = useState<Post | null>(null);
+  const [reportToastOpen, setReportToastOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -191,16 +206,67 @@ export default function HomePage() {
   const handleCommentSubmit = async () => {
     if (!commentingPost || !commentText.trim() || isCommenting) return;
     setIsCommenting(true);
-    const res = await api.posts.comment(commentingPost.id, commentText.trim());
-    if (res?.comment) {
-      setComments(prev => [res.comment, ...prev]);
-      updatePostLocally(commentingPost.id, (p) => ({
-        ...p,
-        commentsCount: (p.commentsCount || 0) + 1,
-      }));
-      setCommentText("");
+    try {
+      const res = await api.posts.comment(commentingPost.id, commentText.trim());
+      if (res?.comment) {
+        setComments(prev => [res.comment, ...prev]);
+        updatePostLocally(commentingPost.id, (p) => ({
+          ...p,
+          commentsCount: (p.commentsCount || 0) + 1,
+        }));
+        setCommentText("");
+      }
+    } catch (err) {
+      console.error("Failed to post comment", err);
+    } finally {
+      setIsCommenting(false);
     }
-    setIsCommenting(false);
+  };
+
+  const handleCommentLike = async (commentId: string) => {
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+
+    const liked = !comment.likedByMe;
+    
+    // Optimistic update
+    setComments(prev => prev.map(c => 
+      c.id === commentId 
+        ? { ...c, likedByMe: liked, likesCount: (c.likesCount || 0) + (liked ? 1 : -1) } 
+        : c
+    ));
+
+    try {
+      const res = await api.posts.likeComment(commentId);
+      if (res) {
+        setComments(prev => prev.map(c => 
+          c.id === commentId 
+            ? { ...c, likedByMe: res.liked, likesCount: res.likesCount } 
+            : c
+        ));
+      }
+    } catch (err) {
+      console.error("Failed to like comment", err);
+      // Revert on error
+      setComments(prev => prev.map(c => 
+        c.id === commentId 
+          ? { ...c, likedByMe: !liked, likesCount: (c.likesCount || 0) + (!liked ? 1 : -1) } 
+          : c
+      ));
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    const ok = await api.posts.deleteComment(commentId);
+    if (ok) {
+      setComments(prev => prev.filter(c => c.id !== commentId));
+      if (commentingPost) {
+        updatePostLocally(commentingPost.id, p => ({
+          ...p,
+          commentsCount: Math.max(0, (p.commentsCount || 1) - 1),
+        }));
+      }
+    }
   };
 
   const handleShareToFriend = async (friendId: string) => {
@@ -208,7 +274,7 @@ export default function HomePage() {
     setIsSharing(true);
     try {
       const dm = await api.dms.send(
-        friendId, 
+        friendId,
         `Shared a post`,
         'post',
         sharingPost.id
@@ -232,19 +298,32 @@ export default function HomePage() {
   const handleEditSubmit = async () => {
     if (!editingPost || !editContent.trim() || isEditing) return;
     setIsEditing(true);
-    const updated = await api.posts.update(editingPost.id, {
-      title: editTitle.trim() || undefined,
-      content: editContent.trim()
-    });
-    if (updated) {
-      updatePostLocally(editingPost.id, (p) => ({
-        ...p,
-        title: updated.title,
-        content: updated.content,
-      }));
-      setEditingPost(null);
+    try {
+      const updated = await api.posts.update(editingPost.id, {
+        title: editTitle.trim() || undefined,
+        content: editContent.trim()
+      });
+      if (updated) {
+        updatePostLocally(editingPost.id, (p) => ({
+          ...p,
+          title: updated.title,
+          content: updated.content,
+        }));
+        setEditingPost(null);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update post");
+    } finally {
+      setIsEditing(false);
     }
-    setIsEditing(false);
+  };
+
+  const handleReportSubmit = (reason: string) => {
+    if (!reportingPost) return;
+    console.log("Report submitted", { type: "post", postId: reportingPost.id, reason });
+    setReportingPost(null);
+    setReportToastOpen(true);
+    window.setTimeout(() => setReportToastOpen(false), 1800);
   };
 
   useEffect(() => {
@@ -312,13 +391,7 @@ export default function HomePage() {
                   // Refresh feed or remove posts by this user visually
                   setPosts(prev => prev.filter(p => p.author.id !== post.author.id));
                 }}
-                onBlock={() => {
-                  alert(`Blocked ${post.author.username}`);
-                  setPosts(prev => prev.filter(p => p.author.id !== post.author.id));
-                }}
-                onReport={() => {
-                  alert(`Reported post by ${post.author.username}`);
-                }}
+                onReport={() => setReportingPost(post)}
               />
             ))
           )}
@@ -326,39 +399,12 @@ export default function HomePage() {
       </main>
 
       {/* Modals */}
-      <BottomSheet isOpen={!!commentingPost} onClose={() => setCommentingPost(null)} title="Comments">
-        <div className="flex-1 overflow-y-auto min-h-[300px] max-h-[60vh] custom-scrollbar py-2">
-          {isLoadingComments ? (
-            <div className="flex flex-col items-center justify-center py-10 opacity-30">
-              <div className="w-6 h-6 border-2 border-white/20 border-t-brand rounded-full animate-spin mb-3" />
-              <p className="text-xs font-bold uppercase tracking-widest">Loading comments...</p>
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
-              <MessageSquare className="w-10 h-10 opacity-10 mb-3" />
-              <p className="text-sm">No comments yet. Be the first to reply!</p>
-            </div>
-          ) : (
-            <div className="space-y-4 px-1">
-              {comments.map((c) => (
-                <div key={c.id} className="flex gap-3 group">
-                  <Avatar src={c.author?.avatarUrl} alt={c.author?.username} size="xs" />
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">{c.author?.username}</span>
-                      <span className="text-[10px] text-zinc-600">
-                        {new Date(c.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-zinc-300 leading-relaxed">{c.content}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="mt-auto border-t border-white/5 pt-4 bg-zinc-950 pb-2">
-          <div className="flex gap-2">
+      <BottomSheet 
+        isOpen={!!commentingPost} 
+        onClose={() => setCommentingPost(null)} 
+        title="Comments"
+        footer={
+          <div className="flex gap-2 items-center">
             <Avatar alt={user?.username} src={user?.avatarUrl} size="sm" />
             <div className="flex-1 relative">
               <input
@@ -376,6 +422,59 @@ export default function HomePage() {
               </button>
             </div>
           </div>
+        }
+      >
+        <div className="flex-1 overflow-y-auto min-h-[300px] max-h-[60vh] custom-scrollbar py-2">
+          {isLoadingComments ? (
+            <div className="flex flex-col items-center justify-center py-10 opacity-30">
+              <div className="w-6 h-6 border-2 border-white/20 border-t-brand rounded-full animate-spin mb-3" />
+              <p className="text-xs font-bold uppercase tracking-widest">Loading comments...</p>
+            </div>
+          ) : comments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+              <MessageSquare className="w-10 h-10 opacity-10 mb-3" />
+              <p className="text-sm">No comments yet. Be the first to reply!</p>
+            </div>
+          ) : (
+            <div className="space-y-6 px-1">
+              {comments.map((c) => (
+                <div key={c.id} className="flex gap-3 group/comment">
+                  <Avatar src={c.author?.avatarUrl} alt={c.author?.username} size="xs" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-bold text-white">{c.author?.username}</span>
+                      <span className="text-[10px] text-zinc-500">{timeAgo(c.createdAt)}</span>
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed break-words">{c.content}</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 self-start pt-1">
+                    {/* Delete — only visible to comment author or post author */}
+                    {(c.author?.id === user?.id || commentingPost?.author?.id === user?.id) && (
+                      <button
+                        onClick={() => handleDeleteComment(c.id)}
+                        className="text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover/comment:opacity-100 mb-1"
+                        title="Delete comment"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => handleCommentLike(c.id)}
+                      className={clsx(
+                        "transition-all active:scale-125",
+                        c.likedByMe ? "text-rose-500" : "text-zinc-600 hover:text-zinc-400"
+                      )}
+                    >
+                      <Heart className={clsx("w-4 h-4", c.likedByMe ? "fill-rose-500 text-rose-500" : "")} />
+                    </button>
+                    {(c.likesCount || 0) > 0 && (
+                      <span className="text-[10px] font-medium text-zinc-500">{c.likesCount}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </BottomSheet>
 
@@ -428,6 +527,16 @@ export default function HomePage() {
           </Button>
         </div>
       </BottomSheet>
+
+      <ReportSheet
+        isOpen={!!reportingPost}
+        title="Report Post"
+        prompt="Why are you reporting this post?"
+        options={POST_REPORT_OPTIONS}
+        onClose={() => setReportingPost(null)}
+        onSubmit={handleReportSubmit}
+      />
+      <Toast message="Report Sent" isOpen={reportToastOpen} />
 
     </div>
   );

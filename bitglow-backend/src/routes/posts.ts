@@ -95,7 +95,9 @@ export async function postRoutes(fastify: FastifyInstance) {
             comment: {
                 id: comment.id,
                 content: comment.content,
-                createdAt: comment.created_at,
+                createdAt: comment.created_at || comment.createdAt,
+                likesCount: 0,
+                likedByMe: false,
                 author: {
                     id: author.id,
                     username: author.username,
@@ -107,9 +109,33 @@ export async function postRoutes(fastify: FastifyInstance) {
     });
 
     fastify.get("/posts/:id/comments", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
         const { id } = req.params as { id: string };
-        const comments = await db.getComments(id);
+        const comments = await db.getComments(id, userId);
         return { comments };
+    });
+
+    fastify.post("/comments/:id/like", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+        schema: idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id } = req.params as { id: string };
+        const result = await db.toggleCommentLike(userId, id);
+        return { liked: result.liked, likesCount: result.likesCount };
+    });
+
+    fastify.delete("/comments/:id", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: idParamSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id } = req.params as { id: string };
+        const ok = await db.deleteComment(userId, id);
+        if (!ok) return reply.code(403).send({ message: "Not authorized or comment not found" });
+        return { ok: true };
     });
 
     fastify.put("/posts/:id", {
@@ -117,13 +143,77 @@ export async function postRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
         schema: updatePostSchema,
     }, async (req, reply) => {
-        const userId = req.auth!.id;
-        const { id } = req.params as { id: string };
-        const { content, title } = (req.body || {}) as { content?: string; title?: string };
-        if (!content || !content.trim()) return reply.code(400).send({ message: "Content required" });
-        const updated = await db.updatePost(id, userId, sanitizeText(content.trim(), 5000), title?.trim() ? sanitizeText(title.trim(), 140) : undefined);
-        if (!updated) return reply.code(404).send({ message: "Post not found" });
-        return { post: updated };
+        try {
+            const userId = req.auth!.id;
+            const { id } = req.params as { id: string };
+            const { content, title } = (req.body || {}) as { content?: string; title?: string };
+
+            console.log(`[UPDATE_POST] User: ${userId}, PostId: ${id}`);
+            console.log(`[UPDATE_POST] Payload:`, { title, content });
+
+            if (!content || !content.trim()) {
+                return reply.code(400).send({ error: "Validation Error", message: "Content required" });
+            }
+
+            // Fetch post first to check ownership and time
+            const post = await db.getPostById(id, userId) as any;
+            
+            if (!post) {
+                console.log(`[UPDATE_POST] Post ${id} not found`);
+                return reply.code(404).send({ error: "Not Found", message: "Post not found" });
+            }
+
+            console.log(`[UPDATE_POST] Fetched Post:`, JSON.stringify(post, null, 2));
+
+            // Defensive ownership check: support post.author.id OR post.author_id OR post.authorId
+            const authorId = post.author?.id || post.author_id || post.authorId;
+            
+            if (!authorId || authorId !== userId) {
+                console.log(`[UPDATE_POST] Unauthorized access attempt by ${userId} on post ${id} (Owner: ${authorId})`);
+                return reply.code(403).send({ error: "Forbidden", message: "You can only edit your own posts" });
+            }
+
+            // Safe timestamp handling: support createdAt OR created_at
+            const rawCreatedAt = post.createdAt || post.created_at;
+            if (!rawCreatedAt) {
+                console.error(`[UPDATE_POST] Post ${id} missing creation timestamp`);
+                return reply.code(500).send({ error: "Database Error", message: "Post data is incomplete" });
+            }
+
+            const createdAt = new Date(rawCreatedAt).getTime();
+            const now = Date.now();
+            const fifteenMinutes = 15 * 60 * 1000;
+
+            if (now - createdAt > fifteenMinutes) {
+                console.log(`[UPDATE_POST] Time limit exceeded for post ${id}. Created: ${rawCreatedAt}`);
+                return reply.code(400).send({ 
+                    error: "Bad Request",
+                    message: "Edit time limit exceeded. Posts can only be edited within 15 minutes of creation." 
+                });
+            }
+
+            // Perform update
+            const updated = await db.updatePost(
+                id, 
+                userId, 
+                sanitizeText(content.trim(), 5000), 
+                title?.trim() ? sanitizeText(title.trim(), 140) : undefined
+            );
+            
+            if (!updated) {
+                console.error(`[UPDATE_POST] Database update failed for post ${id}`);
+                return reply.code(500).send({ error: "Database Error", message: "Failed to update post in database" });
+            }
+
+            console.log(`[UPDATE_POST] Success for post ${id}`);
+            return { post: updated };
+        } catch (err: any) {
+            console.error("[UPDATE_POST] UNHANDLED EXCEPTION:", err);
+            return reply.code(500).send({ 
+                error: "Internal Server Error", 
+                message: err.message || "An unexpected error occurred" 
+            });
+        }
     });
 
     fastify.delete("/posts/:id", {

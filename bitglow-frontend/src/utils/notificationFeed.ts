@@ -4,6 +4,7 @@ import type { Notification } from "../services/api";
 export const ACTIVITY_NOTIFICATION_TYPES = new Set<string>([
     "like",
     "comment",
+    "comment_like",
     "follow",
     "follow_back",
     "follow_request",
@@ -13,6 +14,7 @@ export const ACTIVITY_NOTIFICATION_TYPES = new Set<string>([
 export type ActivityNotification =
     | Extract<Notification, { type: "like" }>
     | Extract<Notification, { type: "comment" }>
+    | Extract<Notification, { type: "comment_like" }>
     | Extract<Notification, { type: "follow_request" }>
     | Extract<Notification, { type: "follow" }>
     | Extract<Notification, { type: "follow_back" }>

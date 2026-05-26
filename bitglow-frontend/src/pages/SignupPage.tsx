@@ -18,7 +18,7 @@ type SignupForm = {
 type SignupTouched = Record<keyof SignupForm, boolean>;
 
 export default function SignupPage() {
-    useEffect(() => { document.title = "BitGlow \u2022 Sign Up"; }, []);
+    useEffect(() => { document.title = "BitGlow"; }, []);
     const [form, setForm] = useState<SignupForm>({
         username: "",
         displayName: "",

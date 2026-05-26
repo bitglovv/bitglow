@@ -36,13 +36,16 @@ export const Avatar: React.FC<AvatarProps> = ({
     return (
         <div className={`relative inline-block ${className}`}>
             <div className={`${sizes[size]} overflow-hidden rounded-full bg-transparent flex items-center justify-center`}>
-                {src ? (
-                    <img src={src} alt={alt} className="block h-full w-full rounded-full object-cover" />
-                ) : (
-                    <div className="flex h-full w-full items-center justify-center rounded-full bg-transparent text-brand font-bold text-sm">
-                        {initials}
-                    </div>
-                )}
+                <img 
+                    src={src || "/default-avatar.png"} 
+                    alt={alt} 
+                    className="block h-full w-full rounded-full object-cover" 
+                    onError={(e) => {
+                        // Fallback to initials if image loading fails
+                        (e.target as any).style.display = 'none';
+                        (e.target as any).parentElement.innerHTML = `<div class="flex h-full w-full items-center justify-center rounded-full bg-transparent text-brand font-bold text-sm">${initials}</div>`;
+                    }}
+                />
             </div>
             {status !== 'none' && (
                 <span className={`absolute bottom-0 right-0 w-3 h-3 ${statusColors[status]} border-2 border-zinc-950 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.5)]`}></span>

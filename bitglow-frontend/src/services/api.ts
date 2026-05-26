@@ -40,23 +40,27 @@ export type User = {
     followersCount?: number;
     activityCount?: number;
     friendsCount?: number;
+    postsCount?: number;
+    isPrivate?: boolean;
+    onlineStatusVisible?: boolean;
 };
 
 export type DMMessage = {
     id: string;
     senderId: string;
     text: string;
-    type: 'text' | 'post';
+    type: 'text' | 'post' | 'profile';
     postId?: string;
+    profileId?: string;
     createdAt: string;
 };
 
 export type Conversation = {
     userId: string;
     username: string;
-    displayName: string;
     avatarUrl?: string;
     lastMessage?: string;
+    lastMessageSenderId?: string | null;
     lastMessageAt?: string | null;
     unreadCount?: number;
     pinned?: boolean;
@@ -101,9 +105,24 @@ export type Post = {
     savedByMe?: boolean;
 };
 
+export type Comment = {
+    id: string;
+    content: string;
+    createdAt: string;
+    author: {
+        id: string;
+        username: string;
+        displayName?: string;
+        avatarUrl?: string;
+    };
+    likesCount: number;
+    likedByMe: boolean;
+};
+
 export type Notification =
     | { type: "like"; user: User; postId: string; createdAt: string }
     | { type: "comment"; user: User; postId: string; content: string; createdAt: string }
+    | { type: "comment_like"; user: User; postId: string; content: string; createdAt: string }
     | { type: "follow_request"; user: User; createdAt: string }
     | { type: "follow"; user: User; createdAt: string }
     | { type: "follow_back"; user: User; createdAt: string }
@@ -333,6 +352,12 @@ export const api = {
             const data = await res.json();
             return data.requests || [];
         },
+        pendingFollows: async (): Promise<Friend[]> => {
+            const res = await fetchWithAuth("/follow/pending");
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.pending || [];
+        },
         acceptFollow: async (followerId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/follow/requests/${followerId}/accept`, { method: "POST" });
             return res.ok;
@@ -378,10 +403,10 @@ export const api = {
             if (!res.ok) return [];
             return res.json();
         },
-        send: async (userId: string, text: string, type: 'text' | 'post' = 'text', postId?: string): Promise<DMMessage | null> => {
+        send: async (userId: string, text: string, type: 'text' | 'post' | 'profile' = 'text', postId?: string, profileId?: string): Promise<DMMessage | null> => {
             const res = await fetchWithAuth(`/dms/${userId}`, {
                 method: "POST",
-                body: JSON.stringify({ text, type, postId }),
+                body: JSON.stringify({ text, type, postId, profileId }),
             });
             if (!res.ok) return null;
             return res.json();
@@ -389,6 +414,12 @@ export const api = {
         markRead: async (userId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/dms/${userId}/read`, {
                 method: "POST",
+            });
+            return res.ok;
+        },
+        deleteConversation: async (userId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/dms/${userId}`, {
+                method: "DELETE",
             });
             return res.ok;
         }
@@ -451,7 +482,7 @@ export const api = {
             if (!res.ok) return null;
             return res.json();
         },
-        comment: async (postId: string, content: string) => {
+        comment: async (postId: string, content: string): Promise<{ comment: Comment } | null> => {
             const res = await fetchWithAuth(`/posts/${postId}/comment`, {
                 method: "POST",
                 body: JSON.stringify({ content }),
@@ -459,7 +490,16 @@ export const api = {
             if (!res.ok) return null;
             return res.json();
         },
-        comments: async (postId: string) => {
+        likeComment: async (commentId: string): Promise<{ liked: boolean; likesCount: number } | null> => {
+            const res = await fetchWithAuth(`/comments/${commentId}/like`, { method: "POST" });
+            if (!res.ok) return null;
+            return res.json();
+        },
+        deleteComment: async (commentId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/comments/${commentId}`, { method: "DELETE" });
+            return res.ok;
+        },
+        comments: async (postId: string): Promise<Comment[]> => {
             const res = await fetchWithAuth(`/posts/${postId}/comments`);
             if (!res.ok) return [];
             const data = await res.json();
@@ -470,9 +510,23 @@ export const api = {
                 method: "PUT",
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) return null;
+            if (!res.ok) {
+                const error = await readErrorMessage(res, "Failed to update post");
+                throw new Error(error);
+            }
             const data = await res.json();
-            return data.post || null;
+            const p = data.post;
+            if (!p) return null;
+            return {
+                ...p,
+                likesCount: Number(p.likesCount ?? p.likes_count ?? 0),
+                commentsCount: Number(p.commentsCount ?? p.comments_count ?? 0),
+                savesCount: Number(p.savesCount ?? p.saves_count ?? 0),
+                likedByMe: p.likedByMe ?? !!p.liked_by_me,
+                savedByMe: p.savedByMe ?? !!p.saved_by_me,
+                createdAt: p.createdAt || p.created_at,
+                updatedAt: p.updatedAt || p.updated_at,
+            };
         },
         delete: async (postId: string) => {
             const res = await fetchWithAuth(`/posts/${postId}`, { method: "DELETE" });
@@ -485,6 +539,70 @@ export const api = {
             if (!res.ok) return [];
             const data = await res.json();
             return data.notifications || [];
+        }
+    },
+    settings: {
+        changeEmail: async (currentPassword: string, newEmail: string) => {
+            const res = await fetchWithAuth("/settings/email", {
+                method: "PUT",
+                body: JSON.stringify({ currentPassword, newEmail }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to change email"));
+            return res.json();
+        },
+        changePassword: async (currentPassword: string, newPassword: string) => {
+            const res = await fetchWithAuth("/settings/password", {
+                method: "PUT",
+                body: JSON.stringify({ currentPassword, newPassword }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to change password"));
+            return res.json();
+        },
+        updatePrivacy: async (isPrivate: boolean) => {
+            const res = await fetchWithAuth("/settings/privacy", {
+                method: "PUT",
+                body: JSON.stringify({ isPrivate }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to update privacy"));
+            return res.json();
+        },
+        updateOnlineStatus: async (isVisible: boolean) => {
+            const res = await fetchWithAuth("/settings/online-status", {
+                method: "PUT",
+                body: JSON.stringify({ isVisible }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to update online status"));
+            return res.json();
+        },
+        getBlockedUsers: async () => {
+            const res = await fetchWithAuth("/settings/blocked");
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.blockedUsers || [];
+        },
+        blockUser: async (userId: string) => {
+            const res = await fetchWithAuth(`/settings/blocked/${userId}`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to block user"));
+            return res.json();
+        },
+        unblockUser: async (userId: string) => {
+            const res = await fetchWithAuth(`/settings/blocked/${userId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to unblock user"));
+            return res.json();
+        },
+        getSavedPosts: async () => {
+            const res = await fetchWithAuth("/settings/saved");
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.savedPosts || [];
+        },
+        reportProblem: async (type: string, reason: string, reportedUserId?: string, postId?: string) => {
+            const res = await fetchWithAuth("/settings/reports", {
+                method: "POST",
+                body: JSON.stringify({ type, reason, reportedUserId, postId }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to submit report"));
+            return res.json();
         }
     }
 };

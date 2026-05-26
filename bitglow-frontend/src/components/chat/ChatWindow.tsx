@@ -22,6 +22,9 @@ interface ChatWindowProps {
   onTyping: (isTyping: boolean) => void;
   isOnline: boolean;
   isLoadingMessages?: boolean;
+  isRequest?: boolean;
+  onAcceptRequest?: () => void;
+  onRejectRequest?: () => void;
 }
 
 export const ChatWindow = ({
@@ -35,6 +38,9 @@ export const ChatWindow = ({
   onTyping,
   isOnline,
   isLoadingMessages = false,
+  isRequest = false,
+  onAcceptRequest,
+  onRejectRequest,
 }: ChatWindowProps) => {
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -143,6 +149,7 @@ export const ChatWindow = ({
                 text: m.text,
                 type: m.type as any || "chat",
                 postId: m.postId,
+                profileId: m.profileId,
                 ts: new Date(m.createdAt).getTime(),
                 avatarUrl:
                   m.senderId === currentUserId ? user?.avatarUrl : conversation.avatarUrl,
@@ -166,7 +173,29 @@ export const ChatWindow = ({
         )}
         style={isNarrow ? { bottom: keyboardInset } : undefined}
       >
-        <MessageInput compact onSendMessage={onSendMessage} onTyping={onTyping} />
+        {isRequest ? (
+          <div className="flex flex-col gap-2 p-2 pt-0 md:flex-row md:items-center">
+            <p className="text-xs text-zinc-500 mb-1 md:mb-0 md:mr-auto">
+              Accept message request from {conversation.username}?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={onRejectRequest || onBack}
+                className="flex-1 rounded-full bg-white/[0.05] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.1] md:flex-none"
+              >
+                Reject
+              </button>
+              <button
+                onClick={onAcceptRequest}
+                className="flex-1 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-black hover:bg-brand/90 md:flex-none"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        ) : (
+          <MessageInput compact onSendMessage={onSendMessage} onTyping={onTyping} />
+        )}
       </div>
     </div>
   );

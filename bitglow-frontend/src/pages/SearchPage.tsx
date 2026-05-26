@@ -14,7 +14,7 @@ export default function SearchPage() {
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
 
-  useEffect(() => { document.title = "BitGlow \u2022 Search"; }, []);
+  useEffect(() => { document.title = "BitGlow"; }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +88,7 @@ export default function SearchPage() {
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-black text-white">
 
-      <Header showTop={false} />
+      <Header />
 
       <main className="relative z-10 flex w-full flex-1 flex-col gap-7 bg-black px-4 pt-5 pb-[calc(80px+env(safe-area-inset-bottom))] md:mx-auto md:max-w-xl md:px-5 md:pt-7 md:pb-12">
         <div className="flex flex-col gap-3">

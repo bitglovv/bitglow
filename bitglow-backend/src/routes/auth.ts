@@ -70,7 +70,9 @@ export async function authRoutes(fastify: FastifyInstance) {
             avatarUrl: dbUser.avatar_url || dbUser.avatarUrl,
             bio: dbUser.bio,
             followersCount: dbUser.followers_count ?? dbUser.followersCount ?? 0,
-            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0
+            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0,
+            isPrivate: dbUser.is_private ?? false,
+            onlineStatusVisible: dbUser.online_status_visible ?? true,
         };
 
         const token = issueAccessToken({ id: user.id, username: user.username, sid: randomUUID() });
@@ -145,7 +147,9 @@ export async function authRoutes(fastify: FastifyInstance) {
             avatarUrl: dbUser.avatar_url || dbUser.avatarUrl,
             bio: dbUser.bio,
             followersCount: dbUser.followers_count ?? dbUser.followersCount ?? 0,
-            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0
+            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0,
+            isPrivate: dbUser.is_private,
+            onlineStatusVisible: dbUser.online_status_visible,
         };
 
         const token = issueAccessToken({ id: user.id, username: user.username, sid: randomUUID() });

@@ -4,7 +4,7 @@ export function LandingNav() {
     return (
         <header className="relative z-10">
             <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-                <Link to="/" className="group flex items-center">
+                <Link to="/" className="group hidden md:flex items-center">
                     <span className="text-brand-gradient text-lg font-semibold tracking-[-0.09em] [text-shadow:0_0_18px_rgba(200,255,216,0.08)] transition duration-300 group-hover:brightness-110 sm:text-[1.35rem]">
                         BitGlow
                     </span>

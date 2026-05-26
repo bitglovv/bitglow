@@ -17,7 +17,7 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
     };
 
     return (
-        <div className="relative h-[100svh] overflow-hidden bg-[#050505] font-sans text-white selection:bg-brand/30">
+        <div className="relative h-[100svh] overflow-hidden bg-black font-sans text-white selection:bg-brand/30">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute left-1/2 top-[10%] h-[35rem] w-[35rem] -translate-x-1/2 rounded-full bg-[#102C26]/40 blur-[160px]" />
                 <div className="absolute inset-0 bg-mesh opacity-[0.01]" />

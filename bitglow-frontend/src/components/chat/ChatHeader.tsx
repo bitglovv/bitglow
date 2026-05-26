@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
 
@@ -26,21 +27,21 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <div className="relative shrink-0">
+        <Link to={`/profile/${conversation.username}`} className="relative shrink-0 transition-transform hover:scale-105">
           <Avatar src={conversation.avatarUrl} alt={conversation.username} size="sm" />
           {isOnline && (
             <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-black bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.65)]" />
           )}
-        </div>
+        </Link>
 
-        <div className="flex min-w-0 flex-col">
+        <Link to={`/profile/${conversation.username}`} className="flex min-w-0 flex-col hover:opacity-80 transition-opacity">
           <span className="truncate text-[15px] font-bold text-white">
             {conversation.displayName || conversation.username}
           </span>
           <span className="truncate text-[11px] font-medium text-zinc-500">
             @{conversation.username}
           </span>
-        </div>
+        </Link>
       </div>
     </div>
   );

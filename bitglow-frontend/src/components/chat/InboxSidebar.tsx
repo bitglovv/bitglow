@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Search, SquarePen } from "lucide-react";
 import clsx from "clsx";
 import { Conversation, Friend } from "../../services/api";
@@ -17,6 +18,7 @@ type Props = {
   onSelectFriend: (friend: Friend) => void;
   isLoading: boolean;
   onlineUsers: Set<string>;
+  currentUserId: string | null;
 };
 
 export const InboxSidebar = ({
@@ -31,6 +33,7 @@ export const InboxSidebar = ({
   onSelectFriend,
   isLoading,
   onlineUsers,
+  currentUserId,
 }: Props) => {
   const q = searchTerm.trim().toLowerCase();
   const filteredFriends = q
@@ -41,9 +44,24 @@ export const InboxSidebar = ({
     : [];
   const conversationsByUserId = new Map(conversations.map((conv) => [conv.userId, conv]));
 
+  // Load accepted conversations from localStorage
+  const acceptedStr = typeof window !== "undefined" ? localStorage.getItem("bitglow:accepted_requests") || "[]" : "[]";
+  const acceptedIds = useMemo(() => {
+    try {
+      return new Set<string>(JSON.parse(acceptedStr));
+    } catch (e) {
+      return new Set<string>();
+    }
+  }, [acceptedStr]);
+
+  // Separate conversations into chats (friends or initiated by me) and requests (non-friends initiated by them)
+  const friendIds = new Set(friends.map((f) => f.id));
+  const chatConversations = conversations.filter((c) => friendIds.has(c.userId) || !c.lastMessageSenderId || c.lastMessageSenderId === currentUserId || acceptedIds.has(c.userId));
+  const requestConversations = conversations.filter((c) => !friendIds.has(c.userId) && c.lastMessageSenderId && c.lastMessageSenderId !== currentUserId && !acceptedIds.has(c.userId));
+
   return (
-    <aside className="flex flex-1 min-h-0 flex-col border-r border-white/[0.06] bg-[#050505]">
-      <div className="px-4 pt-3.5 pb-3">
+    <aside className="flex flex-1 min-h-0 flex-col border-r-0 md:border-r border-white/[0.06] bg-black w-full max-w-full overflow-hidden">
+      <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-md px-4 pt-3.5 pb-3">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tight">Messages</h1>
           <button
@@ -64,11 +82,11 @@ export const InboxSidebar = ({
           />
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-white/[0.035] p-1.5 border border-white/[0.05]">
+        <div className="mt-3 flex items-center gap-1 rounded-full bg-white/[0.035] p-1.5 border border-white/[0.05]">
           <button
             onClick={() => onTabChange("chats")}
             className={clsx(
-              "rounded-full py-2.5 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center whitespace-nowrap",
+              "flex-1 rounded-full py-2 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center",
               activeTab === "chats" ? "bg-white/[0.1] text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
             )}
           >
@@ -77,7 +95,7 @@ export const InboxSidebar = ({
           <button
             onClick={() => onTabChange("requests")}
             className={clsx(
-              "rounded-full py-2.5 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center whitespace-nowrap",
+              "flex-1 rounded-full py-2 text-sm font-bold transition-all duration-200 focus:outline-none flex items-center justify-center",
               activeTab === "requests" ? "bg-white/[0.1] text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
             )}
           >
@@ -87,7 +105,7 @@ export const InboxSidebar = ({
       </div>
 
       {q.length > 0 ? (
-        <div className="custom-scrollbar flex-1 min-h-0 space-y-1 overflow-y-auto overscroll-contain px-2 py-2">
+        <div className="custom-scrollbar flex-1 min-h-0 space-y-1 overflow-y-auto overscroll-contain px-2 py-2 pb-24 md:pb-2">
           {filteredFriends.length === 0 ? (
             <div className="p-6 text-center text-sm text-zinc-500 animate-chat-fade">
               No matching friends
@@ -125,7 +143,7 @@ export const InboxSidebar = ({
                   {isUnread && (
                     <span
                       aria-label={`${existingConversation?.unreadCount} unread message${existingConversation?.unreadCount === 1 ? "" : "s"}`}
-                      className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-[#050505] shadow-[0_0_6px_rgba(16,185,129,0.45)]"
+                      className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_6px_rgba(16,185,129,0.45)]"
                     />
                   )}
                 </button>
@@ -144,18 +162,33 @@ export const InboxSidebar = ({
               </div>
             ) : (
               <ConversationList
-                conversations={conversations}
+                conversations={chatConversations}
                 activeId={activeConversationId}
                 onSelect={onSelectConversation}
                 onlineUsers={onlineUsers}
               />
             )
           ) : (
-            <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-6 text-center text-zinc-500 animate-chat-fade">
-              <div className="mx-auto mb-3 h-12 w-12 rounded-full border border-white/[0.08] bg-white/[0.04] shadow-[0_0_32px_rgba(16,185,129,0.1)]" />
-              <p className="font-semibold text-zinc-400">No message requests</p>
-              <p className="text-sm mt-1">New requests will appear here when people reach out.</p>
-            </div>
+            isLoading ? (
+              <div className="flex-1 min-h-0 px-2 py-2 space-y-2">
+                {[...Array(6)].map((_, i) => (
+                  <ConversationSkeleton key={i} />
+                ))}
+              </div>
+            ) : requestConversations.length > 0 ? (
+              <ConversationList
+                conversations={requestConversations}
+                activeId={activeConversationId}
+                onSelect={onSelectConversation}
+                onlineUsers={onlineUsers}
+              />
+            ) : (
+              <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-6 text-center text-zinc-500 animate-chat-fade pb-24 md:pb-6">
+                <div className="mx-auto mb-3 h-12 w-12 rounded-full border border-white/[0.08] bg-white/[0.04] shadow-[0_0_32px_rgba(16,185,129,0.1)]" />
+                <p className="font-semibold text-zinc-400">No message requests</p>
+                <p className="text-sm mt-1">New requests will appear here when people reach out.</p>
+              </div>
+            )
           )}
         </>
       )}

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { LegalLayout } from "../components/landing/LegalLayout";
 
 export default function PrivacyPage() {
-    useEffect(() => { document.title = "BitGlow \u2022 Privacy"; }, []);
+    useEffect(() => { document.title = "BitGlow"; }, []);
     return (
         <LegalLayout
             title="Privacy"

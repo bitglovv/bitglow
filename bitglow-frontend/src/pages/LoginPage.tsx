@@ -13,7 +13,7 @@ type LoginTouched = {
 };
 
 export default function LoginPage() {
-    useEffect(() => { document.title = "BitGlow \u2022 Login"; }, []);
+    useEffect(() => { document.title = "BitGlow"; }, []);
     const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);

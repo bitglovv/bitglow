@@ -48,13 +48,26 @@
 @layer base {
   :root {
     --brand: 16 185 129;
-    --zinc-950: 5 5 5;
     --bg: #050505;
     --brand-primary: #102c26;
     --brand-accent: #34d399;
     --text-main: #ffffff;
     --text-muted: rgba(255, 255, 255, 0.6);
     --brand-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    
+    --color-white: 255 255 255;
+    --color-black: 0 0 0;
+    --color-zinc-50: 250 250 250;
+    --color-zinc-100: 244 244 245;
+    --color-zinc-200: 228 228 231;
+    --color-zinc-300: 212 212 216;
+    --color-zinc-400: 161 161 170;
+    --color-zinc-500: 113 113 122;
+    --color-zinc-600: 82 82 91;
+    --color-zinc-700: 63 63 70;
+    --color-zinc-800: 30 30 32;
+    --color-zinc-900: 18 18 20;
+    --color-zinc-950: 9 9 11;
   }
 
   html,
@@ -77,6 +90,35 @@
   /* Prevent iOS zoom on focus */
   input, textarea, select {
     font-size: 16px !important;
+  }
+
+  /* Theme Overrides */
+  html.theme-dark body, html.theme-dark #root {
+    background-color: #000000 !important;
+  }
+  html.theme-dark .bg-black {
+    background-color: #000000 !important;
+  }
+
+  html.theme-white body, html.theme-white #root {
+    background-color: rgb(var(--color-black)) !important;
+    color: rgb(var(--color-white)) !important;
+  }
+
+  html.theme-white {
+    --color-white: 0 0 0;
+    --color-black: 255 255 255;
+    --color-zinc-50: 9 9 11;
+    --color-zinc-100: 18 18 20;
+    --color-zinc-200: 30 30 32;
+    --color-zinc-300: 63 63 70;
+    --color-zinc-400: 82 82 91;
+    --color-zinc-500: 113 113 122;
+    --color-zinc-600: 161 161 170;
+    --color-zinc-700: 212 212 216;
+    --color-zinc-800: 228 228 231;
+    --color-zinc-900: 244 244 245;
+    --color-zinc-950: 250 250 250;
   }
 }
 

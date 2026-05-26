@@ -31,7 +31,9 @@ export async function userRoutes(fastify: FastifyInstance) {
             location: dbUser.location,
             bio: dbUser.bio,
             followersCount,
-            followsCount
+            followsCount,
+            isPrivate: dbUser.is_private,
+            onlineStatusVisible: dbUser.online_status_visible,
         };
     });
 
@@ -157,17 +159,20 @@ export async function userRoutes(fastify: FastifyInstance) {
         const { identifier, password } = (req.body || {}) as { identifier?: string; password?: string };
 
         if (!identifier || !password) {
-            return reply.code(400).send({ message: "Username/email and password are required" });
+            reply.code(400).send({ message: "Username/email and password are required" });
+            return;
         }
 
         const dbUser = await db.findUserByLoginIdentifier(identifier);
         if (!dbUser || dbUser.id !== userId) {
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            reply.code(401).send({ message: "Invalid username/email or password" });
+            return;
         }
 
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            reply.code(401).send({ message: "Invalid username/email or password" });
+            return;
         }
 
         await db.revokeSessionsForUser(userId);
@@ -238,6 +243,20 @@ export async function userRoutes(fastify: FastifyInstance) {
             [userId]
         );
         return { requests: rows.rows };
+    });
+
+    // List outgoing follow requests
+    fastify.get("/follow/pending", { preHandler: fastify.requireAuth }, async (req, reply) => {
+        const userId = req.auth!.id;
+
+        const rows = await db.query(
+            `SELECT f.friend_id as id, u.username, u.display_name, u.avatar_url
+             FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.status = 'pending'`,
+            [userId]
+        );
+        return { pending: rows.rows };
     });
 
     // Accept a follow request

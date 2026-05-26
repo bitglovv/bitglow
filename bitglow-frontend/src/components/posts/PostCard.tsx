@@ -5,28 +5,19 @@ import {
   MessageSquare, 
   Send, 
   Bookmark, 
-  MoreHorizontal, 
+  MoreVertical, 
   Edit3, 
-  Trash2 
+  Trash2,
+  UserPlus,
+  UserMinus,
+  AlertTriangle
 } from "lucide-react";
 import clsx from "clsx";
 import { api, Post } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
 import { Card } from "../ui/Card";
 
-const timeAgo = (dateStr: string): string => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s || 1}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  const w = Math.floor(d / 7);
-  return `${w}w`;
-};
+import { timeAgo } from "../../utils/time";
 
 const formatDate = (dateStr: string): string => {
   return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -45,8 +36,8 @@ type PostCardProps = {
   onSave: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onFollow?: () => void;
   onUnfollow?: () => void;
-  onBlock?: () => void;
   onReport?: () => void;
 };
 
@@ -59,8 +50,8 @@ export function PostCard({
   onSave, 
   onEdit, 
   onDelete, 
+  onFollow,
   onUnfollow, 
-  onBlock, 
   onReport 
 }: PostCardProps) {
   const [showMenu, setShowMenu] = useState(false);
@@ -89,7 +80,7 @@ export function PostCard({
             className="ml-auto text-zinc-500 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5"
             onClick={() => setShowMenu(!showMenu)}
           >
-            <MoreHorizontal className="w-4 h-4" />
+            <MoreVertical className="w-4 h-4" />
           </button>
           {showMenu && (
             <>
@@ -97,23 +88,29 @@ export function PostCard({
               <div className="absolute right-0 top-10 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
                 {currentUserId === post.author.id ? (
                   <>
-                    <button onClick={() => { setShowMenu(false); if (onEdit) onEdit(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      <Edit3 className="w-4 h-4" /> Edit
-                    </button>
+                    {(Date.now() - new Date(post.createdAt).getTime() <= 15 * 60 * 1000) && (
+                      <button onClick={() => { setShowMenu(false); if (onEdit) onEdit(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                        <Edit3 className="w-4 h-4" /> Edit
+                      </button>
+                    )}
                     <button onClick={() => { setShowMenu(false); if (onDelete) onDelete(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
                       <Trash2 className="w-4 h-4" /> Delete
                     </button>
                   </>
                 ) : (
                   <>
-                    <button onClick={() => { setShowMenu(false); if (onUnfollow) onUnfollow(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      Unfollow
-                    </button>
-                    <button onClick={() => { setShowMenu(false); if (onBlock) onBlock(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
-                      Block
-                    </button>
+                    {onFollow && (
+                      <button onClick={() => { setShowMenu(false); onFollow(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                        <UserPlus className="w-4 h-4" /> Follow
+                      </button>
+                    )}
+                    {onUnfollow && (
+                      <button onClick={() => { setShowMenu(false); onUnfollow(); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center gap-2 text-white">
+                        <UserMinus className="w-4 h-4" /> Unfollow
+                      </button>
+                    )}
                     <button onClick={() => { setShowMenu(false); if (onReport) onReport(); }} className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-white/5 flex items-center gap-2">
-                      Report
+                      <AlertTriangle className="w-4 h-4" /> Report
                     </button>
                   </>
                 )}

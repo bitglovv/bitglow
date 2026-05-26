@@ -8,7 +8,7 @@ export default function ProtectedRoute() {
     // Show loading state
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-[#050505]">
+            <div className="flex items-center justify-center min-h-screen bg-black">
                 <div className="text-center">
                     <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
                     <p className="text-zinc-400">Loading your session...</p>

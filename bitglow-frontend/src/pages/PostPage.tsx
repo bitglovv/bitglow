@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, MessageSquare, Search as SearchIcon, Send } from "lucide-react";
-import { api, Post, Friend } from "../services/api";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, MessageSquare, Search as SearchIcon, Send, Heart, Trash2 } from "lucide-react";
+import { api, Post, Friend, Comment } from "../services/api";
+import clsx from "clsx";
 import { useAuth } from "../hooks/useAuth";
 import { PostCard } from "../components/posts/PostCard";
 import { BottomSheet } from "../components/ui/BottomSheet";
+import { ReportSheet } from "../components/common/ReportSheet";
+import { Toast } from "../components/ui/Toast";
 import { Avatar } from "../components/ui/Avatar";
 import { PostCardSkeleton } from "../components/ui/Skeleton";
 import { navigateBack } from "../utils/navigateBack";
+import { timeAgo } from "../utils/time";
+
+const POST_REPORT_OPTIONS = [
+    "Spam or misleading content",
+    "Hate speech or symbols",
+    "Bullying or harassment",
+    "Violence or dangerous content",
+    "Nudity or sexual content",
+    "False information",
+];
 
 export default function PostPage() {
     const { postId } = useParams<{ postId: string }>();
@@ -21,10 +34,18 @@ export default function PostPage() {
     const [commentingPost, setCommentingPost] = useState<Post | null>(null);
     const [commentText, setCommentText] = useState("");
     const [isCommenting, setIsCommenting] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
     const [sharingPost, setSharingPost] = useState<Post | null>(null);
     const [friends, setFriends] = useState<Friend[]>([]);
     const [friendQuery, setFriendQuery] = useState("");
-    const [isSharing, setIsSharing] = useState(false);
+    const [editingPost, setEditingPost] = useState<Post | null>(null);
+    const [reportingPost, setReportingPost] = useState<Post | null>(null);
+    const [reportToastOpen, setReportToastOpen] = useState(false);
+    const [editTitle, setEditTitle] = useState("");
+    const [editContent, setEditContent] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [loadingComments, setLoadingComments] = useState(false);
 
     useEffect(() => {
         if (!postId) return;
@@ -46,7 +67,7 @@ export default function PostPage() {
     }, [postId]);
 
     useEffect(() => {
-        if (post) document.title = `BitGlow \u2022 Post by @${post.author.username}`;
+        if (post) document.title = "BitGlow";
     }, [post]);
 
     useEffect(() => {
@@ -54,6 +75,24 @@ export default function PostPage() {
             api.user.friends().then(setFriends).catch(console.error);
         }
     }, [sharingPost, friends.length]);
+
+    const fetchComments = async (id: string) => {
+        setLoadingComments(true);
+        try {
+            const res = await api.posts.comments(id);
+            setComments(res);
+        } catch (err) {
+            console.error("Failed to fetch comments", err);
+        } finally {
+            setLoadingComments(false);
+        }
+    };
+
+    useEffect(() => {
+        if (postId) {
+            fetchComments(postId);
+        }
+    }, [postId]);
 
     const handleLike = async () => {
         if (!post) return;
@@ -87,10 +126,51 @@ export default function PostPage() {
         const res = await api.posts.comment(post.id, commentText.trim());
         if (res?.comment) {
             setPost(prev => prev ? { ...prev, commentsCount: (prev.commentsCount || 0) + 1 } : null);
+            setComments(prev => [res.comment, ...prev]);
             setCommentText("");
-            setCommentingPost(null);
         }
         setIsCommenting(false);
+    };
+
+    const handleCommentLike = async (commentId: string) => {
+        const comment = comments.find(c => c.id === commentId);
+        if (!comment) return;
+
+        const liked = !comment.likedByMe;
+        
+        // Optimistic update
+        setComments(prev => prev.map(c => 
+            c.id === commentId 
+                ? { ...c, likedByMe: liked, likesCount: c.likesCount + (liked ? 1 : -1) } 
+                : c
+        ));
+
+        try {
+            const res = await api.posts.likeComment(commentId);
+            if (res) {
+                setComments(prev => prev.map(c => 
+                    c.id === commentId 
+                        ? { ...c, likedByMe: res.liked, likesCount: res.likesCount } 
+                        : c
+                ));
+            }
+        } catch (err) {
+            console.error("Failed to like comment", err);
+            // Revert on error
+            setComments(prev => prev.map(c => 
+                c.id === commentId 
+                    ? { ...c, likedByMe: !liked, likesCount: c.likesCount + (!liked ? 1 : -1) } 
+                    : c
+            ));
+        }
+    };
+
+    const handleDeleteComment = async (commentId: string) => {
+        const ok = await api.posts.deleteComment(commentId);
+        if (ok) {
+            setComments(prev => prev.filter(c => c.id !== commentId));
+            setPost(prev => prev ? { ...prev, commentsCount: Math.max(0, (prev.commentsCount || 1) - 1) } : null);
+        }
     };
 
     const handleShareToFriend = async (friendId: string) => {
@@ -104,6 +184,42 @@ export default function PostPage() {
         } finally {
             setIsSharing(false);
         }
+    };
+
+    const handleDelete = async () => {
+        if (!post) return;
+        if (!window.confirm("Are you sure you want to delete this post?")) return;
+        const ok = await api.posts.delete(post.id);
+        if (ok) {
+            navigate("/home");
+        }
+    };
+
+    const handleEditSubmit = async () => {
+        if (!editingPost || !editContent.trim() || isEditing) return;
+        setIsEditing(true);
+        try {
+            const updated = await api.posts.update(editingPost.id, {
+                title: editTitle.trim() || undefined,
+                content: editContent.trim()
+            });
+            if (updated) {
+                setPost(prev => prev ? { ...prev, title: updated.title, content: updated.content } : null);
+                setEditingPost(null);
+            }
+        } catch (err: any) {
+            alert(err.message || "Failed to update post");
+        } finally {
+            setIsEditing(false);
+        }
+    };
+
+    const handleReportSubmit = (reason: string) => {
+        if (!reportingPost) return;
+        console.log("Report submitted", { type: "post", postId: reportingPost.id, reason });
+        setReportingPost(null);
+        setReportToastOpen(true);
+        window.setTimeout(() => setReportToastOpen(false), 1800);
     };
 
     const filteredFriends = friends.filter(f => f.username.toLowerCase().includes(friendQuery.toLowerCase()));
@@ -139,19 +255,29 @@ export default function PostPage() {
                             onSave={handleSave}
                             onComment={() => setCommentingPost(post)}
                             onShare={() => setSharingPost(post)}
+                            onEdit={() => {
+                                setEditingPost(post);
+                                setEditTitle(post.title || "");
+                                setEditContent(post.content);
+                            }}
+                            onDelete={handleDelete}
+                            onUnfollow={async () => {
+                                await api.user.unfollow(post.author.id);
+                                // For PostPage, we can optionally redirect to home or just update state
+                            }}
+                            onReport={() => setReportingPost(post)}
                         />
                     </div>
                 )}
             </main>
 
             {/* Modals copied from HomePage logic */}
-            <BottomSheet isOpen={!!commentingPost} onClose={() => setCommentingPost(null)} title="Comments">
-                <div className="flex-1 flex flex-col pt-2 items-center justify-center min-h-[120px] text-zinc-500 mb-6">
-                    <MessageSquare className="w-8 h-8 opacity-20 mb-2" />
-                    <p className="text-sm">Comments are coming soon.</p>
-                </div>
-                <div className="mt-auto border-t border-white/5 pt-4 bg-zinc-950 pb-2">
-                    <div className="flex gap-2">
+            <BottomSheet 
+                isOpen={!!commentingPost} 
+                onClose={() => setCommentingPost(null)} 
+                title="Comments"
+                footer={
+                    <div className="flex gap-2 items-center">
                         <Avatar alt={user?.username} src={user?.avatarUrl} size="sm" />
                         <div className="flex-1 relative">
                             <input
@@ -169,6 +295,62 @@ export default function PostPage() {
                             </button>
                         </div>
                     </div>
+                }
+            >
+                <div className="flex-1 overflow-y-auto max-h-[60vh] custom-scrollbar px-1">
+                    {loadingComments ? (
+                        <div className="flex justify-center py-8">
+                            <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : comments.length === 0 ? (
+                        <div className="flex flex-col pt-8 items-center justify-center text-zinc-500 mb-8">
+                            <MessageSquare className="w-8 h-8 opacity-20 mb-2" />
+                            <p className="text-sm">No comments yet. Be the first to comment!</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6 mb-8">
+                            {comments.map((comment) => (
+                                <div key={comment.id} className="flex gap-3 group/comment">
+                                    <Link to={`/profile/${comment.author.username}`} className="shrink-0 transition-transform hover:scale-105">
+                                        <Avatar src={comment.author.avatarUrl} alt={comment.author.username} size="xs" />
+                                    </Link>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <Link to={`/profile/${comment.author.username}`} className="font-semibold text-sm text-white hover:underline hover:text-brand transition-colors">
+                                                {comment.author.username}
+                                            </Link>
+                                            <span className="text-[10px] text-zinc-500">{timeAgo(comment.createdAt)}</span>
+                                        </div>
+                                        <p className="text-sm text-zinc-300 leading-relaxed break-words">{comment.content}</p>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-1 self-start pt-1">
+                                        {/* Delete — visible to comment author or post author */}
+                                        {(comment.author.id === user?.id || post?.author?.id === user?.id) && (
+                                            <button
+                                                onClick={() => handleDeleteComment(comment.id)}
+                                                className="text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover/comment:opacity-100 mb-1"
+                                                title="Delete comment"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={() => handleCommentLike(comment.id)}
+                                            className={clsx(
+                                                "transition-all active:scale-125",
+                                                comment.likedByMe ? "text-rose-500" : "text-zinc-600 hover:text-zinc-400"
+                                            )}
+                                        >
+                                            <Heart className={clsx("w-4 h-4", comment.likedByMe ? "fill-rose-500 text-rose-500" : "")} />
+                                        </button>
+                                        {comment.likesCount > 0 && (
+                                            <span className="text-[10px] font-medium text-zinc-500">{comment.likesCount}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </BottomSheet>
 
@@ -201,6 +383,40 @@ export default function PostPage() {
                     )}
                 </div>
             </BottomSheet>
+
+            <BottomSheet isOpen={!!editingPost} onClose={() => setEditingPost(null)} title="Edit Post">
+                <div className="space-y-4 pt-2">
+                    <input
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Title (optional)"
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand"
+                    />
+                    <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        placeholder="Post content"
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand min-h-[150px] resize-none"
+                    />
+                    <button 
+                        onClick={handleEditSubmit} 
+                        disabled={!editContent.trim() || isEditing}
+                        className="w-full bg-brand text-black font-bold py-3 rounded-xl hover:opacity-90 disabled:opacity-50 transition-all"
+                    >
+                        {isEditing ? "Saving..." : "Save Changes"}
+                    </button>
+                </div>
+            </BottomSheet>
+
+            <ReportSheet
+                isOpen={!!reportingPost}
+                title="Report Post"
+                prompt="Why are you reporting this post?"
+                options={POST_REPORT_OPTIONS}
+                onClose={() => setReportingPost(null)}
+                onSubmit={handleReportSubmit}
+            />
+            <Toast message="Report Sent" isOpen={reportToastOpen} />
         </div>
     );
 }

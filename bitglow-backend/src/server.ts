@@ -10,6 +10,7 @@ import { liveRoutes } from "./routes/live";
 import { dmRoutes } from "./routes/dms";
 import { postRoutes } from "./routes/posts";
 import { notificationRoutes } from "./routes/notifications";
+import { settingsRoutes } from "./routes/settings";
 import authPlugin from "./plugins/auth";
 import { env } from "./config/env";
 import { db } from "./services/db";
@@ -102,6 +103,7 @@ server.register(liveRoutes, { prefix: "/api" });
 server.register(dmRoutes, { prefix: "/api" });
 server.register(postRoutes, { prefix: "/api" });
 server.register(notificationRoutes, { prefix: "/api" });
+server.register(settingsRoutes, { prefix: "/api/settings" });
 
 server.get("/health", async () => {
   return { status: "ok" };

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { LegalLayout } from "../components/landing/LegalLayout";
 
 export default function TermsPage() {
-    useEffect(() => { document.title = "BitGlow \u2022 Terms"; }, []);
+    useEffect(() => { document.title = "BitGlow"; }, []);
     return (
         <LegalLayout
             title="Terms"

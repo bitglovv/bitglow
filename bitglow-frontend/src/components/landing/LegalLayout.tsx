@@ -10,7 +10,7 @@ type LegalLayoutProps = {
 
 export function LegalLayout({ title, description, children }: LegalLayoutProps) {
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-black text-white">
             <div className="pointer-events-none absolute inset-0">
                 <div className="absolute left-1/2 top-0 h-[18rem] w-[18rem] -translate-x-1/2 rounded-full bg-emerald-300/8 blur-[150px]" />
                 <div className="absolute inset-0 bg-mesh opacity-[0.02]" />

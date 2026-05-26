@@ -10,10 +10,13 @@ import LiveChatPage from "../pages/LiveChatPage";
 import MessagesPage from "../pages/MessagesPage";
 import ProfilePage from "../pages/ProfilePage";
 import EditProfilePage from "../pages/EditProfilePage";
+import AboutAccountPage from "../pages/AboutAccountPage";
 import SearchPage from "../pages/SearchPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import PostPage from "../pages/PostPage";
 import SettingsPage from "../pages/SettingsPage";
+import BlockedUsersPage from "../pages/settings/BlockedUsersPage";
+import SavedPostsPage from "../pages/settings/SavedPostsPage";
 import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../layouts/AppLayout";
@@ -47,8 +50,11 @@ export default function Router() {
                     <Route path="/notifications" element={<NotificationsPage />} />
                     <Route path="/posts/:postId" element={<PostPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/settings/blocked-users" element={<BlockedUsersPage />} />
+                    <Route path="/settings/saved-posts" element={<SavedPostsPage />} />
                     <Route path="/profile" element={<MyProfileRedirect />} />
                     <Route path="/profile/:username" element={<ProfilePage />} />
+                    <Route path="/about/:username" element={<AboutAccountPage />} />
                     <Route path="/profile/edit" element={<EditProfilePage />} />
                 </Route>
             </Route>
