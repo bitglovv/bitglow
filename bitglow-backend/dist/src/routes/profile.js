@@ -44,6 +44,8 @@ async function profileRoutes(fastify) {
         const friendsCount = await db_1.db.getFriendsCount(dbUser.id);
         const followersCount = await db_1.db.getFollowersCount(dbUser.id);
         const followsCount = await db_1.db.getFollowingCount(dbUser.id);
+        const postsRes = await db_1.db.query('SELECT COUNT(*)::int FROM posts WHERE author_id = $1', [dbUser.id]);
+        const postsCount = postsRes.rows[0].count;
         const user = {
             id: dbUser.id,
             username: dbUser.username,
@@ -54,7 +56,9 @@ async function profileRoutes(fastify) {
             location: dbUser.location,
             followersCount,
             followsCount,
-            friendsCount
+            friendsCount,
+            postsCount,
+            createdAt: dbUser.created_at
         };
         return user;
     });

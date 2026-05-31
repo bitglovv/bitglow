@@ -15,6 +15,7 @@ const live_1 = require("./routes/live");
 const dms_1 = require("./routes/dms");
 const posts_1 = require("./routes/posts");
 const notifications_1 = require("./routes/notifications");
+const settings_1 = require("./routes/settings");
 const auth_2 = __importDefault(require("./plugins/auth"));
 const env_1 = require("./config/env");
 const db_1 = require("./services/db");
@@ -99,6 +100,7 @@ server.register(live_1.liveRoutes, { prefix: "/api" });
 server.register(dms_1.dmRoutes, { prefix: "/api" });
 server.register(posts_1.postRoutes, { prefix: "/api" });
 server.register(notifications_1.notificationRoutes, { prefix: "/api" });
+server.register(settings_1.settingsRoutes, { prefix: "/api/settings" });
 server.get("/health", async () => {
     return { status: "ok" };
 });

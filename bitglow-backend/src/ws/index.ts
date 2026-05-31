@@ -25,6 +25,7 @@ export function startWS(httpServer: any) {
             userAgent: request.headers?.["user-agent"]?.toString(),
             rooms: new Set(),
             roomOwners: new Map(),
+            onlineVisible: true,
         };
 
     clients.add(meta);

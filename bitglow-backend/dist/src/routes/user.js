@@ -29,7 +29,9 @@ async function userRoutes(fastify) {
             location: dbUser.location,
             bio: dbUser.bio,
             followersCount,
-            followsCount
+            followsCount,
+            isPrivate: dbUser.is_private,
+            onlineStatusVisible: dbUser.online_status_visible,
         };
     });
     /**
@@ -139,15 +141,18 @@ async function userRoutes(fastify) {
         const userId = req.auth.id;
         const { identifier, password } = (req.body || {});
         if (!identifier || !password) {
-            return reply.code(400).send({ message: "Username/email and password are required" });
+            reply.code(400).send({ message: "Username/email and password are required" });
+            return;
         }
         const dbUser = await db_1.db.findUserByLoginIdentifier(identifier);
         if (!dbUser || dbUser.id !== userId) {
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            reply.code(401).send({ message: "Invalid username/email or password" });
+            return;
         }
         const isValidPassword = await db_1.db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            reply.code(401).send({ message: "Invalid username/email or password" });
+            return;
         }
         await db_1.db.revokeSessionsForUser(userId);
         await db_1.db.deleteUserAccount(userId);
@@ -197,8 +202,6 @@ async function userRoutes(fastify) {
             return reply.code(400).send({ message: "Invalid user" });
         }
         const result = await db_1.db.followUser(userId, friendId);
-        const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
-        pushSocialActivity(friendId);
         return { status: result.status };
     });
     // List incoming follow requests (for private accounts)
@@ -210,13 +213,20 @@ async function userRoutes(fastify) {
              WHERE f.friend_id = $1 AND f.status = 'pending'`, [userId]);
         return { requests: rows.rows };
     });
+    // List outgoing follow requests
+    fastify.get("/follow/pending", { preHandler: fastify.requireAuth }, async (req, reply) => {
+        const userId = req.auth.id;
+        const rows = await db_1.db.query(`SELECT f.friend_id as id, u.username, u.display_name, u.avatar_url
+             FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.status = 'pending'`, [userId]);
+        return { pending: rows.rows };
+    });
     // Accept a follow request
     fastify.post("/follow/requests/:id/accept", { preHandler: fastify.requireAuth, schema: schemas_1.idParamSchema }, async (req, reply) => {
         const userId = req.auth.id;
         const { id } = req.params;
         await db_1.db.acceptFollow(userId, id);
-        const { pushSocialActivity } = await import("../ws/socialBroadcast.js");
-        pushSocialActivity(id);
         return { ok: true };
     });
     /**

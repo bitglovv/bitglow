@@ -4,7 +4,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.db = void 0;
-exports.activityNotifStableId = activityNotifStableId;
 const pg_1 = require("pg");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const env_1 = require("../config/env");
@@ -30,6 +29,7 @@ const initCoreTables = async () => {
                 follows_count INTEGER DEFAULT 0,
                 role TEXT DEFAULT 'user',
                 is_private BOOLEAN DEFAULT false,
+                online_status_visible BOOLEAN DEFAULT true,
                 created_at TIMESTAMP DEFAULT now(),
                 updated_at TIMESTAMP DEFAULT now()
             );
@@ -67,6 +67,15 @@ const initPostsTable = async () => {
     try {
         await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
         await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false;`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status_visible BOOLEAN DEFAULT true;`);
+        await pool.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='updated_at') THEN
+                    ALTER TABLE posts ADD COLUMN updated_at TIMESTAMP DEFAULT now();
+                END IF;
+            END $$;
+        `);
         await pool.query(`
             CREATE TABLE IF NOT EXISTS posts (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -74,7 +83,8 @@ const initPostsTable = async () => {
                 title TEXT,
                 content TEXT NOT NULL,
                 visibility TEXT DEFAULT 'friends' CHECK (visibility IN ('public','friends')),
-                created_at TIMESTAMP DEFAULT now()
+                created_at TIMESTAMP DEFAULT now(),
+                updated_at TIMESTAMP DEFAULT now()
             );
             CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
             CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
@@ -103,6 +113,14 @@ const initPostsTable = async () => {
                 created_at TIMESTAMP DEFAULT now()
             );
             CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id);
+
+            CREATE TABLE IF NOT EXISTS post_comment_likes (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                comment_id UUID NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (user_id, comment_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_post_comment_likes_comment ON post_comment_likes(comment_id);
         `);
     }
     catch (err) {
@@ -175,6 +193,8 @@ const initDMTables = async () => {
                 conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
                 sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 text TEXT NOT NULL,
+                type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post')),
+                post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
                 created_at TIMESTAMP DEFAULT now()
             );
             DO $$
@@ -188,6 +208,30 @@ const initDMTables = async () => {
                     ALTER TABLE dm_messages ADD COLUMN read_at TIMESTAMP;
                     UPDATE dm_messages SET read_at = created_at WHERE read_at IS NULL;
                 END IF;
+                
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'type'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post', 'profile'));
+                    ALTER TABLE dm_messages ADD COLUMN post_id UUID REFERENCES posts(id) ON DELETE SET NULL;
+                    ALTER TABLE dm_messages ADD COLUMN profile_id UUID REFERENCES users(id) ON DELETE SET NULL;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'profile_id'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN profile_id UUID REFERENCES users(id) ON DELETE SET NULL;
+                END IF;
+
+                -- Update CHECK constraint to include 'profile'
+                ALTER TABLE dm_messages DROP CONSTRAINT IF EXISTS dm_messages_type_check;
+                ALTER TABLE dm_messages ADD CONSTRAINT dm_messages_type_check CHECK (type IN ('text', 'post', 'profile'));
             END $$;
             CREATE INDEX IF NOT EXISTS idx_dm_msg_conv ON dm_messages(conversation_id);
             CREATE INDEX IF NOT EXISTS idx_dm_msg_created ON dm_messages(created_at DESC);
@@ -199,23 +243,6 @@ const initDMTables = async () => {
     }
 };
 void initDMTables();
-const initActivityNotificationReads = async () => {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS activity_notification_reads (
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                notif_key TEXT NOT NULL,
-                read_at TIMESTAMPTZ DEFAULT now(),
-                PRIMARY KEY (user_id, notif_key)
-            );
-            CREATE INDEX IF NOT EXISTS idx_activity_notif_reads_user ON activity_notification_reads(user_id);
-        `);
-    }
-    catch (e) {
-        console.error("Failed to ensure activity_notification_reads", e);
-    }
-};
-void initActivityNotificationReads();
 const initLiveTables = async () => {
     try {
         await pool.query(`
@@ -344,34 +371,6 @@ async function getCanonicalLiveRoomByRequestedId(client, roomId) {
     }
     return mapLiveRoom(row);
 }
-function activityNotifStableId(item) {
-    const ca = new Date(item.createdAt).toISOString();
-    if (item.type === "like")
-        return `like:${item.user.id}:${item.postId}:${ca}`;
-    if (item.type === "comment" && item.commentId)
-        return `comment:${item.commentId}`;
-    return `${item.type}:${item.user.id}:${ca}`;
-}
-async function hydrateActivityReadFlags(userId, items) {
-    if (items.length === 0)
-        return [];
-    const keys = items.map(activityNotifStableId);
-    const res = await pool.query(`SELECT notif_key FROM activity_notification_reads
-         WHERE user_id = $1 AND notif_key = ANY($2::text[])`, [userId, keys]);
-    const read = new Set(res.rows.map((r) => r.notif_key));
-    return items.map((it) => {
-        const createdAt = typeof it.createdAt === "string"
-            ? it.createdAt
-            : new Date(it.createdAt).toISOString();
-        const id = activityNotifStableId({ ...it, createdAt });
-        return {
-            ...it,
-            createdAt,
-            id,
-            read: read.has(id),
-        };
-    });
-}
 exports.db = {
     query: (text, params) => pool.query(text, params),
     async hashPassword(password) {
@@ -401,8 +400,13 @@ exports.db = {
     async revokeSessionByToken(tokenHash) {
         await pool.query(`UPDATE user_sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`, [tokenHash]);
     },
-    async revokeSessionsForUser(userId) {
-        await pool.query(`UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [userId]);
+    async revokeSessionsForUser(userId, keepSessionId) {
+        if (keepSessionId) {
+            await pool.query(`UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND id != $2 AND revoked_at IS NULL`, [userId, keepSessionId]);
+        }
+        else {
+            await pool.query(`UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [userId]);
+        }
     },
     async pruneUserSessions(userId, keepLatest = 5) {
         await pool.query(`UPDATE user_sessions
@@ -464,9 +468,9 @@ exports.db = {
     `;
         const res = await pool.query(query, [limit]);
         // reverse to get chronological order for client
-        return res.rows.reverse().map(row => ({
+        return res.rows.reverse().map((row) => ({
             ...row,
-            ts: new Date(row.ts).getTime()
+            ts: row.ts ? new Date(row.ts).getTime() : 0
         }));
     },
     async findUserByEmail(email) {
@@ -486,14 +490,16 @@ exports.db = {
         const client = await pool.connect();
         try {
             await client.query("BEGIN");
-            await client.query("DELETE FROM dm_messages WHERE sender_id = $1", [userId]);
-            await client.query("DELETE FROM dm_messages WHERE conversation_id IN (SELECT id FROM dm_conversations WHERE user_a = $1 OR user_b = $1)", [userId]);
-            await client.query("DELETE FROM dm_conversations WHERE user_a = $1 OR user_b = $1", [userId]);
-            await client.query("DELETE FROM live_messages WHERE sender_id = $1", [userId]);
-            await client.query("DELETE FROM live_messages WHERE room_id IN (SELECT id FROM live_rooms WHERE created_by = $1)", [userId]);
-            await client.query("DELETE FROM live_rooms WHERE created_by = $1", [userId]);
-            await client.query("DELETE FROM friends WHERE user_id = $1 OR friend_id = $1", [userId]);
-            await client.query("DELETE FROM messages WHERE user_id = $1", [userId]);
+            // Delete from all tables referencing users
+            await client.query("DELETE FROM messages WHERE sender_id = $1", [userId]);
+            await client.query("DELETE FROM messages WHERE dm_thread_id IN (SELECT id FROM dm_threads WHERE user_one = $1 OR user_two = $1)", [userId]);
+            await client.query("DELETE FROM dm_threads WHERE user_one = $1 OR user_two = $1", [userId]);
+            await client.query("DELETE FROM messages WHERE room_id IN (SELECT id FROM chat_rooms WHERE created_by = $1)", [userId]);
+            await client.query("DELETE FROM chat_room_members WHERE user_id = $1", [userId]);
+            await client.query("DELETE FROM chat_rooms WHERE created_by = $1", [userId]);
+            await client.query("DELETE FROM follows WHERE follower_id = $1 OR followed_id = $1", [userId]);
+            await client.query("DELETE FROM blocks WHERE blocker_id = $1 OR blocked_id = $1", [userId]);
+            await client.query("DELETE FROM user_presence WHERE user_id = $1", [userId]);
             await client.query("DELETE FROM users WHERE id = $1", [userId]);
             await client.query("COMMIT");
             return true;
@@ -530,7 +536,7 @@ exports.db = {
         return res.rows[0];
     },
     async getUserById(id) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1', [id]);
         return res.rows[0];
     },
     async getAllUsers() {
@@ -683,6 +689,16 @@ exports.db = {
         await pool.query(`DELETE FROM friends
              WHERE (user_id = $1 AND friend_id = $2)
                 OR (user_id = $2 AND friend_id = $1)`, [userId, friendId]);
+        // Delete the DM conversation to reset chat history and route future messages to Requests
+        const convRes = await pool.query(`SELECT id FROM dm_conversations
+             WHERE (user_a = $1 AND user_b = $2)
+                OR (user_a = $2 AND user_b = $1)`, [userId, friendId]);
+        if (convRes.rowCount && convRes.rowCount > 0) {
+            for (const row of convRes.rows) {
+                await pool.query('DELETE FROM dm_messages WHERE conversation_id = $1', [row.id]);
+                await pool.query('DELETE FROM dm_conversations WHERE id = $1', [row.id]);
+            }
+        }
     },
     async getFriends(userId) {
         const res = await pool.query(`SELECT DISTINCT u.id, u.username, u.display_name, u.avatar_url
@@ -852,12 +868,13 @@ exports.db = {
                     u.display_name as other_display_name,
                     u.avatar_url as other_avatar_url,
                     m.text as last_message,
+                    m.sender_id as last_message_sender_id,
                     m.created_at as last_message_at,
                     COALESCE(unread.count, 0)::int as unread_count
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              LEFT JOIN LATERAL (
-                SELECT text, created_at
+                SELECT text, created_at, sender_id
                 FROM dm_messages
                 WHERE conversation_id = c.id
                 ORDER BY created_at DESC
@@ -875,17 +892,17 @@ exports.db = {
         return res.rows;
     },
     async getDMHistory(conversationId, limit = 100) {
-        const res = await pool.query(`SELECT id, sender_id, text, created_at
+        const res = await pool.query(`SELECT id, sender_id, text, type, post_id, created_at
              FROM dm_messages
              WHERE conversation_id = $1
              ORDER BY created_at ASC
              LIMIT $2`, [conversationId, limit]);
         return res.rows;
     },
-    async saveDMMessage(conversationId, senderId, text) {
-        const res = await pool.query(`INSERT INTO dm_messages (conversation_id, sender_id, text)
-             VALUES ($1, $2, $3)
-             RETURNING id, sender_id, text, created_at`, [conversationId, senderId, text]);
+    async saveDMMessage(conversationId, senderId, text, type = 'text', postId, profileId) {
+        const res = await pool.query(`INSERT INTO dm_messages (conversation_id, sender_id, text, type, post_id, profile_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, sender_id, text, type, post_id, profile_id, created_at`, [conversationId, senderId, text, type, postId || null, profileId || null]);
         return res.rows[0];
     },
     async markDMConversationRead(conversationId, readerId) {
@@ -991,19 +1008,42 @@ exports.db = {
         const res = await pool.query(`INSERT INTO post_comments (post_id, author_id, content)
              VALUES ($1, $2, $3)
              RETURNING id, post_id, author_id, content, created_at`, [postId, userId, content]);
-        return res.rows[0];
+        const row = res.rows[0];
+        return {
+            ...row,
+            likesCount: 0,
+            likedByMe: false
+        };
     },
-    async getComments(postId, limit = 50) {
-        const res = await pool.query(`SELECT c.id, c.content, c.created_at, u.id as author_id, u.username, u.display_name, u.avatar_url
+    async toggleCommentLike(userId, commentId) {
+        const existing = await pool.query('SELECT 1 FROM post_comment_likes WHERE user_id = $1 AND comment_id = $2', [userId, commentId]);
+        if (existing.rowCount === 0) {
+            await pool.query('INSERT INTO post_comment_likes (user_id, comment_id) VALUES ($1, $2)', [userId, commentId]);
+        }
+        else {
+            await pool.query('DELETE FROM post_comment_likes WHERE user_id = $1 AND comment_id = $2', [userId, commentId]);
+        }
+        const countRes = await pool.query('SELECT COUNT(*)::int AS count FROM post_comment_likes WHERE comment_id = $1', [commentId]);
+        return { liked: existing.rowCount === 0, likesCount: countRes.rows[0].count };
+    },
+    async getComments(postId, userId, limit = 50) {
+        const res = await pool.query(`SELECT c.id, c.content, c.created_at, u.id as author_id, u.username, u.display_name, u.avatar_url,
+                    COALESCE(l.count, 0) AS "likesCount",
+                    EXISTS(SELECT 1 FROM post_comment_likes pcl WHERE pcl.comment_id = c.id AND pcl.user_id = $2) AS "likedByMe"
              FROM post_comments c
              JOIN users u ON u.id = c.author_id
+             LEFT JOIN LATERAL (
+                 SELECT count(*)::int AS count FROM post_comment_likes cl WHERE cl.comment_id = c.id
+             ) l ON true
              WHERE c.post_id = $1
              ORDER BY c.created_at DESC
-             LIMIT $2`, [postId, limit]);
+             LIMIT $3`, [postId, userId, limit]);
         return res.rows.map(r => ({
             id: r.id,
             content: r.content,
             createdAt: r.created_at,
+            likesCount: r.likesCount,
+            likedByMe: r.likedByMe,
             author: {
                 id: r.author_id,
                 username: r.username,
@@ -1012,54 +1052,69 @@ exports.db = {
             }
         }));
     },
+    async deleteComment(userId, commentId) {
+        // Allow comment author OR the post author to delete
+        const res = await pool.query(`DELETE FROM post_comments c
+             USING posts p
+             WHERE c.id = $1
+               AND p.id = c.post_id
+               AND (c.author_id = $2 OR p.author_id = $2)`, [commentId, userId]);
+        return (res.rowCount ?? 0) > 0;
+    },
     async updatePost(postId, authorId, content, title) {
-        const res = await pool.query(`UPDATE posts
-             SET content = $1,
-                 title = $2,
-                 updated_at = now()
-             WHERE id = $3 AND author_id = $4
-             RETURNING id, author_id, content, title, visibility, created_at, updated_at`, [content, title || null, postId, authorId]);
-        return res.rows[0] || null;
+        try {
+            console.log(`[DB_UPDATE] Updating post ${postId} for author ${authorId}`);
+            const res = await pool.query(`UPDATE posts
+                 SET content = $1,
+                     title = $2,
+                     updated_at = NOW()
+                 WHERE id = $3 AND author_id = $4
+                 RETURNING *`, [content || "", title || null, postId, authorId]);
+            if (res.rowCount === 0) {
+                console.log(`[DB_UPDATE] No rows updated for post ${postId}`);
+            }
+            return res.rows[0] || null;
+        }
+        catch (err) {
+            console.error(`[DB_UPDATE] CRITICAL ERROR updating post ${postId}:`, err);
+            throw err;
+        }
     },
     async deletePost(postId, authorId) {
         const res = await pool.query(`DELETE FROM posts WHERE id = $1 AND author_id = $2`, [postId, authorId]);
         return (res.rowCount ?? 0) > 0;
     },
-    async getPostAuthorId(postId) {
-        const res = await pool.query(`SELECT author_id FROM posts WHERE id = $1`, [postId]);
-        return res.rows[0]?.author_id ?? null;
-    },
     async getNotifications(userId, limit = 50) {
+        // 1. Likes on your posts
         const likesRes = await pool.query(`SELECT pl.user_id,
                     pl.post_id,
                     pl.created_at,
                     'like' AS type,
                     u.username,
                     u.display_name,
-                    u.avatar_url,
-                    (SELECT left(trim(regexp_replace(p2.content, E'\\s+', ' ', 'g')), 140) FROM posts p2 WHERE p2.id = pl.post_id) AS post_preview
+                    u.avatar_url
              FROM post_likes pl
              JOIN posts p ON p.id = pl.post_id
              JOIN users u ON u.id = pl.user_id
              WHERE p.author_id = $1 AND pl.user_id <> $1
              ORDER BY pl.created_at DESC
              LIMIT $2`, [userId, limit]);
-        const commentsRes = await pool.query(`SELECT pc.id AS comment_id,
-                    pc.author_id AS user_id,
+        // 2. Comments on your posts
+        const commentsRes = await pool.query(`SELECT pc.author_id as user_id,
                     pc.post_id,
                     pc.created_at,
                     pc.content,
                     'comment' AS type,
                     u.username,
                     u.display_name,
-                    u.avatar_url,
-                    (SELECT left(trim(regexp_replace(p2.content, E'\\s+', ' ', 'g')), 140) FROM posts p2 WHERE p2.id = pc.post_id) AS post_preview
+                    u.avatar_url
              FROM post_comments pc
              JOIN posts p ON p.id = pc.post_id
              JOIN users u ON u.id = pc.author_id
              WHERE p.author_id = $1 AND pc.author_id <> $1
              ORDER BY pc.created_at DESC
              LIMIT $2`, [userId, limit]);
+        // 3. Follow requests and New Followers
         const followsRes = await pool.query(`SELECT f.user_id,
                     f.created_at,
                     f.status,
@@ -1072,60 +1127,220 @@ exports.db = {
              WHERE f.friend_id = $1 AND f.user_id <> $1
              ORDER BY f.created_at DESC
              LIMIT $2`, [userId, limit]);
-        const typePri = {
-            follow_request: 4,
-            comment: 3,
-            follow: 2,
-            follow_back: 2,
-            like: 1,
-        };
+        // 5. Likes on your comments
+        const commentLikesRes = await pool.query(`SELECT pcl.user_id,
+                    pcl.comment_id,
+                    pcl.created_at,
+                    'comment_like' AS type,
+                    u.username,
+                    u.display_name,
+                    u.avatar_url,
+                    pc.post_id,
+                    pc.content as comment_content
+             FROM post_comment_likes pcl
+             JOIN post_comments pc ON pc.id = pcl.comment_id
+             JOIN users u ON u.id = pcl.user_id
+             WHERE pc.author_id = $1 AND pcl.user_id <> $1
+             ORDER BY pcl.created_at DESC
+             LIMIT $2`, [userId, limit]);
+        // 6. New DM Notifications (Last message from others)
+        const dmsRes = await pool.query(`SELECT m.sender_id as user_id,
+                    m.text as content,
+                    m.created_at,
+                    'dm' as type,
+                    u.username,
+                    u.display_name,
+                    u.avatar_url
+             FROM dm_messages m
+             JOIN dm_conversations c ON c.id = m.conversation_id
+             JOIN users u ON u.id = m.sender_id
+             WHERE (c.user_a = $1 OR c.user_b = $1)
+               AND m.sender_id <> $1
+             ORDER BY m.created_at DESC
+             LIMIT $2`, [userId, limit]);
         const items = [
             ...likesRes.rows.map((r) => ({
-                type: "like",
+                type: 'like',
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
-                postPreview: r.post_preview,
-                createdAt: r.created_at,
+                createdAt: r.created_at
             })),
             ...commentsRes.rows.map((r) => ({
-                type: "comment",
+                type: 'comment',
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
-                postPreview: r.post_preview,
                 content: r.content,
-                commentId: r.comment_id,
-                createdAt: r.created_at,
+                createdAt: r.created_at
+            })),
+            ...commentLikesRes.rows.map((r) => ({
+                type: 'comment_like',
+                user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
+                postId: r.post_id,
+                content: r.comment_content,
+                createdAt: r.created_at
             })),
             ...followsRes.rows.map((r) => ({
-                type: (r.status === "pending" ? "follow_request" : r.is_mutual ? "follow_back" : "follow"),
+                type: r.status === 'pending' ? 'follow_request' : (r.is_mutual ? 'follow_back' : 'follow'),
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
-                createdAt: r.created_at,
+                createdAt: r.created_at
+            })),
+            ...dmsRes.rows.map((r) => ({
+                type: 'dm',
+                user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
+                content: r.content,
+                createdAt: r.created_at
             })),
         ];
-        items.sort((a, b) => {
-            const tb = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-            if (tb !== 0)
-                return tb;
-            return (typePri[b.type] || 0) - (typePri[a.type] || 0);
-        });
-        const sliced = items.slice(0, limit);
-        return await hydrateActivityReadFlags(userId, sliced);
+        return items
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, limit);
     },
-    async markActivityNotificationsRead(userId, keys) {
-        if (!keys.length)
-            return;
-        await pool.query(`INSERT INTO activity_notification_reads (user_id, notif_key)
-             SELECT $1, unnest($2::text[])
-             ON CONFLICT (user_id, notif_key) DO NOTHING`, [userId, keys]);
+    async getPostById(postId, userId) {
+        console.log(`DB: getPostById called for postId=${postId}, userId=${userId}`);
+        const res = await pool.query(`
+            SELECT p.id,
+                   p.content,
+                   p.title,
+                   p.visibility,
+                   p.created_at,
+                   u.id   AS author_id,
+                   u.username,
+                   u.display_name,
+                   u.avatar_url,
+                   COALESCE(l.count, 0) AS "likesCount",
+                   COALESCE(c.count, 0) AS "commentsCount",
+                   COALESCE(s.count, 0) AS "savesCount",
+                   (SELECT 1 FROM post_likes pl2 WHERE pl2.user_id = $2 AND pl2.post_id = p.id LIMIT 1) AS "likedByMe",
+                   (SELECT 1 FROM post_saves ps2 WHERE ps2.user_id = $2 AND ps2.post_id = p.id LIMIT 1) AS "savedByMe"
+            FROM posts p
+            JOIN users u ON u.id = p.author_id
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+            ) l ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+            ) c ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+            ) s ON true
+            WHERE p.id = $1
+            `, [postId, userId]);
+        console.log(`DB: getPostById result rowCount=${res.rowCount}`);
+        if (res.rowCount === 0)
+            return null;
+        const row = res.rows[0];
+        return {
+            id: row.id,
+            content: row.content,
+            title: row.title,
+            visibility: row.visibility,
+            createdAt: row.created_at,
+            author: {
+                id: row.author_id,
+                username: row.username,
+                displayName: row.display_name,
+                avatarUrl: row.avatar_url
+            },
+            likesCount: row.likesCount,
+            commentsCount: row.commentsCount,
+            savesCount: row.savesCount,
+            likedByMe: !!row.likedByMe,
+            savedByMe: !!row.savedByMe,
+        };
     },
-    async markAllActivityNotificationsRead(userId) {
-        const items = await this.getNotifications(userId, 250);
-        const keys = items.map((i) => i.id).filter(Boolean);
-        if (keys.length)
-            await this.markActivityNotificationsRead(userId, keys);
+    async updateUserEmail(userId, email) {
+        await pool.query('UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2', [email, userId]);
     },
-    async getUnreadActivityNotificationCount(userId) {
-        const items = await this.getNotifications(userId, 100);
-        return items.filter((i) => !i.read).length;
+    async updateUserPassword(userId, hash) {
+        await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
     },
+    async updateUserPrivacy(userId, isPrivate) {
+        await pool.query('UPDATE users SET is_private = $1, updated_at = NOW() WHERE id = $2', [isPrivate, userId]);
+    },
+    async updateUserOnlineStatusVisible(userId, isVisible) {
+        await pool.query('UPDATE users SET online_status_visible = $1, updated_at = NOW() WHERE id = $2', [isVisible, userId]);
+    },
+    async getBlockedUsers(userId) {
+        const res = await pool.query(`SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+             FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.status = 'blocked'
+             ORDER BY u.username`, [userId]);
+        return res.rows;
+    },
+    async blockUser(userId, blockedId) {
+        await pool.query(`DELETE FROM friends
+             WHERE (user_id = $1 AND friend_id = $2)
+                OR (user_id = $2 AND friend_id = $1)`, [userId, blockedId]);
+        await pool.query(`INSERT INTO friends (user_id, friend_id, status)
+             VALUES ($1, $2, 'blocked')
+             ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'blocked'`, [userId, blockedId]);
+    },
+    async unblockUser(userId, unblockedId) {
+        await pool.query(`DELETE FROM friends
+             WHERE user_id = $1 AND friend_id = $2 AND status = 'blocked'`, [userId, unblockedId]);
+    },
+    async getSavedPosts(userId) {
+        const res = await pool.query(`
+            SELECT p.id,
+                   p.content,
+                   p.title,
+                   p.visibility,
+                   p.created_at,
+                   u.id   AS author_id,
+                   u.username,
+                   u.display_name,
+                   u.avatar_url,
+                   COALESCE(l.count, 0) AS "likesCount",
+                   COALESCE(c.count, 0) AS "commentsCount",
+                   COALESCE(s.count, 0) AS "savesCount",
+                   (SELECT 1 FROM post_likes pl2 WHERE pl2.user_id = $1 AND pl2.post_id = p.id LIMIT 1) AS "likedByMe",
+                   true AS "savedByMe"
+            FROM post_saves ps_main
+            JOIN posts p ON p.id = ps_main.post_id
+            JOIN users u ON u.id = p.author_id
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+            ) l ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+            ) c ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+            ) s ON true
+            WHERE ps_main.user_id = $1
+            ORDER BY ps_main.created_at DESC
+            `, [userId]);
+        return res.rows.map(row => ({
+            id: row.id,
+            content: row.content,
+            title: row.title,
+            visibility: row.visibility,
+            createdAt: row.created_at,
+            author: {
+                id: row.author_id,
+                username: row.username,
+                displayName: row.display_name,
+                avatarUrl: row.avatar_url
+            },
+            likesCount: row.likesCount,
+            commentsCount: row.commentsCount,
+            savesCount: row.savesCount,
+            likedByMe: !!row.likedByMe,
+            savedByMe: !!row.savedByMe,
+        }));
+    },
+    async saveReport(userId, type, reportedUserId, postId, reason) {
+        // Simple insert into a generic reports table, or create user_reports if it exists
+        // Wait, schema.sql has user_reports
+        if (type === 'account' && reportedUserId) {
+            await pool.query(`INSERT INTO user_reports (reported_user, reported_by, reason)
+                 VALUES ($1, $2, $3)`, [reportedUserId, userId || null, reason]);
+        }
+        else {
+            // Log it in security_logs as a fallback if it's a post report
+            await pool.query(`INSERT INTO security_logs (event_type, user_id, details)
+                 VALUES ($1, $2, $3)`, ['report', userId || null, JSON.stringify({ type, reportedUserId, postId, reason })]);
+        }
+    }
 };

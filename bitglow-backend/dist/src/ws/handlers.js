@@ -20,9 +20,14 @@ const USER_RATE_LIMIT_MS = 1_000;
 exports.roomUsers = new Map();
 exports.userMessageTimestamps = new Map();
 function broadcastPresence(clients) {
+    let onlineCount = 0;
+    for (const c of clients) {
+        if (c.onlineVisible)
+            onlineCount++;
+    }
     const message = JSON.stringify({
         type: "server:presence",
-        onlineCount: clients.size,
+        onlineCount,
         ts: Date.now(),
     });
     for (const c of clients) {
@@ -36,7 +41,7 @@ function broadcastRoomPresence(clients, roomId) {
     const count = usersInRoom.size;
     // We still want to send the first few profiles for the avatar stack
     // (We find them by looking in the active WS clients)
-    const activeInRoom = Array.from(clients).filter((c) => c.socket.readyState === ws_1.default.OPEN && c.rooms.has(roomId));
+    const activeInRoom = Array.from(clients).filter((c) => c.socket.readyState === ws_1.default.OPEN && c.rooms.has(roomId) && c.onlineVisible);
     const message = JSON.stringify({
         type: "server:room:presence",
         roomId,
@@ -95,8 +100,10 @@ async function handleMessage(meta, raw, clients) {
                 meta.username = decoded.username;
                 meta.isAuth = true;
                 const user = await db_1.db.getUserById(meta.userId);
-                if (user)
+                if (user) {
                     meta.avatarUrl = user.avatar_url || user.avatarUrl;
+                    meta.onlineVisible = user.online_status_visible ?? true;
+                }
                 await db_1.db.touchSession(session.id);
                 meta.socket.send(JSON.stringify({
                     type: "server:welcome",

@@ -5,10 +5,8 @@ exports.startWS = startWS;
 const ws_1 = require("ws");
 const crypto_1 = require("crypto");
 const handlers_1 = require("./handlers");
-const socialBroadcast_1 = require("./socialBroadcast");
 const db_1 = require("../services/db");
 const clients = new Set();
-(0, socialBroadcast_1.attachSocialFeedClients)(clients);
 function startWS(httpServer) {
     const wss = new ws_1.WebSocketServer({ server: httpServer });
     wss.on("connection", (socket, request) => {
@@ -25,6 +23,7 @@ function startWS(httpServer) {
             userAgent: request.headers?.["user-agent"]?.toString(),
             rooms: new Set(),
             roomOwners: new Map(),
+            onlineVisible: true,
         };
         clients.add(meta);
         console.log(`✅ Client ${userId} connected. Total: ${clients.size}`);

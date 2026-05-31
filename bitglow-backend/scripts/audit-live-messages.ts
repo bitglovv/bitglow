@@ -10,6 +10,17 @@ const pool = new Pool({
 const rawLimit = Number(process.argv[2] || 500);
 const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 500;
 
+interface AuditLiveMessageRow {
+  messageId: string;
+  roomId: string;
+  roomOwnerId: string;
+  roomOwnerUsername: string;
+  senderId: string;
+  senderUsername: string;
+  createdAt: string | Date;
+  auditStatus: string;
+}
+
 async function main() {
   const result = await pool.query(
     `WITH canonical_rooms AS (
@@ -65,7 +76,7 @@ async function main() {
   }
 
   console.table(
-    result.rows.map((row) => ({
+    result.rows.map((row: AuditLiveMessageRow) => ({
       messageId: row.messageId,
       roomId: row.roomId,
       roomOwnerId: row.roomOwnerId,

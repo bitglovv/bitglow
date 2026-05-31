@@ -166,6 +166,9 @@ exports.dmSendSchema = {
         required: ["text"],
         properties: {
             text: { type: "string", minLength: 1, maxLength: 2000 },
+            type: { type: "string", enum: ["text", "post", "profile"] },
+            postId: { type: "string" },
+            profileId: { type: "string" },
         },
     },
 };

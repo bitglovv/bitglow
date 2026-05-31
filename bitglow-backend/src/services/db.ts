@@ -2,6 +2,95 @@ import { Pool, PoolClient } from 'pg';
 import bcrypt from 'bcrypt';
 import { env } from "../config/env";
 
+
+
+
+export interface LiveMessageRow {
+    id: string;
+    room_id: string;
+    sender_id: string;
+    username: string;
+    content: string;
+    created_at: string | Date;
+}
+
+export interface FriendRow {
+    id: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+}
+
+export interface PostRow {
+    id: string;
+    content: string;
+    title?: string;
+    visibility?: string;
+    created_at: string | Date;
+    author_id: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+    likesCount?: number;
+    commentsCount?: number;
+    savesCount?: number;
+    likedByMe?: boolean | number;
+    savedByMe?: boolean | number;
+}
+
+export interface CommentRow {
+    id: string;
+    content: string;
+    created_at: string | Date;
+    author_id: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+    likesCount?: number;
+    likedByMe?: boolean | number;
+}
+
+export interface NotificationRow {
+    id: string;
+    type: string;
+    created_at: string | Date;
+    is_read: boolean;
+    actor_id?: string;
+    actor_username?: string;
+    actor_display_name?: string;
+    actor_avatar_url?: string;
+    post_id?: string;
+    user_id?: string;
+    username?: string;
+    display_name?: string;
+    avatar_url?: string;
+    content?: string;
+    comment_content?: string;
+    status?: string;
+    is_mutual?: boolean;
+}
+
+export interface DMMessageRow {
+    id: string;
+    conversation_id: string;
+    sender_id: string;
+    text: string;
+    type: string;
+    created_at: string | Date;
+    post_id?: string;
+}
+
+export interface SecurityLogRow {
+    id: string;
+    event_type: string;
+    user_id?: string;
+    ip_address?: string;
+    user_agent?: string;
+    details?: any;
+    created_at: string | Date;
+    ts?: string | number | Date;
+}
+
 const pool = new Pool({
     connectionString: env.DATABASE_URL,
 });
@@ -533,9 +622,9 @@ export const db = {
     `;
         const res = await pool.query(query, [limit]);
         // reverse to get chronological order for client
-        return res.rows.reverse().map(row => ({
+        return res.rows.reverse().map((row: SecurityLogRow) => ({
             ...row,
-            ts: new Date(row.ts).getTime()
+            ts: row.ts ? new Date(row.ts).getTime() : 0
         }));
     },
 
@@ -785,7 +874,7 @@ export const db = {
                       u.username ASC`,
             [userId]
         );
-        return res.rows.map((row) => mapLiveRoom(row, userId));
+        return res.rows.map((row: LiveRoomRow) => mapLiveRoom(row, userId));
     },
 
     async followUser(userId: string, friendId: string) {
@@ -926,7 +1015,7 @@ export const db = {
     async saveMirroredLiveMessages(senderId: string, content: string) {
         const senderRoom = await this.getOrCreateOwnerLiveRoom(senderId);
         const friends = await this.getFriends(senderId);
-        const ownerIds = Array.from(new Set([senderId, ...friends.map((friend: any) => friend.id)]));
+        const ownerIds = Array.from(new Set([senderId, ...friends.map((friend: FriendRow) => friend.id)]));
         const deliveries: Array<{ room: any; message: any }> = [];
 
         for (const ownerId of ownerIds) {
@@ -1435,32 +1524,32 @@ export const db = {
         );
 
         const items = [
-            ...likesRes.rows.map((r: any) => ({
+            ...likesRes.rows.map((r: NotificationRow) => ({
                 type: 'like' as const,
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
                 createdAt: r.created_at
             })),
-            ...commentsRes.rows.map((r: any) => ({
+            ...commentsRes.rows.map((r: NotificationRow) => ({
                 type: 'comment' as const,
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
                 content: r.content,
                 createdAt: r.created_at
             })),
-            ...commentLikesRes.rows.map((r: any) => ({
+            ...commentLikesRes.rows.map((r: NotificationRow) => ({
                 type: 'comment_like' as const,
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 postId: r.post_id,
                 content: r.comment_content,
                 createdAt: r.created_at
             })),
-            ...followsRes.rows.map((r: any) => ({
+            ...followsRes.rows.map((r: NotificationRow) => ({
                 type: r.status === 'pending' ? ('follow_request' as const) : (r.is_mutual ? ('follow_back' as const) : ('follow' as const)),
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 createdAt: r.created_at
             })),
-            ...dmsRes.rows.map((r: any) => ({
+            ...dmsRes.rows.map((r: NotificationRow) => ({
                 type: 'dm' as const,
                 user: { id: r.user_id, username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url },
                 content: r.content,
