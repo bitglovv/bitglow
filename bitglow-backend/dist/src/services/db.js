@@ -61,21 +61,22 @@ const initCoreTables = async () => {
         console.error("Failed to ensure core tables", err);
     }
 };
-void initCoreTables();
 // Ensure posts + related tables exist for blogging
 const initPostsTable = async () => {
     try {
-        await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
-        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false;`);
-        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status_visible BOOLEAN DEFAULT true;`);
+        // 1. Safely add optional columns to users (table already exists from initCoreTables)
         await pool.query(`
-            DO $$
+            DO $
             BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='updated_at') THEN
-                    ALTER TABLE posts ADD COLUMN updated_at TIMESTAMP DEFAULT now();
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_private') THEN
+                    ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT false;
                 END IF;
-            END $$;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='online_status_visible') THEN
+                    ALTER TABLE users ADD COLUMN online_status_visible BOOLEAN DEFAULT true;
+                END IF;
+            END $;
         `);
+        // 2. Create posts + related tables FIRST
         await pool.query(`
             CREATE TABLE IF NOT EXISTS posts (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -122,12 +123,20 @@ const initPostsTable = async () => {
             );
             CREATE INDEX IF NOT EXISTS idx_post_comment_likes_comment ON post_comment_likes(comment_id);
         `);
+        // 3. Safe migration: add updated_at only if missing (for existing DBs)
+        await pool.query(`
+            DO $
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='updated_at') THEN
+                    ALTER TABLE posts ADD COLUMN updated_at TIMESTAMP DEFAULT now();
+                END IF;
+            END $;
+        `);
     }
     catch (err) {
         console.error("Failed to ensure posts table", err);
     }
 };
-void initPostsTable();
 const initSecurityTables = async () => {
     try {
         await pool.query(`
@@ -146,6 +155,8 @@ const initSecurityTables = async () => {
                 END IF;
             END $$;
 
+            -- Safe migration: add columns only if they don't exist
+            -- (ADD COLUMN IF NOT EXISTS not supported inside DO $ in older PG)
             ALTER TABLE user_sessions
             ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP,
             ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;
@@ -174,7 +185,6 @@ const initSecurityTables = async () => {
         console.error("Failed to ensure security tables", err);
     }
 };
-void initSecurityTables();
 const initDMTables = async () => {
     try {
         await pool.query(`
@@ -193,8 +203,10 @@ const initDMTables = async () => {
                 conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
                 sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 text TEXT NOT NULL,
-                type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post')),
+                type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post', 'profile')),
                 post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
+                profile_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                read_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT now()
             );
             DO $$
@@ -242,7 +254,6 @@ const initDMTables = async () => {
         console.error("Failed to ensure DM tables", err);
     }
 };
-void initDMTables();
 const initLiveTables = async () => {
     try {
         await pool.query(`
@@ -275,7 +286,6 @@ const initLiveTables = async () => {
         console.error("Failed to ensure Live tables", err);
     }
 };
-void initLiveTables();
 const initLegacyMessagesTable = async () => {
     try {
         await pool.query(`
@@ -293,7 +303,22 @@ const initLegacyMessagesTable = async () => {
         console.error("Failed to ensure legacy messages table", err);
     }
 };
-void initLegacyMessagesTable();
+// Sequential startup — each step awaits the previous to avoid race conditions
+void (async () => {
+    try {
+        console.log('[DB] Initializing tables sequentially...');
+        await initCoreTables();
+        await initPostsTable();
+        await initSecurityTables();
+        await initDMTables();
+        await initLiveTables();
+        await initLegacyMessagesTable();
+        console.log('[DB] All tables initialized successfully.');
+    }
+    catch (err) {
+        console.error('[DB] Fatal error during table initialization:', err);
+    }
+})();
 const LIVE_ROOM_LOCK_NAMESPACE = 31_003;
 function mapLiveRoom(row, viewerId) {
     if (!row) {
