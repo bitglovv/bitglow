@@ -11,15 +11,26 @@ const isLoopbackHost = (value?: string | null) => {
 const getApiHost = () => {
     const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
     const hostname = window.location.hostname;
-    const isRemoteDeviceHost = !!hostname && hostname !== "localhost" && hostname !== "127.0.0.1";
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
 
-    if (isRemoteDeviceHost) {
-        if (!envHost || isLoopbackHost(envHost)) {
-            return `http://${hostname}:3003`;
+    // Running on a deployed/remote host (e.g. Vercel)
+    if (!isLocalhost) {
+        // VITE_API_HOST must be set to the actual backend URL (e.g. Render)
+        if (envHost && !isLoopbackHost(envHost)) {
+            return envHost;
         }
-        return envHost;
+        // VITE_API_HOST is missing or still pointing to localhost —
+        // this will fail in production; log a clear warning.
+        console.warn(
+            "[BitGlow] VITE_API_HOST is not set to a public backend URL. " +
+            "Set VITE_API_HOST in your Vercel environment variables to your Render backend URL " +
+            "(e.g. https://bitglow-backend.onrender.com). Requests will fail."
+        );
+        // Return env var as-is so the error is obvious rather than silently wrong
+        return envHost ?? "http://127.0.0.1:3003";
     }
 
+    // Local development
     if (envHost) return envHost;
     return "http://127.0.0.1:3003";
 };

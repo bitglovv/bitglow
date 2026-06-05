@@ -1,18 +1,23 @@
 type Subscriber = (data: any) => void;
 
+function getWsUrl(): string {
+    const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+
+    if (!isLocalhost && envHost && !envHost.includes("127.0.0.1") && !envHost.includes("localhost")) {
+        // Convert https://... → wss://... or http://... → ws://...
+        return envHost.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
+    }
+
+    // Local dev
+    return "ws://127.0.0.1:3003";
+}
+
 class SocketService {
     private socket: WebSocket | null = null;
     private subscribers: Subscriber[] = [];
-    private url: string = (() => {
-        const hostname = window.location.hostname;
-        const isRemoteDeviceHost = !!hostname && hostname !== "localhost" && hostname !== "127.0.0.1";
-
-        if (isRemoteDeviceHost) {
-            return `ws://${hostname}:3003`;
-        }
-
-        return "ws://127.0.0.1:3003";
-    })();
+    private url: string = getWsUrl();
     private reconnectInterval: number = 3000;
 
     connect() {
