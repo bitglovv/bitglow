@@ -64,7 +64,7 @@ export default function SignupPage() {
     const passwordError = useMemo(() => {
         if (!touched.password) return "";
         if (!form.password) return "Password is required.";
-        if (form.password.length < 6) return "Password must be at least 6 characters.";
+        if (form.password.length < 8) return "Password must be at least 8 characters.";
         return "";
     }, [form.password, touched.password]);
 
@@ -77,8 +77,8 @@ export default function SignupPage() {
 
     const passwordStrength = useMemo(() => {
         if (!form.password) return "";
-        if (form.password.length < 6) return "Weak";
-        if (form.password.length < 10) return "Medium";
+        if (form.password.length < 8) return "Weak";
+        if (form.password.length < 12) return "Medium";
         return "Strong";
     }, [form.password]);
 
