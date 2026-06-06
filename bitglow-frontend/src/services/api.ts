@@ -387,7 +387,7 @@ export const api = {
     },
     profile: {
         get: async (username: string): Promise<User> => {
-            const res = await fetchWithAuth(`/profile/${username}`);
+            const res = await fetchWithAuth(`/api/profile/${username}`);
             if (!res.ok) throw new Error("Profile not found");
             return res.json();
         },
