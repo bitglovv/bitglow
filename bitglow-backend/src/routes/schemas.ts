@@ -40,10 +40,10 @@ export const userUpdateSchema = {
         additionalProperties: false,
         properties: {
             displayName: { type: "string", minLength: 1, maxLength: 64 },
-            bio: { type: "string", minLength: 1, maxLength: 500 },
-            avatarUrl: { type: "string", maxLength: 2048 },
+            bio: { type: "string", maxLength: 500 },
+            avatarUrl: { type: "string", maxLength: 5000000 },
             website: { type: "string", maxLength: 2048 },
-            location: { type: "string", minLength: 1, maxLength: 80 },
+            location: { type: "string", maxLength: 80 },
             username: { type: "string", minLength: 3, maxLength: 30 },
         },
     },
