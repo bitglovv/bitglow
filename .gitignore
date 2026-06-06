@@ -3,6 +3,3 @@ bitglow-backend/node_modules/
 bitglow-frontend/node_modules/
 dist/
 .env
-node_modules/
-dist/
-.env
