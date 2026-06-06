@@ -152,7 +152,7 @@ const initPostsTable = async () => {
     try {
         // 1. Safely add optional columns to users (table already exists from initCoreTables)
         await pool.query(`
-            DO $
+            DO $$
             BEGIN
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_private') THEN
                     ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT false;
@@ -160,7 +160,7 @@ const initPostsTable = async () => {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='online_status_visible') THEN
                     ALTER TABLE users ADD COLUMN online_status_visible BOOLEAN DEFAULT true;
                 END IF;
-            END $;
+            END $$;
         `);
 
         // 2. Create posts + related tables FIRST
@@ -213,12 +213,12 @@ const initPostsTable = async () => {
 
         // 3. Safe migration: add updated_at only if missing (for existing DBs)
         await pool.query(`
-            DO $
+            DO $$
             BEGIN
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='updated_at') THEN
                     ALTER TABLE posts ADD COLUMN updated_at TIMESTAMP DEFAULT now();
                 END IF;
-            END $;
+            END $$;
         `);
     } catch (err) {
         console.error("Failed to ensure posts table", err);
