@@ -22,7 +22,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     fastify.post("/signup", {
         config: {
-            rateLimit: { max: 3, timeWindow: "1 hour" },
+            rateLimit: { max: 20, timeWindow: "1 hour" },
         },
         schema: authSignupSchema,
     }, async (req, reply) => {
