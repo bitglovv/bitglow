@@ -62,7 +62,7 @@ export function validateUrl(value?: string | null) {
     if (!value) return true;
     try {
         const url = new URL(value);
-        return ["http:", "https:"].includes(url.protocol);
+        return ["http:", "https:", "data:"].includes(url.protocol);
     } catch {
         return false;
     }
