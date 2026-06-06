@@ -1,15 +1,8 @@
-# Root ignores
+node_modules/
+bitglow-backend/node_modules/
+bitglow-frontend/node_modules/
+dist/
+.env
 node_modules/
 dist/
 .env
-*.log
-
-# Backend
-bitglow-backend/node_modules/
-bitglow-backend/dist/
-bitglow-backend/.env
-
-# Frontend
-bitglow-frontend/node_modules/
-bitglow-frontend/dist/
-bitglow-frontend/.env
