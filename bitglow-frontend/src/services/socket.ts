@@ -1,17 +1,44 @@
 type Subscriber = (data: any) => void;
 
+const isLoopbackHost = (value?: string | null) => {
+    if (!value) return false;
+    try {
+        const host = new URL(value).hostname;
+        return host === "localhost" || host === "127.0.0.1";
+    } catch {
+        return value.includes("localhost") || value.includes("127.0.0.1");
+    }
+};
+
+const isPrivateNetworkHost = (hostname: string) =>
+    /^192\.168\./.test(hostname) ||
+    /^10\./.test(hostname) ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+    /^169\.254\./.test(hostname);
+
 function getWsUrl(): string {
     const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
     const hostname = window.location.hostname;
-    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
 
-    if (!isLocalhost && envHost && !envHost.includes("127.0.0.1") && !envHost.includes("localhost")) {
-        // Convert https://... → wss://... or http://... → ws://...
+    // Case 1: localhost
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+        return "ws://127.0.0.1:3003";
+    }
+
+    // Case 2: LAN / private network — same IP, port 3003
+    if (isPrivateNetworkHost(hostname)) {
+        if (envHost && !isLoopbackHost(envHost)) {
+            return envHost.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
+        }
+        return `ws://${hostname}:3003`;
+    }
+
+    // Case 3: Public domain (Vercel) — derive wss:// from VITE_API_HOST
+    if (envHost && !isLoopbackHost(envHost)) {
         return envHost.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
     }
 
-    // Local dev
-    return "ws://127.0.0.1:3003";
+    return "wss://bitglow-backend-hh2h.onrender.com"; // safe fallback
 }
 
 class SocketService {
