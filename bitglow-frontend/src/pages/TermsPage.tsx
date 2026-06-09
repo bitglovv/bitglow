@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, FileText, ChevronRight } from "lucide-react";
-import { navigateBack } from "../../utils/navigateBack";
+import { navigateBack } from "../utils/navigateBack";
 
 export default function TermsPage() {
     useEffect(() => { document.title = "Terms of Service · BitGlow"; }, []);
