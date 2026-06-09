@@ -5,6 +5,7 @@ import IndexPage from "../pages/IndexPage";
 import PrivacyPage from "../pages/PrivacyPage";
 import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
+import AboutPage from "../pages/AboutPage";
 import HomePage from "../pages/HomePage";
 import LiveChatPage from "../pages/LiveChatPage";
 import MessagesPage from "../pages/MessagesPage";
@@ -32,13 +33,16 @@ export default function Router() {
     return (
         <Routes>
             <Route path="/" element={<IndexPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/contact" element={<ContactPage />} />
 
             {/* Auth Routes - block if already logged in */}
             <Route path="/login" element={token && user ? <Navigate to="/home" /> : <LoginPage />} />
             <Route path="/signup" element={token && user ? <Navigate to="/home" /> : <SignupPage />} />
+
+            {/* Public legal pages — also accessible from within the app */}
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/about-app" element={<AboutPage />} />
 
             {/* Protected App Routes */}
             <Route element={<ProtectedRoute />}>

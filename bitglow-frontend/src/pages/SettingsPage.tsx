@@ -16,6 +16,7 @@ import {
   Trash2,
   UserRoundCog,
   UserX,
+  Zap,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import { Input } from "../components/ui/Input";
@@ -306,12 +307,12 @@ export default function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="About & Support">
-            <SettingsItem icon={<CircleUserRound className="h-5 w-5" />} title="About BitGlow" />
-            <SettingsItem icon={<FileText className="h-5 w-5" />} title="Terms of Service" to="/terms" />
-            <SettingsItem icon={<Shield className="h-5 w-5" />} title="Privacy Policy" to="/privacy" />
-            <SettingsItem icon={<Flag className="h-5 w-5" />} title="Report Problem" to="/contact" />
-            <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Help Center" />
-            <SettingsItem icon={<Mail className="h-5 w-5" />} title="Contact Support" to="/contact" />
+            <SettingsItem icon={<Zap className="h-5 w-5" />} title="About BitGlow" subtitle="Version, features & tech stack" to="/about-app" />
+            <SettingsItem icon={<FileText className="h-5 w-5" />} title="Terms of Service" subtitle="Rules & usage policies" to="/terms" />
+            <SettingsItem icon={<Shield className="h-5 w-5" />} title="Privacy Policy" subtitle="How we handle your data" to="/privacy" />
+            <SettingsItem icon={<Flag className="h-5 w-5" />} title="Report a Problem" subtitle="Submit a bug or issue" to="/contact" />
+            <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Help Center" subtitle="Get support" to="/contact" />
+            <SettingsItem icon={<Mail className="h-5 w-5" />} title="Contact Support" subtitle="Reach us directly" to="/contact" />
           </SettingsSection>
 
           <SettingsSection title="Account Info">
