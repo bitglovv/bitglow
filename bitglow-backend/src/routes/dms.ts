@@ -15,7 +15,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         const userId = req.auth.id;
 
-        const rows = await db.listDMConversations(userId);
+        const { limit = "50", offset = "0" } = (req.query || {}) as { limit?: string; offset?: string };
+        const rows = await db.listDMConversations(userId, Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
         const conversations = rows.map((r: any) => ({
             userId: r.other_id,
             username: r.other_username,
@@ -50,6 +51,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
 
         const convo = await db.getOrCreateDMConversation(userId, otherId);
+        if (!convo) return reply.code(403).send({ message: "Messaging blocked" });
         const messages = await db.getDMHistory(convo.id, 200);
         await db.markDMConversationRead(convo.id, userId);
 
@@ -87,6 +89,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         // Open messaging enabled
         const convo = await db.getOrCreateDMConversation(userId, otherId);
+        if (!convo) return reply.code(403).send({ message: "Messaging blocked" });
         const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000), type || 'text', postId, profileId);
 
         return {
@@ -158,3 +161,4 @@ export async function dmRoutes(fastify: FastifyInstance) {
         return { ok: true };
     });
 }
+

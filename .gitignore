@@ -4,3 +4,11 @@ bitglow-frontend/node_modules/
 dist/
 .env
 .vscode/
+.env.*
+!.env.example
+bitglow-backend/.env
+bitglow-backend/.env.*
+!bitglow-backend/.env.example
+bitglow-backend/dist/
+bitglow-backend/*.log
+

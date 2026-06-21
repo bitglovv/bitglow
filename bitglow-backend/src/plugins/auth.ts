@@ -28,7 +28,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
             const decoded = verifyAccessToken(token);
 
             const session = await db.getActiveSessionByToken(hashToken(token));
-            if (!session || session.user_id !== decoded.id) {
+            if (!session || session.user_id !== decoded.id || session.sid !== decoded.sid) {
                 return reply.code(401).send({ message: "Session expired or revoked" });
             }
 
@@ -60,3 +60,4 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 };
 
 export default fp(authPlugin);
+

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import net from "net";
 import sanitizeHtml from "sanitize-html";
 import { env } from "../config/env";
 import { db } from "./db";
@@ -35,9 +36,6 @@ export function normalizeIdentifier(identifier: string) {
 }
 
 export function getRequestIp(req: any) {
-    if (env.TRUST_PROXY) {
-        return (req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.socket?.remoteAddress || "").toString();
-    }
     return (req.ip || req.socket?.remoteAddress || "").toString();
 }
 
@@ -60,12 +58,38 @@ export function validateUsername(username: string) {
 
 export function validateUrl(value?: string | null) {
     if (!value) return true;
+    if (value.length > 2048) return false;
     try {
         const url = new URL(value);
-        return ["http:", "https:", "data:"].includes(url.protocol);
+        if (!["http:", "https:"].includes(url.protocol)) return false;
+        return !isLocalOrPrivateHost(url.hostname);
     } catch {
         return false;
     }
+}
+
+function isLocalOrPrivateHost(hostname: string) {
+    const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost")) return true;
+
+    const ipVersion = net.isIP(host);
+    if (ipVersion === 4) {
+        const [a, b] = host.split(".").map(Number);
+        return a === 10
+            || a === 127
+            || (a === 169 && b === 254)
+            || (a === 172 && b >= 16 && b <= 31)
+            || (a === 192 && b === 168)
+            || a === 0;
+    }
+    if (ipVersion === 6) {
+        return host === "::1"
+            || host.startsWith("fc")
+            || host.startsWith("fd")
+            || host.startsWith("fe80:");
+    }
+
+    return false;
 }
 
 export function issueAccessToken(payload: AuthTokenPayload) {
@@ -76,9 +100,10 @@ export function verifyAccessToken(token: string) {
     return jwt.verify(token, env.JWT_SECRET) as AuthTokenPayload;
 }
 
-export async function createSession(userId: string, token: string, req: any) {
+export async function createSession(userId: string, sid: string, token: string, req: any) {
     return db.createSession({
         userId,
+        sid,
         tokenHash: hashToken(token),
         ipAddress: getRequestIp(req),
         userAgent: getRequestUserAgent(req),
@@ -115,3 +140,4 @@ async function bcryptCompare(password: string, hash: string) {
     const bcrypt = await import("bcrypt");
     return bcrypt.compare(password, hash);
 }
+

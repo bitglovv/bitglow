@@ -9,9 +9,6 @@ export async function postRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
         schema: createPostSchema,
     }, async (req, reply) => {
-        console.log("AUTH:", req.auth);
-        console.log("HEADERS:", req.headers.authorization);
-
         if (!req.auth) {
             return reply.code(401).send({ message: "Not authenticated" });
         }
@@ -64,6 +61,7 @@ export async function postRoutes(fastify: FastifyInstance) {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const result = await db.toggleLike(userId, id);
+        if (!result) return reply.code(404).send({ message: "Post not found" });
         return { liked: result.liked, likesCount: result.count };
     });
 
@@ -75,6 +73,7 @@ export async function postRoutes(fastify: FastifyInstance) {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const result = await db.toggleSave(userId, id);
+        if (!result) return reply.code(404).send({ message: "Post not found" });
         return { saved: result.saved, savesCount: result.count };
     });
 
@@ -90,6 +89,7 @@ export async function postRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Comment content required" });
         }
         const comment = await db.addComment(userId, id, sanitizeText(content.trim(), 1000));
+        if (!comment) return reply.code(404).send({ message: "Post not found" });
         const author = await db.getUserById(userId);
         return {
             comment: {
@@ -112,6 +112,7 @@ export async function postRoutes(fastify: FastifyInstance) {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const comments = await db.getComments(id, userId);
+        if (!comments) return reply.code(404).send({ message: "Post not found" });
         return { comments };
     });
 
@@ -123,6 +124,7 @@ export async function postRoutes(fastify: FastifyInstance) {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
         const result = await db.toggleCommentLike(userId, id);
+        if (!result) return reply.code(404).send({ message: "Comment not found" });
         return { liked: result.liked, likesCount: result.likesCount };
     });
 
@@ -148,9 +150,6 @@ export async function postRoutes(fastify: FastifyInstance) {
             const { id } = req.params as { id: string };
             const { content, title } = (req.body || {}) as { content?: string; title?: string };
 
-            console.log(`[UPDATE_POST] User: ${userId}, PostId: ${id}`);
-            console.log(`[UPDATE_POST] Payload:`, { title, content });
-
             if (!content || !content.trim()) {
                 return reply.code(400).send({ error: "Validation Error", message: "Content required" });
             }
@@ -159,17 +158,13 @@ export async function postRoutes(fastify: FastifyInstance) {
             const post = await db.getPostById(id, userId) as any;
             
             if (!post) {
-                console.log(`[UPDATE_POST] Post ${id} not found`);
                 return reply.code(404).send({ error: "Not Found", message: "Post not found" });
             }
-
-            console.log(`[UPDATE_POST] Fetched Post:`, JSON.stringify(post, null, 2));
 
             // Defensive ownership check: support post.author.id OR post.author_id OR post.authorId
             const authorId = post.author?.id || post.author_id || post.authorId;
             
             if (!authorId || authorId !== userId) {
-                console.log(`[UPDATE_POST] Unauthorized access attempt by ${userId} on post ${id} (Owner: ${authorId})`);
                 return reply.code(403).send({ error: "Forbidden", message: "You can only edit your own posts" });
             }
 
@@ -185,7 +180,6 @@ export async function postRoutes(fastify: FastifyInstance) {
             const fifteenMinutes = 15 * 60 * 1000;
 
             if (now - createdAt > fifteenMinutes) {
-                console.log(`[UPDATE_POST] Time limit exceeded for post ${id}. Created: ${rawCreatedAt}`);
                 return reply.code(400).send({ 
                     error: "Bad Request",
                     message: "Edit time limit exceeded. Posts can only be edited within 15 minutes of creation." 
@@ -205,7 +199,6 @@ export async function postRoutes(fastify: FastifyInstance) {
                 return reply.code(500).send({ error: "Database Error", message: "Failed to update post in database" });
             }
 
-            console.log(`[UPDATE_POST] Success for post ${id}`);
             return { post: updated };
         } catch (err: any) {
             console.error("[UPDATE_POST] UNHANDLED EXCEPTION:", err);
@@ -231,12 +224,11 @@ export async function postRoutes(fastify: FastifyInstance) {
     fastify.get("/posts/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
-        console.log(`ROUTE: GET /posts/${id} by user ${userId}`);
         const post = await db.getPostById(id, userId);
         if (!post) {
-            console.log(`ROUTE: Post ${id} NOT FOUND for user ${userId}`);
-            return reply.code(404).send({ message: `Post not found (ID: ${id}, User: ${userId})` });
+            return reply.code(404).send({ message: "Post not found" });
         }
         return { post };
     });
 }
+

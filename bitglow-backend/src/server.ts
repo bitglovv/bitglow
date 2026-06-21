@@ -44,7 +44,7 @@ function isAllowedOrigin(origin?: string) {
 const server = Fastify({ 
     logger: true,
     bodyLimit: 5 * 1024 * 1024,
-    trustProxy: env.TRUST_PROXY,
+    trustProxy: env.TRUST_PROXY ? 1 : false,
 });
 
 server.register(cors, {
@@ -117,6 +117,11 @@ server.listen({ port: env.PORT, host: env.HOST }, (err, address) => {
   console.log(`Server listening at ${address}`);
 
   startWS(server.server);
+  setInterval(() => {
+    db.cleanupExpiredLiveMessages().catch((error: unknown) => {
+      server.log.error({ error }, "failed to clean up expired live messages");
+    });
+  }, 5 * 60 * 1000).unref();
   
   // Print registered routes
   server.ready().then(() => {
@@ -124,3 +129,5 @@ server.listen({ port: env.PORT, host: env.HOST }, (err, address) => {
     server.printRoutes();
   });
 });
+
+

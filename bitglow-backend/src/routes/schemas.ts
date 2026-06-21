@@ -41,7 +41,7 @@ export const userUpdateSchema = {
         properties: {
             displayName: { type: "string", minLength: 1, maxLength: 64 },
             bio: { type: "string", maxLength: 500 },
-            avatarUrl: { type: "string", maxLength: 5000000 },
+            avatarUrl: { type: "string", maxLength: 2048 },
             website: { type: "string", maxLength: 2048 },
             location: { type: "string", maxLength: 80 },
             username: { type: "string", minLength: 3, maxLength: 30 },
@@ -193,3 +193,4 @@ export const liveCreateSchema = {
         },
     },
 } as const;
+

@@ -65,7 +65,9 @@ export function startWS(httpServer: any) {
         const users = roomUsers.get(roomId);
         if (users) {
           users.delete(meta.userId);
-          // Broadcast the new accurate count
+          if (users.size === 0) {
+            roomUsers.delete(roomId);
+          }
           broadcastRoomPresence(clients, roomId);
         }
       }
@@ -83,3 +85,4 @@ export function startWS(httpServer: any) {
 
   console.log("🚀 WebSocket server ready");
 }
+

@@ -75,8 +75,9 @@ export async function authRoutes(fastify: FastifyInstance) {
             onlineStatusVisible: dbUser.online_status_visible ?? true,
         };
 
-        const token = issueAccessToken({ id: user.id, username: user.username, sid: randomUUID() });
-        await createSession(user.id, token, req);
+        const sid = randomUUID();
+        const token = issueAccessToken({ id: user.id, username: user.username, sid });
+        await createSession(user.id, sid, token, req);
         await db.pruneUserSessions(user.id, 5);
         await logSecurityEvent("signup", req, { identifier: normalizedEmail }, user.id);
         return { token, user };
@@ -152,8 +153,9 @@ export async function authRoutes(fastify: FastifyInstance) {
             onlineStatusVisible: dbUser.online_status_visible,
         };
 
-        const token = issueAccessToken({ id: user.id, username: user.username, sid: randomUUID() });
-        await createSession(user.id, token, req);
+        const sid = randomUUID();
+        const token = issueAccessToken({ id: user.id, username: user.username, sid });
+        await createSession(user.id, sid, token, req);
         await db.pruneUserSessions(user.id, 5);
         await logSecurityEvent("login_success", req, { identifier: normalizedIdentifier }, user.id);
         return { token, user };
@@ -167,4 +169,5 @@ export async function authRoutes(fastify: FastifyInstance) {
         return { ok: true };
     });
 }
+
 

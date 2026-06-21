@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
-import { validateUsername, sanitizeText, validateUrl } from "../services/security";
+import { hashToken, parseBearerToken, validateUsername, sanitizeText, validateUrl, verifyAccessToken } from "../services/security";
 import { deleteAccountSchema, followSchema, idParamSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
 
 export async function userRoutes(fastify: FastifyInstance) {
@@ -42,8 +42,15 @@ export async function userRoutes(fastify: FastifyInstance) {
      * Returns all users (public info)
      */
     fastify.get("/users", async (req, reply) => {
-        const users = await db.getAllUsers();
-        return users;
+        const requesterId = await getOptionalRequesterId(req);
+        const { limit = "50", offset = "0" } = (req.query || {}) as { limit?: string; offset?: string };
+        const users = await db.getAllUsers(Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
+        const filtered = [];
+        for (const user of users) {
+            const authorized = requesterId === user.id || (!!requesterId && await db.areFriends(requesterId, user.id));
+            filtered.push(filterPublicUser(user, authorized));
+        }
+        return filtered;
     });
 
     /**
@@ -61,7 +68,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         const followersCount = await db.getFollowersCount(dbUser.id);
         const followsCount = await db.getFollowingCount(dbUser.id);
 
-        const user = {
+        const requesterId = await getOptionalRequesterId(req);
+        const authorized = requesterId === dbUser.id || (!!requesterId && await db.areFriends(requesterId, dbUser.id));
+        return filterPublicUser({
             id: dbUser.id,
             username: dbUser.username,
             displayName: dbUser.display_name,
@@ -70,10 +79,9 @@ export async function userRoutes(fastify: FastifyInstance) {
             location: dbUser.location,
             bio: dbUser.bio,
             followersCount,
-            followsCount
-        };
-
-        return user;
+            followsCount,
+            isPrivate: dbUser.is_private,
+        }, authorized);
     });
 
     /**
@@ -228,6 +236,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         }
 
         const result = await db.followUser(userId, friendId);
+        if (result.status === "blocked") {
+            return reply.code(403).send({ message: "Follow blocked" });
+        }
         return { status: result.status };
     });
 
@@ -315,4 +326,39 @@ export async function userRoutes(fastify: FastifyInstance) {
         const following = await db.getFollowing(userId);
         return { following };
     });
+}
+
+function filterPublicUser(user: any, isAuthorized = false) {
+    const base = {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName || user.display_name,
+        avatarUrl: user.avatarUrl || user.avatar_url,
+        followersCount: user.followersCount ?? user.followers_count ?? 0,
+        followsCount: user.followsCount ?? user.follows_count ?? 0,
+        isPrivate: user.isPrivate ?? user.is_private ?? false,
+    };
+
+    if (base.isPrivate && !isAuthorized) {
+        return base;
+    }
+
+    return {
+        ...base,
+        website: user.website,
+        location: user.location,
+        bio: user.bio,
+    };
+}
+async function getOptionalRequesterId(req: any) {
+    const token = parseBearerToken(req.headers?.authorization);
+    if (!token) return undefined;
+    try {
+        const decoded = verifyAccessToken(token);
+        const session = await db.getActiveSessionByToken(hashToken(token));
+        if (!session || session.user_id !== decoded.id || session.sid !== decoded.sid) return undefined;
+        return decoded.id;
+    } catch {
+        return undefined;
+    }
 }

@@ -17,7 +17,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Current password and new email are required" });
         }
 
-        const dbUser = await db.getUserById(userId);
+        const dbUser = await db.getUserWithPasswordHash(userId);
         if (!dbUser) {
             reply.code(404).send({ message: "User not found" });
             return;
@@ -60,7 +60,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        const dbUser = await db.getUserById(userId);
+        const dbUser = await db.getUserWithPasswordHash(userId);
         if (!dbUser) {
             reply.code(404).send({ message: "User not found" });
             return;
@@ -174,3 +174,4 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         return { ok: true };
     });
 }
+

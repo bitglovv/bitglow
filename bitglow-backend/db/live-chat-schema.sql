@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS friends (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
   friend_id UUID NOT NULL,
-  status TEXT CHECK (status IN ('pending', 'accepted')) DEFAULT 'pending',
+  status TEXT CHECK (status IN ('pending', 'accepted', 'blocked')) DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT now(),
   UNIQUE (user_id, friend_id)
 );
@@ -32,3 +32,5 @@ CREATE TABLE IF NOT EXISTS live_messages (
   created_at TIMESTAMP DEFAULT now()
 );
  
+CREATE INDEX IF NOT EXISTS idx_live_msg_created ON live_messages(created_at DESC);
+

@@ -1,80 +1,55 @@
 -- =====================================================
--- BitGlow Database Schema
+-- BitGlow Active Database Schema
 -- PostgreSQL
--- Senior-level, scalable, production-ready
 -- =====================================================
 
--- Drop existing tables if they exist (in reverse order of dependencies)
-DROP TABLE IF EXISTS user_reports;
-DROP TABLE IF EXISTS follows;
-DROP TABLE IF EXISTS user_presence;
-DROP TABLE IF EXISTS messages;
-DROP TABLE IF EXISTS dm_threads;
-DROP TABLE IF EXISTS chat_room_members;
-DROP TABLE IF EXISTS chat_rooms;
-DROP TABLE IF EXISTS user_sessions;
-DROP TABLE IF EXISTS users;
-
--- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =====================================================
--- USERS & AUTH
--- =====================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-  username VARCHAR(32) UNIQUE NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  display_name VARCHAR(64) NOT NULL,
-
+  username TEXT UNIQUE NOT NULL,
+  display_name TEXT,
+  email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-
-  bio TEXT,
   avatar_url TEXT,
   website TEXT,
   location TEXT,
-
+  bio TEXT,
   followers_count INTEGER DEFAULT 0,
   follows_count INTEGER DEFAULT 0,
-
-  role VARCHAR(20) DEFAULT 'user', -- user | admin | moderator
+  role TEXT DEFAULT 'user',
   is_verified BOOLEAN DEFAULT false,
   is_banned BOOLEAN DEFAULT false,
   is_private BOOLEAN DEFAULT false,
   online_status_visible BOOLEAN DEFAULT true,
-
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now(),
   deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- =====================================================
--- USER SESSIONS (JWT / LOGIN TRACKING)
--- =====================================================
-CREATE TABLE user_sessions (
+CREATE TABLE IF NOT EXISTS user_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sid TEXT UNIQUE,
   token_hash TEXT UNIQUE NOT NULL,
   ip_address TEXT,
   user_agent TEXT,
-
   created_at TIMESTAMP DEFAULT now(),
-  expires_at TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL,
   revoked_at TIMESTAMP,
   last_used_at TIMESTAMP
 );
 
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
-CREATE INDEX idx_user_sessions_token_hash ON user_sessions(token_hash);
-CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
-CREATE INDEX idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_sid ON user_sessions(sid);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
 
-CREATE TABLE security_logs (
+CREATE TABLE IF NOT EXISTS security_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   event_type TEXT NOT NULL,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -84,123 +59,102 @@ CREATE TABLE security_logs (
   created_at TIMESTAMP DEFAULT now()
 );
 
-CREATE INDEX idx_security_logs_event_type ON security_logs(event_type);
-CREATE INDEX idx_security_logs_user_id ON security_logs(user_id);
-CREATE INDEX idx_security_logs_created_at ON security_logs(created_at DESC);
+CREATE TABLE IF NOT EXISTS friends (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friend_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'blocked')),
+  created_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (user_id, friend_id),
+  CHECK (user_id <> friend_id)
+);
 
--- =====================================================
--- CHAT ROOMS (LIVE / GROUP CHAT)
--- =====================================================
-CREATE TABLE chat_rooms (
+CREATE INDEX IF NOT EXISTS idx_friends_user_status ON friends(user_id, friend_id, status);
+CREATE INDEX IF NOT EXISTS idx_friends_friend_status ON friends(friend_id, user_id, status);
+
+CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT,
+  content TEXT NOT NULL,
+  visibility TEXT DEFAULT 'friends' CHECK (visibility IN ('public','friends')),
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
 
-  name VARCHAR(100) NOT NULL,
-  slug VARCHAR(100) UNIQUE NOT NULL,
-  description TEXT,
+CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_visibility_author ON posts(visibility, author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
 
-  is_public BOOLEAN DEFAULT true,
-  created_by UUID REFERENCES users(id),
+CREATE TABLE IF NOT EXISTS post_likes (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (user_id, post_id)
+);
 
+CREATE TABLE IF NOT EXISTS post_saves (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (user_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT now()
 );
 
--- =====================================================
--- CHAT ROOM MEMBERS
--- =====================================================
-CREATE TABLE chat_room_members (
-  room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS post_comment_likes (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  comment_id UUID NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (user_id, comment_id)
+);
 
-  role VARCHAR(20) DEFAULT 'member', -- admin | moderator | member
+CREATE TABLE IF NOT EXISTS dm_conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT now(),
+  UNIQUE(user_a, user_b),
+  CHECK (user_a <> user_b)
+);
+
+CREATE TABLE IF NOT EXISTS dm_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post', 'profile')),
+  post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
+  profile_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  read_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS live_rooms (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS live_room_members (
+  room_id UUID NOT NULL REFERENCES live_rooms(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   joined_at TIMESTAMP DEFAULT now(),
-
   PRIMARY KEY (room_id, user_id)
 );
 
--- =====================================================
--- DIRECT MESSAGE THREADS (1-TO-1)
--- =====================================================
-CREATE TABLE dm_threads (
+CREATE TABLE IF NOT EXISTS live_messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-  user_one UUID REFERENCES users(id) ON DELETE CASCADE,
-  user_two UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  created_at TIMESTAMP DEFAULT now(),
-
-  UNIQUE (user_one, user_two),
-  CHECK (user_one <> user_two)
-);
-
--- =====================================================
--- MESSAGES (ROOM + DM)
--- =====================================================
-CREATE TABLE messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-  sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
-  dm_thread_id UUID REFERENCES dm_threads(id) ON DELETE CASCADE,
-
+  room_id UUID NOT NULL REFERENCES live_rooms(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
-  message_type VARCHAR(20) DEFAULT 'text', -- text | image | system
-
-  created_at TIMESTAMP DEFAULT now(),
-  edited_at TIMESTAMP,
-  deleted_at TIMESTAMP,
-
-  CHECK (
-    (room_id IS NOT NULL AND dm_thread_id IS NULL)
-    OR
-    (room_id IS NULL AND dm_thread_id IS NOT NULL)
-  )
-);
-
-CREATE INDEX idx_messages_room ON messages(room_id);
-CREATE INDEX idx_messages_dm ON messages(dm_thread_id);
-CREATE INDEX idx_messages_created_at ON messages(created_at DESC);
-
--- =====================================================
--- USER PRESENCE (ONLINE / OFFLINE)
--- =====================================================
-CREATE TABLE user_presence (
-  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-
-  status VARCHAR(20) DEFAULT 'offline', -- online | away | busy
-  last_seen TIMESTAMP DEFAULT now()
-);
-
--- =====================================================
--- FOLLOW / FRIEND SYSTEM
--- =====================================================
-CREATE TABLE follows (
-  follower_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  followed_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  created_at TIMESTAMP DEFAULT now(),
-
-  PRIMARY KEY (follower_id, followed_id),
-  CHECK (follower_id <> followed_id)
-);
-
--- =====================================================
--- REPORTS & MODERATION
--- =====================================================
-CREATE TABLE user_reports (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-  reported_user UUID REFERENCES users(id) ON DELETE CASCADE,
-  reported_by UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  reason TEXT,
   created_at TIMESTAMP DEFAULT now()
 );
 
--- =====================================================
--- SOFT DELETE SAFETY (OPTIONAL VIEW)
--- =====================================================
-CREATE VIEW active_users AS
-SELECT *
-FROM users
-WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_dm_msg_created ON dm_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_live_msg_created ON live_messages(created_at DESC);

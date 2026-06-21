@@ -122,7 +122,7 @@ export async function handleMessage(
                 const tokenHash = hashToken(m.token);
                 const decoded = verifyAccessToken(m.token);
                 const session = await db.getActiveSessionByToken(tokenHash);
-                if (!session || session.user_id !== decoded.id) {
+                if (!session || session.user_id !== decoded.id || session.sid !== decoded.sid) {
                     throw new Error("session revoked");
                 }
 
@@ -259,7 +259,11 @@ export async function handleMessage(
                 meta.roomOwners.delete(roomId);
 
                 // STEP 4: LEAVE ROOM
-                roomUsers.get(roomId)?.delete(meta.userId);
+                const users = roomUsers.get(roomId);
+                users?.delete(meta.userId);
+                if (users && users.size === 0) {
+                    roomUsers.delete(roomId);
+                }
 
                 broadcastRoomPresence(clients, roomId);
 
@@ -486,5 +490,7 @@ export async function handleMessage(
             );
     }
 }
+
+
 
 

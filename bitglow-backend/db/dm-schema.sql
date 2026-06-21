@@ -15,5 +15,10 @@ CREATE TABLE IF NOT EXISTS dm_messages (
   conversation_id UUID NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL,
   text TEXT NOT NULL,
+  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'post', 'profile')),
+  post_id UUID,
+  profile_id UUID,
+  read_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT now()
 );
+
