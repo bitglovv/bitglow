@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import LiveChatIcon from "../assets/icons/live-chat.svg";
 import Header from "../components/common/Header";
@@ -6,14 +6,12 @@ import LiveMessageList from "../components/chat/LiveMessageList";
 import MessageInput from "../components/chat/MessageInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLiveRoom } from "../hooks/useLiveRoom";
-import { useNavigate } from "react-router-dom";
 import { useVisualViewportBottomInset } from "../hooks/useVisualViewportBottomInset";
 
 const SCROLL_KEY = "bitglow_live_msg_scroll";
 
 export default function LiveChatPage() {
   const { token, user } = useAuth();
-  const navigate = useNavigate();
 
   const {
     messages,
@@ -22,7 +20,6 @@ export default function LiveChatPage() {
     typingUsers,
     status,
     activeRoom,
-    roomError,
     isResolvingRoom,
     hasJoinedChat,
     handleSend,
@@ -34,8 +31,8 @@ export default function LiveChatPage() {
 
   const [showNewMsgButton, setShowNewMsgButton] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
-  const [composerHeight, setComposerHeight] = useState(88);
+  const isAtBottomRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
   const keyboardInset = useVisualViewportBottomInset();
 
   useEffect(() => {
@@ -60,7 +57,14 @@ export default function LiveChatPage() {
     const el = messagesScrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
+    isAtBottomRef.current = true;
     setShowNewMsgButton(false);
+  };
+
+  const measureIsAtBottom = () => {
+    const el = messagesScrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 96;
   };
 
   const onScroll = () => {
@@ -71,7 +75,8 @@ export default function LiveChatPage() {
         sessionStorage.setItem(`${SCROLL_KEY}_${activeRoomId}`, el.scrollTop.toString());
     }
 
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    const isAtBottom = measureIsAtBottom();
+    isAtBottomRef.current = isAtBottom;
     if (isAtBottom) setShowNewMsgButton(false);
   };
 
@@ -81,38 +86,27 @@ export default function LiveChatPage() {
     }
   }, [hasJoinedChat]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = messagesScrollRef.current;
     if (!el || messages.length === 0) return;
 
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-    if (isAtBottom) {
-      requestAnimationFrame(() => scrollToBottom("smooth"));
+    const previousCount = previousMessageCountRef.current;
+    const hasNewMessage = messages.length > previousCount;
+    const latestMessage = messages[messages.length - 1];
+    const latestIsMine = !!latestMessage?.userId && latestMessage.userId === user?.id;
+
+    previousMessageCountRef.current = messages.length;
+
+    if (!hasNewMessage) return;
+
+    if (isAtBottomRef.current || latestIsMine) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollToBottom(latestIsMine ? "smooth" : "auto"));
+      });
     } else {
       setShowNewMsgButton(true);
     }
-  }, [messages]);
-
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-
-    const update = () => {
-      setComposerHeight(Math.ceil(el.getBoundingClientRect().height));
-    };
-
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    window.addEventListener("orientationchange", update);
-    window.visualViewport?.addEventListener("resize", update);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("orientationchange", update);
-      window.visualViewport?.removeEventListener("resize", update);
-    };
-  }, [hasJoinedChat]);
+  }, [messages, user?.id]);
 
   const typingLabel = useMemo(() => {
     const users = Object.values(typingUsers);
@@ -129,7 +123,7 @@ export default function LiveChatPage() {
   const canSend = status === "connected" && !!activeRoom?.id && hasJoinedChat && !isResolvingRoom;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-black text-white selection:bg-brand/30">
+    <div className="flex min-h-svh flex-col bg-black text-white selection:bg-brand/30">
       {!hasJoinedChat ? (
         // Welcome Screen
         <>
@@ -183,17 +177,18 @@ export default function LiveChatPage() {
             }
           />
 
-          <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col">
             <div
               ref={messagesScrollRef}
               onScroll={onScroll}
-              className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y"
+              className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.035),transparent_34%)] touch-pan-y"
             >
               <div
-                className="mx-auto flex min-h-full w-full max-w-[700px] flex-col px-4 pt-2"
-                style={{ paddingBottom: composerHeight + keyboardInset + 24 }}
+                className={clsx(
+                  "mx-auto flex min-h-full w-full max-w-[760px] flex-col px-3 pb-4 pt-3 sm:px-5 md:pb-5 md:pt-4",
+                  activeRoom && messages.length > 0 && "justify-end"
+                )}
               >
-                <div className="mt-auto pointer-events-none" />
                 {isResolvingRoom && !activeRoom ? (
                   <div className="flex flex-col items-center justify-center h-full opacity-30">
                     <div className="w-6 h-6 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin mb-4" />
@@ -201,8 +196,16 @@ export default function LiveChatPage() {
                   </div>
                 ) : activeRoom ? (
                   messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-end h-full mb-70 opacity-60 pointer-events-none">
-                      <p className="text-[11px] font-black tracking-[0.2em] opacity-50 text-center">Chat will appear here when friends start chatting</p>
+                    <div className="pointer-events-none flex flex-1 items-center justify-center px-6 py-10">
+                      <div className="flex max-w-[280px] flex-col items-center text-center">
+                        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+                          <img src={LiveChatIcon} alt="" className="h-7 w-7 opacity-85" />
+                        </div>
+                        <p className="text-sm font-bold text-white/85">No messages yet</p>
+                        <p className="mt-1 text-xs font-medium leading-5 text-zinc-500">
+                          Start the room with a quick hello.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <div className="relative">
@@ -220,8 +223,7 @@ export default function LiveChatPage() {
             {showNewMsgButton && (
               <button
                 onClick={() => scrollToBottom()}
-                className="absolute left-1/2 z-30 flex -translate-x-1/2 animate-bounce items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-2 text-[11px] font-bold text-white shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all hover:scale-105 active:scale-95"
-                style={{ bottom: composerHeight + keyboardInset + 16 }}
+                className="mx-auto mb-2 flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-zinc-900/95 px-4 py-2 text-[11px] font-bold text-white shadow-[0_12px_30px_rgba(0,0,0,0.32)] transition-all hover:bg-zinc-800 active:scale-95"
               >
                 <span>New messages</span>
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
@@ -229,22 +231,27 @@ export default function LiveChatPage() {
             )}
 
             <div
-              ref={composerRef}
-              className="z-[120] border-t border-white/[0.03] bg-black px-2 py-1 will-change-transform"
+              className="shrink-0 border-t border-white/[0.06] bg-black/95 px-3 py-2 transition-[padding-bottom] duration-200 ease-out sm:px-4"
               style={{
-                paddingBottom: `calc(12px + env(safe-area-inset-bottom))`,
-                transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
+                paddingBottom: keyboardInset > 0
+                  ? keyboardInset
+                  : "calc(12px + env(safe-area-inset-bottom))",
               }}
             >
-              <div className="max-w-[700px] mx-auto">
-                <div className="h-1 mb-1 overflow-hidden">
+              <div className="mx-auto max-w-[760px]">
+                <div className="min-h-5 px-1 pb-1">
                   {typingLabel && (
-                    <div className="text-[11px] text-zinc-500 font-bold animate-in fade-in slide-in-from-bottom-1 duration-300 ml-1">
+                    <div className="animate-in fade-in slide-in-from-bottom-1 ml-1 text-[11px] font-bold text-zinc-500 duration-300">
                       {typingLabel}
                     </div>
                   )}
                 </div>
-                <MessageInput onSend={handleSend} onChange={handleTyping} disabled={!canSend} />
+                <MessageInput
+                  onSend={handleSend}
+                  onChange={handleTyping}
+                  disabled={!canSend}
+                  variant="live"
+                />
               </div>
             </div>
           </main>

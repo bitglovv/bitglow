@@ -95,6 +95,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
         const latestInfo = m.userId ? userMap.current[m.userId] : null;
         const activeUn = latestInfo?.username || m.username || "User";
         const activeAv = latestInfo?.avatarUrl || m.avatarUrl;
+        const timeLabel = isLast ? formatTime12h(currDate) : undefined;
 
         return (
           <div
@@ -103,21 +104,21 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
             style={{ animationDelay: `${Math.min(i, 8) * 18}ms` }}
           >
             {showDateSep && (
-              <div className="flex items-center justify-center py-2.5 md:py-2">
-                <span className="text-[11px] font-medium tracking-wide text-zinc-500">
+              <div className="flex items-center justify-center py-3 md:py-3.5">
+                <span className="rounded-full border border-white/[0.06] bg-white/[0.035] px-3 py-1 text-[11px] font-semibold tracking-wide text-zinc-500">
                   {formatDateSeparator(currDate)}
                 </span>
               </div>
             )}
 
             {isSystem ? (
-              <div className="flex justify-center py-1.5 animate-chat-fade">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+              <div className="flex justify-center py-2 animate-chat-fade">
+                <span className="rounded-full bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
                   {m.text}
                 </span>
               </div>
             ) : (
-              <div className={isFirst ? "mt-0.5" : "mt-0"}>
+              <div className={isFirst ? "mt-1.5" : "mt-0.5"}>
                 <MessageBubble
                   text={m.text}
                   username={activeUn}
@@ -128,6 +129,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
                   type={m.type}
                   postId={m.postId}
                   profileId={m.profileId}
+                  timeLabel={timeLabel}
                 />
               </div>
             )}
