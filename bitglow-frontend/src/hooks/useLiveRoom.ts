@@ -52,6 +52,7 @@ export function useLiveRoom(token: string | null) {
   const [roomError, setRoomError] = useState("");
   const [isResolvingRoom, setIsResolvingRoom] = useState(true);
   const [hasJoinedChat, setHasJoinedChat] = useState(() => localStorage.getItem('bitglow_live_joined') === 'true');
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const idRef = useRef(0);
@@ -79,10 +80,10 @@ export function useLiveRoom(token: string | null) {
   useEffect(() => {
     const socket = socketRef.current;
     const roomId = activeRoom?.id;
-    if (socket?.readyState === WebSocket.OPEN && roomId) {
+    if (socket?.readyState === WebSocket.OPEN && roomId && hasJoinedChat) {
         socket.send(JSON.stringify({ type: "client:room:presence", roomId }));
     }
-  }, [activeRoom, status]);
+  }, [activeRoom, status, hasJoinedChat]);
 
   const openOwnLiveRoom = useCallback(async () => {
     const requestId = ++resolveRequestRef.current;
@@ -120,13 +121,11 @@ export function useLiveRoom(token: string | null) {
     socketRef.current = socket;
 
     let didCleanup = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     socket.onopen = () => {
       setStatus("connected");
       socket.send(JSON.stringify({ type: "client:hello", token }));
-      if (activeRoomIdRef.current) {
-        socket.send(JSON.stringify({ type: "client:join_room", roomId: activeRoomIdRef.current }));
-      }
     };
 
     socket.onmessage = async (event) => {
@@ -199,7 +198,13 @@ export function useLiveRoom(token: string | null) {
       }
     };
 
-    socket.onclose = () => { if (!didCleanup) setStatus("disconnected"); };
+    socket.onclose = () => {
+      if (didCleanup) return;
+      setStatus("disconnected");
+      reconnectTimer = setTimeout(() => {
+        setReconnectAttempt((attempt) => attempt + 1);
+      }, 1200);
+    };
 
     const typingInterval = setInterval(() => {
       const now = Date.now();
@@ -216,27 +221,29 @@ export function useLiveRoom(token: string | null) {
     return () => {
       didCleanup = true;
       clearInterval(typingInterval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       clearAllExpiryTimers();
       if (socket.readyState === WebSocket.OPEN) {
         if (activeRoomIdRef.current) socket.send(JSON.stringify({ type: "client:leave_room", roomId: activeRoomIdRef.current }));
         socket.close();
       }
     };
-  }, [token, openOwnLiveRoom]);
+  }, [token, openOwnLiveRoom, reconnectAttempt]);
 
   useEffect(() => {
     const socket = socketRef.current;
     const roomId = activeRoom?.id;
     if (!socket || socket.readyState !== WebSocket.OPEN || !roomId) return;
-    if (activeRoomIdRef.current) {
-        setRoomError("");
-        setRoomOnline(0);
-        socket.send(JSON.stringify({ type: "client:join_room", roomId }));
-    }
+    if (!hasJoinedChat) return;
+
+    setRoomError("");
+    setRoomOnline(0);
+    socket.send(JSON.stringify({ type: "client:join_room", roomId }));
+
     return () => {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "client:leave_room", roomId }));
     };
-  }, [activeRoom?.id, hasJoinedChat]);
+  }, [activeRoom?.id, hasJoinedChat, status]);
 
   function scheduleExpiry(msgId: string, msgTs: number) {
     const existing = timerMapRef.current.get(msgId);
@@ -263,7 +270,7 @@ export function useLiveRoom(token: string | null) {
   const handleSend = useCallback((rawText: string) => {
     const socket = socketRef.current;
     const roomId = activeRoom?.id;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !roomId) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !roomId || !hasJoinedChat) return;
 
     const now = Date.now();
     if (now - lastSentAtRef.current < MESSAGE_COOLDOWN) return;
@@ -273,16 +280,16 @@ export function useLiveRoom(token: string | null) {
 
     lastSentAtRef.current = now;
     socket.send(JSON.stringify({ type: "client:chat:send", roomId, text }));
-  }, [activeRoom]);
+  }, [activeRoom, hasJoinedChat]);
 
   const handleTyping = useCallback(() => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !activeRoom?.id) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !activeRoom?.id || !hasJoinedChat) return;
     const now = Date.now();
     if (now - lastTypingSentRef.current < 2000) return;
     lastTypingSentRef.current = now;
     socket.send(JSON.stringify({ type: "client:typing", roomId: activeRoom.id }));
-  }, [activeRoom]);
+  }, [activeRoom, hasJoinedChat]);
 
   const handleLeave = useCallback(() => {
     const socket = socketRef.current;
@@ -310,9 +317,6 @@ export function useLiveRoom(token: string | null) {
     localStorage.setItem('bitglow_live_joined_at', String(now));
     setRoomError("");
     setHasJoinedChat(true);
-    if (socketRef.current?.readyState === WebSocket.OPEN && activeRoomIdRef.current) {
-      socketRef.current.send(JSON.stringify({ type: "client:join_room", roomId: activeRoomIdRef.current }));
-    }
   }, []);
 
   return {

@@ -7,6 +7,7 @@ import MessageInput from "../components/chat/MessageInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLiveRoom } from "../hooks/useLiveRoom";
 import { useNavigate } from "react-router-dom";
+import { useVisualViewportBottomInset } from "../hooks/useVisualViewportBottomInset";
 
 const SCROLL_KEY = "bitglow_live_msg_scroll";
 
@@ -33,7 +34,9 @@ export default function LiveChatPage() {
 
   const [showNewMsgButton, setShowNewMsgButton] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [composerHeight, setComposerHeight] = useState(88);
+  const keyboardInset = useVisualViewportBottomInset();
 
   useEffect(() => {
     document.title = "BitGlow";
@@ -54,7 +57,9 @@ export default function LiveChatPage() {
   }, [hasJoinedChat, activeRoomId]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
     setShowNewMsgButton(false);
   };
 
@@ -72,7 +77,7 @@ export default function LiveChatPage() {
 
   useEffect(() => {
     if (hasJoinedChat && messages.length > 0) {
-      setTimeout(() => scrollToBottom("auto"), 50);
+      requestAnimationFrame(() => scrollToBottom("auto"));
     }
   }, [hasJoinedChat]);
 
@@ -82,11 +87,32 @@ export default function LiveChatPage() {
 
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
     if (isAtBottom) {
-      scrollToBottom("smooth");
+      requestAnimationFrame(() => scrollToBottom("smooth"));
     } else {
       setShowNewMsgButton(true);
     }
   }, [messages]);
+
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      setComposerHeight(Math.ceil(el.getBoundingClientRect().height));
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("orientationchange", update);
+    window.visualViewport?.addEventListener("resize", update);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [hasJoinedChat]);
 
   const typingLabel = useMemo(() => {
     const users = Object.values(typingUsers);
@@ -100,15 +126,15 @@ export default function LiveChatPage() {
     return `${user?.displayName || user?.username || 'BitGlow'}'s Room`;
   }, [user?.displayName, user?.username]);
 
-  const canSend = status === "connected" && !!activeRoom?.id && !isResolvingRoom;
+  const canSend = status === "connected" && !!activeRoom?.id && hasJoinedChat && !isResolvingRoom;
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-black text-white selection:bg-brand/30 overflow-hidden touch-none">
+    <div className="flex h-screen flex-col overflow-hidden bg-black text-white selection:bg-brand/30">
       {!hasJoinedChat ? (
         // Welcome Screen
         <>
           <Header hideActions={true} hideBottomNav={false} />
-          <div className="flex-1 flex items-center justify-center p-6 pb-[80px] bg-black">
+          <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-6 pb-[80px]">
             <div className="max-w-sm w-full flex flex-col items-center justify-center text-center">
               <img src={LiveChatIcon} alt="Live Chat" className="live-icon-xl mx-auto mb-6" />
               <h1 className="text-3xl font-black mb-2 tracking-tight text-white">{roomTitle}</h1>
@@ -135,6 +161,7 @@ export default function LiveChatPage() {
         // Live Chat Screen
         <>
           <Header
+            hideBottomNav={true}
             rightContent={
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
@@ -156,13 +183,16 @@ export default function LiveChatPage() {
             }
           />
 
-          <main className="flex-1 flex flex-col h-[calc(100vh-56px)] mt-14 overflow-hidden relative">
+          <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <div
               ref={messagesScrollRef}
               onScroll={onScroll}
-              className="flex-1 overflow-y-auto scrollbar-hide flex flex-col touch-pan-y overscroll-none"
+              className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y"
             >
-              <div className="w-full max-w-[700px] mx-auto flex flex-col min-h-full px-4 pt-2 pb-[0px]">
+              <div
+                className="mx-auto flex min-h-full w-full max-w-[700px] flex-col px-4 pt-2"
+                style={{ paddingBottom: composerHeight + keyboardInset + 24 }}
+              >
                 <div className="mt-auto pointer-events-none" />
                 {isResolvingRoom && !activeRoom ? (
                   <div className="flex flex-col items-center justify-center h-full opacity-30">
@@ -177,7 +207,6 @@ export default function LiveChatPage() {
                   ) : (
                     <div className="relative">
                       <LiveMessageList messages={messages} selfId={user?.id || null} participants={roomUsers} />
-                      <div ref={messagesEndRef} className="h-0 w-0" />
                     </div>
                   )
                 ) : (
@@ -191,14 +220,22 @@ export default function LiveChatPage() {
             {showNewMsgButton && (
               <button
                 onClick={() => scrollToBottom()}
-                className="absolute bottom-28 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-blue-600 text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center gap-2 animate-bounce hover:scale-105 active:scale-95 transition-all z-30"
+                className="absolute left-1/2 z-30 flex -translate-x-1/2 animate-bounce items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-2 text-[11px] font-bold text-white shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all hover:scale-105 active:scale-95"
+                style={{ bottom: composerHeight + keyboardInset + 16 }}
               >
                 <span>New messages</span>
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
               </button>
             )}
 
-            <div className="bg-black border-t border-white/[0.03] px-2 py-1 pb-[calc(12px+env(safe-area-inset-bottom))] z-20">
+            <div
+              ref={composerRef}
+              className="z-[120] border-t border-white/[0.03] bg-black px-2 py-1 will-change-transform"
+              style={{
+                paddingBottom: `calc(12px + env(safe-area-inset-bottom))`,
+                transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
+              }}
+            >
               <div className="max-w-[700px] mx-auto">
                 <div className="h-1 mb-1 overflow-hidden">
                   {typingLabel && (

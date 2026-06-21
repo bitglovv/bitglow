@@ -14,7 +14,8 @@ interface MessageInputProps {
 
 function textareaMaxHeightPx() {
   if (typeof window === "undefined") return 200;
-  return Math.min(Math.round(window.innerHeight * 0.36), 220);
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  return Math.min(Math.round(viewportHeight * 0.36), 220);
 }
 
 export const MessageInput = ({
@@ -49,7 +50,11 @@ export const MessageInput = ({
       if (textareaRef.current) syncTextareaHeight();
     };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+    };
   }, []);
 
   useEffect(() => {
