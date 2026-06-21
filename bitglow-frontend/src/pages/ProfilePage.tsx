@@ -97,7 +97,7 @@ function ListModal({
 
 export default function ProfilePage() {
   const { username } = useParams<{ username?: string }>();
-  const { user: loggedInUser } = useAuth();
+  const { user: loggedInUser, isAuthLoading } = useAuth();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<User | null>(null);
@@ -147,8 +147,8 @@ export default function ProfilePage() {
   useEffect(() => {
     let cancelled = false;
     async function loadProfile() {
+      if (isAuthLoading) return;
       setLoading(true);
-      setProfile(null);
       setError("");
 
       if (!username) {
@@ -178,7 +178,7 @@ export default function ProfilePage() {
 
     loadProfile();
     return () => { cancelled = true; };
-  }, [username, loggedInUser]);
+  }, [username, loggedInUser, isAuthLoading]);
 
   useEffect(() => {
     if (!loggedInUser) return;

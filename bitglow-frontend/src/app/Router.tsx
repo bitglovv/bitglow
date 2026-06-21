@@ -22,21 +22,20 @@ import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../layouts/AppLayout";
 import { useAuth } from "../hooks/useAuth";
+import { FullScreenLoader } from "../components/ui/FullScreenLoader";
 
 export default function Router() {
-    const { token, user, isLoading } = useAuth(); // Need isLoading to prevent premature redirect? 
-    // Actually if isLoading is true, token might be null but we don't know yet.
-    // So for public routes that redirect if logged in, we should also wait for loading.
+    const { token, user, isAuthLoading } = useAuth();
 
-    if (isLoading) return null; // Or a spinner, but App is usually loading
+    if (isAuthLoading) return <FullScreenLoader />;
 
     return (
         <Routes>
-            <Route path="/" element={<IndexPage />} />
+            <Route path="/" element={token && user ? <Navigate to="/home" replace /> : <IndexPage />} />
 
             {/* Auth Routes - block if already logged in */}
-            <Route path="/login" element={token && user ? <Navigate to="/home" /> : <LoginPage />} />
-            <Route path="/signup" element={token && user ? <Navigate to="/home" /> : <SignupPage />} />
+            <Route path="/login" element={token && user ? <Navigate to="/home" replace /> : <LoginPage />} />
+            <Route path="/signup" element={token && user ? <Navigate to="/home" replace /> : <SignupPage />} />
 
             {/* Public legal pages — also accessible from within the app */}
             <Route path="/privacy" element={<PrivacyPage />} />

@@ -4,9 +4,10 @@ import { useAuth } from "../hooks/useAuth";
 import { LandingNav } from "../components/landing/sections/LandingNav";
 import { HeroSection } from "../components/landing/sections/HeroSection";
 import { LandingFooter } from "../components/landing/sections/LandingFooter";
+import { FullScreenLoader } from "../components/ui/FullScreenLoader";
 
 export default function IndexPage() {
-    const { user, isLoading } = useAuth();
+    const { user, isAuthLoading } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -14,12 +15,13 @@ export default function IndexPage() {
     }, []);
 
     useEffect(() => {
-        if (!isLoading && user) {
-            navigate("/home");
+        if (!isAuthLoading && user) {
+            navigate("/home", { replace: true });
         }
-    }, [user, isLoading, navigate]);
+    }, [user, isAuthLoading, navigate]);
 
-    if (isLoading || user) return null;
+    if (isAuthLoading) return <FullScreenLoader />;
+    if (user) return null;
 
     return (
         <div className="relative flex min-h-[100svh] flex-col overflow-hidden bg-black text-white selection:bg-brand/30">

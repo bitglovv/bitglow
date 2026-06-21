@@ -1,10 +1,12 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { api, User } from "../services/api";
+import { useSettingsStore } from "../store/settingsStore";
 
 type AuthContextType = {
     user: User | null;
     token: string | null;
     isLoading: boolean;
+    isAuthLoading: boolean;
     login: (token: string, user?: User) => void;
     logout: () => void;
     refreshUser: () => Promise<void>;
@@ -12,10 +14,44 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function loadToken() {
+    return localStorage.getItem("token");
+}
+
+function loadStoredUser() {
+    const raw = localStorage.getItem("user");
+    if (!raw) return null;
+
+    try {
+        return JSON.parse(raw) as User;
+    } catch {
+        return null;
+    }
+}
+
+function isInvalidTokenError(error: unknown) {
+    return error instanceof Error && (
+        error.message.includes("401")
+        || error.message.includes("Unauthorized")
+    );
+}
+
+function persistUser(user: User) {
+    localStorage.setItem("user", JSON.stringify(user));
+}
+
+function hydrateStores(user: User | null) {
+    if (!user) return;
+    useSettingsStore.getState().hydrateFromUser(
+        !!user.isPrivate,
+        user.onlineStatusVisible ?? true
+    );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
-    const [isLoading, setIsLoading] = useState(true);
+    const [token, setToken] = useState<string | null>(() => loadToken());
+    const [user, setUser] = useState<User | null>(() => loadStoredUser());
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
 
     const clearSession = () => {
         localStorage.removeItem("token");
@@ -25,121 +61,139 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
+        let cancelled = false;
+
         async function initAuth() {
-            console.log("Starting auth initialization...");
-            const storedToken = localStorage.getItem("token");
-            console.log("Stored token:", storedToken ? "Exists" : "None");
-            
-            // Add timeout to prevent hanging
-            const timeoutId = setTimeout(() => {
-                console.log("Auth timeout reached, setting isLoading to false");
-                setIsLoading(false);
-            }, 15000); // 15 second timeout
-            
-            if (storedToken) {
-                try {
-                    console.log("Validating token...");
-                    // Validate token by fetching user data
-                    const userData = await api.auth.me();
-                    console.log("User data received:", userData);
-                    setUser(userData);
-                    setToken(storedToken);
-                    localStorage.setItem("user", JSON.stringify(userData));
-                    console.log("Auth initialization complete - user set");
-                } catch (err) {
-                    console.error("Auth init failed", err);
-                    // Check if it's a network error vs auth error
-                    if (err instanceof Error) {
-                        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-                            console.log("Network error, keeping user logged in with stored token");
-                            // Try to get user data from localStorage as fallback
-                            const storedUser = localStorage.getItem("user");
-                            if (storedUser) {
-                                try {
-                                    const userObj = JSON.parse(storedUser);
-                                    setUser(userObj);
-                                    setToken(storedToken);
-                                    console.log("Using stored user data as fallback");
-                                } catch (parseErr) {
-                                    console.log("Failed to parse stored user data");
-                                    clearSession();
-                                }
-                            } else {
-                                clearSession();
-                            }
-                        } else if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-                            console.log("Token invalid, logging out");
-                            clearSession();
-                        } else {
-                            console.log("Other error, clearing broken session");
-                            clearSession();
-                        }
-                    } else {
-                        clearSession();
-                    }
+            console.log("AUTH_START");
+
+            const storedToken = loadToken();
+            if (!storedToken) {
+                if (!cancelled) {
+                    setToken(null);
+                    setIsAuthLoading(false);
+                    console.log("AUTH_LOADING_COMPLETE");
                 }
-            } else {
-                console.log("No stored token, not logged in");
+                return;
             }
-            
-            console.log("Setting isLoading to false");
-            setIsLoading(false);
-            clearTimeout(timeoutId);
+
+            console.log("AUTH_TOKEN_FOUND");
+
+            const cachedUser = loadStoredUser();
+            if (cachedUser && !cancelled) {
+                setUser(cachedUser);
+                hydrateStores(cachedUser);
+            }
+
+            try {
+                const restoredUser = await api.auth.me();
+                if (cancelled) return;
+
+                setToken(storedToken);
+                setUser(restoredUser);
+                persistUser(restoredUser);
+                hydrateStores(restoredUser);
+                console.log("AUTH_USER_RESTORED");
+            } catch (error) {
+                if (cancelled) return;
+
+                if (isInvalidTokenError(error)) {
+                    clearSession();
+                } else if (cachedUser) {
+                    setToken(storedToken);
+                    setUser(cachedUser);
+                    hydrateStores(cachedUser);
+                    console.log("AUTH_USER_RESTORED");
+                } else {
+                    console.error("Auth hydration failed before user restore", error);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsAuthLoading(false);
+                    console.log("AUTH_LOADING_COMPLETE");
+                }
+            }
         }
-        initAuth();
+
+        void initAuth();
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    // Validate token when window regains focus
     useEffect(() => {
         const handleFocus = () => {
-            if (token) {
-                api.auth.me().catch((err) => {
-                    console.error("Token validation failed on focus", err);
-                    if (err instanceof Error && (err.message.includes("401") || err.message.includes("Unauthorized"))) {
+            if (!token || isAuthLoading) return;
+
+            api.auth.me()
+                .then((freshUser) => {
+                    setUser(freshUser);
+                    persistUser(freshUser);
+                    hydrateStores(freshUser);
+                })
+                .catch((error) => {
+                    if (isInvalidTokenError(error)) {
                         clearSession();
                     }
                 });
-            }
         };
 
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [token]);
+        window.addEventListener("focus", handleFocus);
+        return () => window.removeEventListener("focus", handleFocus);
+    }, [token, isAuthLoading]);
 
     const login = (newToken: string, userData?: User) => {
         localStorage.setItem("token", newToken);
         setToken(newToken);
+        setIsAuthLoading(false);
+
         if (userData) {
             setUser(userData);
-            // Store user data as fallback
-            localStorage.setItem("user", JSON.stringify(userData));
-        } else {
-            // Always fetch fresh user data after login
-            api.auth.me().then((user) => {
-                setUser(user);
-                // Store user data as fallback
-                localStorage.setItem("user", JSON.stringify(user));
-            }).catch((err) => {
-                console.error("Failed to fetch user data after login:", err);
-                logout();
-            });
+            persistUser(userData);
+            hydrateStores(userData);
+            return;
         }
+
+        api.auth.me()
+            .then((freshUser) => {
+                setUser(freshUser);
+                persistUser(freshUser);
+                hydrateStores(freshUser);
+            })
+            .catch((error) => {
+                if (isInvalidTokenError(error)) {
+                    clearSession();
+                } else {
+                    console.error("Failed to fetch user data after login", error);
+                }
+            });
     };
 
     const logout = () => {
         clearSession();
+        setIsAuthLoading(false);
     };
 
     const refreshUser = async () => {
         if (!token) return;
-        try {
-            const u = await api.auth.me();
-            setUser(u);
-        } catch (e) { console.error(e) }
-    }
+        const freshUser = await api.auth.me();
+        setUser(freshUser);
+        persistUser(freshUser);
+        hydrateStores(freshUser);
+    };
+
+    const value = useMemo<AuthContextType>(() => ({
+        user,
+        token,
+        isLoading: isAuthLoading,
+        isAuthLoading,
+        login,
+        logout,
+        refreshUser,
+    }), [user, token, isAuthLoading]);
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

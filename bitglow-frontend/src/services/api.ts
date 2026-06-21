@@ -285,17 +285,12 @@ export const api = {
             return readAuthResponse(res);
         },
         me: async (): Promise<User> => {
-            console.log("API: Calling /api/me");
             const res = await fetchWithAuth("/api/me");
-            console.log("API: Response status", res.status);
             if (!res.ok) {
                 const errorText = await res.text();
-                console.log("API: Error response", errorText);
                 throw new Error(`Failed to fetch user: ${res.status} ${errorText}`);
             }
-            const userData = await res.json();
-            console.log("API: User data received", userData);
-            return userData;
+            return res.json();
         },
     },
     user: {
