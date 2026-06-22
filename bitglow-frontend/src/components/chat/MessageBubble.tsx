@@ -28,6 +28,7 @@ interface LiveBubbleProps {
   type?: "chat" | "system" | "post" | "profile";
   postId?: string;
   profileId?: string;
+  timeLabel?: string;
 }
 
 type MessageBubbleProps = DMBubbleProps | LiveBubbleProps;
@@ -99,9 +100,10 @@ export function MessageBubble(props: MessageBubbleProps) {
     username, 
     avatarUrl, 
     isFirstInGroup = true, 
-    isLastInGroup = true 
+    isLastInGroup = true,
+    timeLabel
   } = "message" in props 
-    ? { username: props.isMe ? "You" : "Other", avatarUrl: undefined } 
+    ? { username: props.isMe ? "You" : "Other", avatarUrl: undefined, timeLabel: undefined } 
     : props;
 
   const isPost = type === "post" || (type === "chat" && !!postId) || (!type && !!postId);
@@ -117,7 +119,7 @@ export function MessageBubble(props: MessageBubbleProps) {
       )}
     >
       {!isMe && isFirstInGroup && (
-        <div className="mr-2.5 shrink-0 pt-1">
+        <div className="mr-2.5 shrink-0 pt-0.5">
           {username && username !== "User" && username !== "Other" ? (
             <Link to={`/profile/${username}`} className="block transition-transform hover:scale-105">
               <Avatar src={avatarUrl} alt={username} size="xs" />
@@ -127,9 +129,14 @@ export function MessageBubble(props: MessageBubbleProps) {
           )}
         </div>
       )}
-      {!isMe && !isFirstInGroup && <div className="mr-2.5 w-7 shrink-0" />}
+      {!isMe && !isFirstInGroup && <div className="mr-2.5 w-6 shrink-0" />}
 
       <div className={clsx("flex max-w-[85%] flex-col md:max-w-[65%] xl:max-w-[55%]", isMe ? "items-end" : "items-start")}>
+        {!isMe && isFirstInGroup && username && username !== "User" && username !== "Other" && (
+          <div className="flex h-6 items-center mb-1 ml-1">
+            <span className="text-[12px] font-bold text-zinc-400">{username}</span>
+          </div>
+        )}
         <div
           className={clsx(
             "transition-all duration-300 ease-out relative group/bubble",
@@ -159,6 +166,11 @@ export function MessageBubble(props: MessageBubbleProps) {
             <p className="whitespace-pre-wrap break-words text-zinc-400 italic text-sm">Shared a profile</p>
           )}
         </div>
+        {timeLabel && (
+          <div className={clsx("mt-1 text-[10px] font-bold tracking-wider text-zinc-600", isMe ? "mr-1" : "ml-1")}>
+            {timeLabel}
+          </div>
+        )}
       </div>
     </div>
   );

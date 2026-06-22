@@ -84,7 +84,7 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
         const next = messages[i + 1];
         const currDate = new Date(m.ts);
         const prevDate = prev ? new Date(prev.ts) : null;
-        const showDateSep = !prevDate || !isSameDay(prevDate, currDate);
+        const showDateSep = !isLiveChat && (!prevDate || !isSameDay(prevDate, currDate));
         const isSystem = m.type === "system";
         const isFirst =
           !prev || prev.type === "system" || prev.userId !== m.userId || showDateSep;
@@ -92,7 +92,7 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
           !next ||
           next.type === "system" ||
           next.userId !== m.userId ||
-          (next ? !isSameDay(currDate, new Date(next.ts)) : true);
+          (next ? (!isLiveChat && !isSameDay(currDate, new Date(next.ts))) : true);
         const latestInfo = m.userId ? userMap.current[m.userId] : null;
         const activeUn = latestInfo?.username || m.username || "User";
         const activeAv = latestInfo?.avatarUrl || m.avatarUrl;
@@ -104,9 +104,17 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
             className="animate-message-in"
             style={{ animationDelay: `${Math.min(i, 8) * 18}ms` }}
           >
+            {!isLiveChat && showDateSep && (
+              <div className="flex items-center justify-center py-3 md:py-3.5">
+                <span className="rounded-full border border-white/[0.06] bg-white/[0.035] px-3 py-1 text-[11px] font-semibold tracking-wide text-zinc-500">
+                  {formatDateSeparator(currDate)}
+                </span>
+              </div>
+            )}
+
             {isSystem ? (
               <div className="flex justify-center py-2 animate-chat-fade">
-                <span className="rounded-full bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600/80">
                   {m.text}
                 </span>
               </div>

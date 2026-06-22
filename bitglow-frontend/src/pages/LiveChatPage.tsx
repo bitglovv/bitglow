@@ -184,7 +184,7 @@ export default function LiveChatPage() {
               className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.035),transparent_34%)] touch-pan-y"
             >
               <div
-                className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-3 pt-3 sm:px-5 md:pt-4"
+                className="mx-auto flex flex-col justify-end min-h-full w-full max-w-[760px] px-3 pb-2 pt-3 sm:px-5 md:pb-3 md:pt-4"
               >
                 {isResolvingRoom && !activeRoom ? (
                   <div className="flex flex-col items-center justify-center h-full opacity-30">
