@@ -78,7 +78,7 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
   });
 
   return (
-    <div className="flex flex-col gap-px animate-chat-fade">
+    <div className="flex flex-col justify-end min-h-full gap-px animate-chat-fade">
       {messages.map((m, i) => {
         const prev = messages[i - 1];
         const next = messages[i + 1];

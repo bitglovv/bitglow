@@ -123,7 +123,13 @@ export default function LiveChatPage() {
   const canSend = status === "connected" && !!activeRoom?.id && hasJoinedChat && !isResolvingRoom;
 
   return (
-    <div className="flex min-h-svh flex-col bg-black text-white selection:bg-brand/30">
+    <div
+      className={clsx(
+        "bg-black text-white selection:bg-brand/30",
+        hasJoinedChat ? "fixed left-0 right-0 top-0 flex flex-col overflow-hidden" : "flex min-h-svh flex-col"
+      )}
+      style={hasJoinedChat ? { bottom: keyboardInset } : undefined}
+    >
       {!hasJoinedChat ? (
         // Welcome Screen
         <>
@@ -205,7 +211,7 @@ export default function LiveChatPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="relative">
+                    <div className="relative flex flex-col justify-end min-h-full w-full">
                       <LiveMessageList messages={messages} selfId={user?.id || null} participants={roomUsers} isLiveChat={true} />
                       {typingLabel && (
                         <div className="animate-in fade-in slide-in-from-bottom-1 ml-1 mt-2 text-[11px] font-bold text-zinc-500 duration-300">
@@ -233,12 +239,7 @@ export default function LiveChatPage() {
             )}
 
             <div
-              className="shrink-0 border-t border-white/[0.06] bg-black/95 px-3 py-2 transition-[padding-bottom] duration-200 ease-out sm:px-4"
-              style={{
-                paddingBottom: keyboardInset > 0
-                  ? keyboardInset
-                  : "calc(12px + env(safe-area-inset-bottom))",
-              }}
+              className="shrink-0 border-t border-white/[0.06] bg-black/95 px-3 py-2 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-4"
             >
               <div className="mx-auto max-w-[760px]">
                 <MessageInput
