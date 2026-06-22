@@ -28,7 +28,6 @@ interface LiveBubbleProps {
   type?: "chat" | "system" | "post" | "profile";
   postId?: string;
   profileId?: string;
-  timeLabel?: string;
 }
 
 type MessageBubbleProps = DMBubbleProps | LiveBubbleProps;
@@ -95,7 +94,6 @@ export function MessageBubble(props: MessageBubbleProps) {
   const type = "message" in props ? props.message.type : (props as LiveBubbleProps).type;
   const postId = "message" in props ? props.message.postId : (props as LiveBubbleProps).postId;
   const profileId = "message" in props ? props.message.profileId : (props as LiveBubbleProps).profileId;
-  const timeLabel = "message" in props ? undefined : (props as LiveBubbleProps).timeLabel;
   
   const { 
     username, 
@@ -112,14 +110,14 @@ export function MessageBubble(props: MessageBubbleProps) {
   return (
     <div
       className={clsx(
-        "group flex w-full px-1 transition-all duration-300 ease-out sm:px-2",
+        "group flex w-full px-2 transition-all duration-300 ease-out",
         isMe ? "justify-end" : "justify-start",
-        isFirstInGroup ? "mt-2.5" : "mt-0.5",
-        isLastInGroup ? "mb-2" : "mb-0"
+        isFirstInGroup ? "mt-3" : "mt-0.5",
+        isLastInGroup ? "mb-1.5" : "mb-0"
       )}
     >
       {!isMe && isFirstInGroup && (
-        <div className="mr-2.5 shrink-0 pt-5">
+        <div className="mr-2.5 shrink-0 pt-1">
           {username && username !== "User" && username !== "Other" ? (
             <Link to={`/profile/${username}`} className="block transition-transform hover:scale-105">
               <Avatar src={avatarUrl} alt={username} size="xs" />
@@ -131,31 +129,23 @@ export function MessageBubble(props: MessageBubbleProps) {
       )}
       {!isMe && !isFirstInGroup && <div className="mr-2.5 w-7 shrink-0" />}
 
-      <div className={clsx("flex max-w-[82%] flex-col sm:max-w-[76%] md:max-w-[68%] xl:max-w-[58%]", isMe ? "items-end" : "items-start")}>
-        {!isMe && isFirstInGroup && username && username !== "User" && username !== "Other" && (
-          <Link
-            to={`/profile/${username}`}
-            className="mb-1 ml-1 max-w-full truncate text-[11px] font-bold leading-none text-zinc-400 transition-colors hover:text-white"
-          >
-            {username}
-          </Link>
-        )}
+      <div className={clsx("flex max-w-[85%] flex-col md:max-w-[65%] xl:max-w-[55%]", isMe ? "items-end" : "items-start")}>
         <div
           className={clsx(
             "transition-all duration-300 ease-out relative group/bubble",
             // Only apply bubble styling for text messages
             !isPost && !isProfile
               ? clsx(
-                  "px-3.5 py-2.5 text-[15px] leading-[1.45] shadow-xl sm:px-4",
+                  "px-4 py-2.5 text-[14.5px] leading-[1.45] shadow-xl",
                   isMe
-                    ? "bg-brand text-black shadow-[0_12px_30px_rgba(16,185,129,0.18)] font-medium"
-                    : "border border-white/[0.08] bg-zinc-900/95 text-white backdrop-blur-sm shadow-[0_12px_30px_rgba(0,0,0,0.24)]",
-                  isMe && isFirstInGroup && "rounded-tl-[22px] rounded-bl-[22px] rounded-br-[22px] rounded-tr-md",
-                  isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[22px] rounded-r-md",
-                  isMe && isLastInGroup && "rounded-tl-[22px] rounded-bl-[22px] rounded-br-md rounded-tr-md",
-                  !isMe && isFirstInGroup && "rounded-tr-[22px] rounded-br-[22px] rounded-bl-[22px] rounded-tl-md",
-                  !isMe && !isFirstInGroup && !isLastInGroup && "rounded-r-[22px] rounded-l-md",
-                  !isMe && isLastInGroup && "rounded-tr-[22px] rounded-br-md rounded-bl-[22px] rounded-tl-md"
+                    ? "bg-brand text-black shadow-[0_12px_32px_rgba(16,185,129,0.18)] font-medium"
+                    : "border border-white/[0.08] bg-zinc-900/90 text-white backdrop-blur-sm shadow-[0_12px_32px_rgba(0,0,0,0.25)]",
+                  isMe && isFirstInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[24px] rounded-tr-[4px]",
+                  isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[24px] rounded-r-[4px]",
+                  isMe && isLastInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[4px] rounded-tr-[4px]",
+                  !isMe && isFirstInGroup && "rounded-tr-[24px] rounded-br-[24px] rounded-bl-[24px] rounded-tl-[4px]",
+                  !isMe && !isFirstInGroup && !isLastInGroup && "rounded-r-[24px] rounded-l-[4px]",
+                  !isMe && isLastInGroup && "rounded-tr-[24px] rounded-br-[4px] rounded-bl-[24px] rounded-tl-[4px]"
                 )
               : ""
           )}
@@ -169,16 +159,6 @@ export function MessageBubble(props: MessageBubbleProps) {
             <p className="whitespace-pre-wrap break-words text-zinc-400 italic text-sm">Shared a profile</p>
           )}
         </div>
-        {isLastInGroup && timeLabel && (
-          <span
-            className={clsx(
-              "mt-1 px-1 text-[10px] font-medium leading-none text-zinc-600",
-              isMe ? "text-right" : "text-left"
-            )}
-          >
-            {timeLabel}
-          </span>
-        )}
       </div>
     </div>
   );

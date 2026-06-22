@@ -23,6 +23,7 @@ type Props = {
   messages: ChatMessage[];
   selfId: string | null;
   participants?: RoomUser[];
+  isLiveChat?: boolean;
 };
 
 function isSameDay(a: Date, b: Date) {
@@ -69,7 +70,7 @@ function formatDateSeparator(date: Date): string {
   return `${monthDay} ${time}`;
 }
 
-export default function LiveMessageList({ messages, selfId, participants = [] }: Props) {
+export default function LiveMessageList({ messages, selfId, participants = [], isLiveChat = false }: Props) {
   const userMap = useRef<Record<string, RoomUser>>({});
 
   participants.forEach((p) => {
@@ -103,14 +104,6 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
             className="animate-message-in"
             style={{ animationDelay: `${Math.min(i, 8) * 18}ms` }}
           >
-            {showDateSep && (
-              <div className="flex items-center justify-center py-3 md:py-3.5">
-                <span className="rounded-full border border-white/[0.06] bg-white/[0.035] px-3 py-1 text-[11px] font-semibold tracking-wide text-zinc-500">
-                  {formatDateSeparator(currDate)}
-                </span>
-              </div>
-            )}
-
             {isSystem ? (
               <div className="flex justify-center py-2 animate-chat-fade">
                 <span className="rounded-full bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
@@ -121,7 +114,7 @@ export default function LiveMessageList({ messages, selfId, participants = [] }:
               <div className={isFirst ? "mt-1.5" : "mt-0.5"}>
                 <MessageBubble
                   text={m.text}
-                  username={activeUn}
+                  username={isLiveChat ? activeUn : "User"}
                   isSelf={!!m.userId && m.userId === selfId}
                   avatarUrl={activeAv}
                   isFirstInGroup={isFirst}

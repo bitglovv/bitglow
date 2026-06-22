@@ -184,10 +184,7 @@ export default function LiveChatPage() {
               className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.035),transparent_34%)] touch-pan-y"
             >
               <div
-                className={clsx(
-                  "mx-auto flex min-h-full w-full max-w-[760px] flex-col px-3 pb-4 pt-3 sm:px-5 md:pb-5 md:pt-4",
-                  activeRoom && messages.length > 0 && "justify-end"
-                )}
+                className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-3 pt-3 sm:px-5 md:pt-4"
               >
                 {isResolvingRoom && !activeRoom ? (
                   <div className="flex flex-col items-center justify-center h-full opacity-30">
@@ -209,7 +206,12 @@ export default function LiveChatPage() {
                     </div>
                   ) : (
                     <div className="relative">
-                      <LiveMessageList messages={messages} selfId={user?.id || null} participants={roomUsers} />
+                      <LiveMessageList messages={messages} selfId={user?.id || null} participants={roomUsers} isLiveChat={true} />
+                      {typingLabel && (
+                        <div className="animate-in fade-in slide-in-from-bottom-1 ml-1 mt-2 text-[11px] font-bold text-zinc-500 duration-300">
+                          {typingLabel}
+                        </div>
+                      )}
                     </div>
                   )
                 ) : (
@@ -239,13 +241,6 @@ export default function LiveChatPage() {
               }}
             >
               <div className="mx-auto max-w-[760px]">
-                <div className="min-h-5 px-1 pb-1">
-                  {typingLabel && (
-                    <div className="animate-in fade-in slide-in-from-bottom-1 ml-1 text-[11px] font-bold text-zinc-500 duration-300">
-                      {typingLabel}
-                    </div>
-                  )}
-                </div>
                 <MessageInput
                   onSend={handleSend}
                   onChange={handleTyping}
