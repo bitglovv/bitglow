@@ -7,7 +7,7 @@ import { SplashScreen } from "../components/ui/SplashLoader";
 
 export default function App() {
     const { theme } = useSettingsStore();
-    
+
     useEffect(() => {
         const root = document.documentElement;
         root.classList.remove("theme-dark", "theme-white", "theme-amoled", "theme-light");
@@ -15,13 +15,17 @@ export default function App() {
     }, [theme]);
 
     return (
-        <SplashScreen>
-            <BrowserRouter>
-                <AuthProvider>
+        <BrowserRouter>
+            {/*
+             * AuthProvider must wrap SplashScreen so that SplashScreen can
+             * consume useAuth() and wait for isAuthLoading to become false
+             * before dismissing the splash overlay.
+             */}
+            <AuthProvider>
+                <SplashScreen>
                     <Router />
-                </AuthProvider>
-            </BrowserRouter>
-        </SplashScreen>
+                </SplashScreen>
+            </AuthProvider>
+        </BrowserRouter>
     );
 }
-
