@@ -8,21 +8,34 @@
     <title>BitGlow</title>
     <link rel="icon" type="image/png" href="/bitglow.png" />
 
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
     <!-- Meta -->
     <meta name="description"
         content="BitGlow is a real-time global chat experience built for presence and connection." />
-    <meta name="theme-color" content="#000000" />
 
-    <!-- Fonts (optional, clean default) -->
+    <!-- theme-color: controls Android status bar + PWA splash tint -->
+    <meta name="theme-color" content="#09090B" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BitGlow" />
+    <link rel="apple-touch-icon" href="/bitglow.png" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
+    <!-- Inline critical styles: prevent any white flash before CSS loads -->
     <style>
         html,
-        body {
+        body,
+        #root {
             margin: 0;
             padding: 0;
-            background: #000;
+            background: #09090B;
             color: #fff;
         }
     </style>
