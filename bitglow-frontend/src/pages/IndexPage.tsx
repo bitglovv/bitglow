@@ -4,7 +4,6 @@ import { useAuth } from "../hooks/useAuth";
 import { LandingNav } from "../components/landing/sections/LandingNav";
 import { HeroSection } from "../components/landing/sections/HeroSection";
 import { LandingFooter } from "../components/landing/sections/LandingFooter";
-import { FullScreenLoader } from "../components/ui/FullScreenLoader";
 
 export default function IndexPage() {
     const { user, isAuthLoading } = useAuth();
@@ -20,7 +19,8 @@ export default function IndexPage() {
         }
     }, [user, isAuthLoading, navigate]);
 
-    if (isAuthLoading) return <FullScreenLoader />;
+    // Router returns null while isAuthLoading — we never render during that window.
+    // Once auth resolves and there is a user, the effect above redirects to /home.
     if (user) return null;
 
     return (

@@ -3,6 +3,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "../hooks/useAuth";
 import Router from "./Router";
 import { useSettingsStore } from "../store/settingsStore";
+import { SplashScreen } from "../components/ui/SplashLoader";
 
 export default function App() {
     const { theme } = useSettingsStore();
@@ -14,10 +15,13 @@ export default function App() {
     }, [theme]);
 
     return (
-        <BrowserRouter>
-            <AuthProvider>
-                <Router />
-            </AuthProvider>
-        </BrowserRouter>
+        <SplashScreen>
+            <BrowserRouter>
+                <AuthProvider>
+                    <Router />
+                </AuthProvider>
+            </BrowserRouter>
+        </SplashScreen>
     );
 }
+

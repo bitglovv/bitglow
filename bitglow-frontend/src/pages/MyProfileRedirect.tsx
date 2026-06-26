@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { FullScreenLoader } from "../components/ui/FullScreenLoader";
 
 export default function MyProfileRedirect() {
     const { user, isAuthLoading } = useAuth();
@@ -16,7 +15,6 @@ export default function MyProfileRedirect() {
         }
     }, [user, isAuthLoading, navigate]);
 
-    if (isAuthLoading) return <FullScreenLoader />;
-
+    // Auth restores silently — render nothing while the check is in flight.
     return null;
 }

@@ -22,12 +22,13 @@ import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../layouts/AppLayout";
 import { useAuth } from "../hooks/useAuth";
-import { FullScreenLoader } from "../components/ui/FullScreenLoader";
 
 export default function Router() {
     const { token, user, isAuthLoading } = useAuth();
 
-    if (isAuthLoading) return <FullScreenLoader />;
+    // Auth restores silently — render nothing while the check is in flight.
+    // The SplashScreen in App.tsx covers the very first load visually.
+    if (isAuthLoading) return null;
 
     return (
         <Routes>
