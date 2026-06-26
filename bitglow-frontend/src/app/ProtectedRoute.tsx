@@ -12,11 +12,11 @@ export default function ProtectedRoute() {
     }
 
     if (token && !user) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/" replace />;
     }
 
     if (!token) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/" replace />;
     }
 
     return <Outlet />;
