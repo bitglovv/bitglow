@@ -2,6 +2,8 @@ import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { sanitizeText } from "../services/security";
 import { dmSendSchema, dmUserSchema } from "./schemas";
+import { clients } from "../ws";
+import WebSocket from "ws";
 
 export async function dmRoutes(fastify: FastifyInstance) {
     /**
@@ -81,7 +83,13 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         const userId = req.auth.id;
         const { userId: otherId } = req.params as { userId: string };
-        const { text, type, postId, profileId } = req.body as { text?: string; type?: 'text' | 'post' | 'profile'; postId?: string; profileId?: string };
+        const { text, type, postId, profileId, clientMsgId } = req.body as { 
+            text?: string; 
+            type?: 'text' | 'post' | 'profile'; 
+            postId?: string; 
+            profileId?: string;
+            clientMsgId?: string;
+        };
 
         if (!otherId || !text || !text.trim()) {
             return reply.code(400).send({ message: "Invalid message" });
@@ -92,15 +100,34 @@ export async function dmRoutes(fastify: FastifyInstance) {
         if (!convo) return reply.code(403).send({ message: "Messaging blocked" });
         const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000), type || 'text', postId, profileId);
 
-        return {
+        const responseMsg = {
             id: saved.id,
             senderId: saved.sender_id,
+            receiverId: otherId,
             text: saved.text,
             type: saved.type,
             postId: saved.post_id,
             profileId: saved.profile_id,
             createdAt: new Date(saved.created_at).toISOString()
         };
+
+        // Broadcast to WebSocket clients
+        const payload = JSON.stringify({
+            type: "server:dm:message",
+            message: responseMsg,
+            clientMsgId
+        });
+
+        for (const client of clients) {
+            if (
+                (client.userId === userId || client.userId === otherId) &&
+                client.socket.readyState === WebSocket.OPEN
+            ) {
+                client.socket.send(payload);
+            }
+        }
+
+        return responseMsg;
     });
 
     /**

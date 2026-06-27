@@ -180,6 +180,7 @@ export const dmSendSchema = {
             type: { type: "string", enum: ["text", "post", "profile"] },
             postId: { type: "string" },
             profileId: { type: "string" },
+            clientMsgId: { type: "string" },
         },
     },
 } as const;

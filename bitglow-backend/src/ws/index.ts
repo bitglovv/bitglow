@@ -5,7 +5,7 @@ import { ClientMeta, handleMessage, broadcastPresence, broadcastRoomPresence, ro
 import type { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 
-const clients = new Set<ClientMeta>();
+export const clients = new Set<ClientMeta>();
 
 export function startWS(httpServer: any) {
   const wss = new WebSocketServer({ server: httpServer });

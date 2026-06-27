@@ -1,6 +1,8 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { api, User } from "../services/api";
 import { useSettingsStore } from "../store/settingsStore";
+import { socketService } from "../services/socket";
+import { useChatStore } from "../store/chatStore";
 
 type AuthContextType = {
     user: User | null;
@@ -120,6 +122,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             cancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        if (!token || !user?.id) return;
+
+        socketService.connect();
+
+        const unsubscribe = socketService.subscribe((data) => {
+            if (data.type === "server:dm:message") {
+                useChatStore.getState().handleIncomingMessage(data.message, user.id, data.clientMsgId);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+            socketService.disconnect();
+        };
+    }, [token, user?.id]);
 
     useEffect(() => {
         const handleFocus = () => {

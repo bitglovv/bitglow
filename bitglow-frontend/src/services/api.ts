@@ -420,10 +420,10 @@ export const api = {
             if (!res.ok) return [];
             return res.json();
         },
-        send: async (userId: string, text: string, type: 'text' | 'post' | 'profile' = 'text', postId?: string, profileId?: string): Promise<DMMessage | null> => {
+        send: async (userId: string, text: string, type: 'text' | 'post' | 'profile' = 'text', postId?: string, profileId?: string, clientMsgId?: string): Promise<DMMessage | null> => {
             const res = await fetchWithAuth(`/dms/${userId}`, {
                 method: "POST",
-                body: JSON.stringify({ text, type, postId, profileId }),
+                body: JSON.stringify({ text, type, postId, profileId, clientMsgId }),
             });
             if (!res.ok) return null;
             return res.json();

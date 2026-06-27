@@ -19,6 +19,7 @@ interface ChatState {
   sendMessage: (userId: string, text: string, currentUserId: string) => Promise<void>;
   setTyping: (userId: string, isTyping: boolean) => void;
   setOnline: (userId: string, isOnline: boolean) => void;
+  handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -145,7 +146,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     // API Call
-    const savedMsg = await api.dms.send(userId, text);
+    const savedMsg = await api.dms.send(userId, text, 'text', undefined, undefined, optimisticMsg.id);
     if (savedMsg) {
       // Replace optimistic message
       set((state) => ({
@@ -175,4 +176,73 @@ export const useChatStore = create<ChatState>((set, get) => ({
     else next.delete(userId);
     return { onlineUsers: next };
   }),
+
+  handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => {
+    const { activeConversationId } = get();
+    const otherUserId = msg.senderId === currentUserId ? msg.receiverId : msg.senderId;
+    const isMe = msg.senderId === currentUserId;
+
+    set((state) => {
+      const prevMsgs = state.messages[otherUserId] || [];
+      let newMsgs = [...prevMsgs];
+      let replaced = false;
+
+      if (clientMsgId) {
+        const tempIdx = newMsgs.findIndex((m) => m.id === clientMsgId);
+        if (tempIdx !== -1) {
+          newMsgs[tempIdx] = {
+            id: msg.id,
+            senderId: msg.senderId,
+            text: msg.text,
+            createdAt: msg.createdAt,
+            type: msg.type,
+            postId: msg.postId,
+            profileId: msg.profileId,
+          };
+          replaced = true;
+        }
+      }
+
+      if (!replaced) {
+        if (newMsgs.some((m) => m.id === msg.id)) {
+          return {}; // Message already exists, avoid duplicates
+        }
+        newMsgs.push(msg);
+      }
+
+      const convs = [...state.conversations];
+      const idx = convs.findIndex((c) => c.userId === otherUserId);
+      const isActive = activeConversationId === otherUserId;
+      const unreadDelta = !isMe && !isActive ? 1 : 0;
+
+      if (idx !== -1) {
+        const copy = {
+          ...convs[idx],
+          lastMessage: msg.text,
+          lastMessageAt: msg.createdAt,
+          lastMessageSenderId: msg.senderId,
+          unreadCount: convs[idx].unreadCount + unreadDelta,
+        };
+        convs.splice(idx, 1);
+        convs.unshift(copy);
+      } else {
+        // Conversation not in sidebar yet, fetch full list and friends to populate
+        setTimeout(() => {
+          get().fetchConversationsAndFriends();
+        }, 100);
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          [otherUserId]: newMsgs,
+        },
+        conversations: convs,
+      };
+    });
+
+    if (!isMe && activeConversationId === otherUserId) {
+      void api.dms.markRead(otherUserId);
+    }
+  },
 }));

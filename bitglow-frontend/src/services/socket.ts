@@ -48,15 +48,18 @@ class SocketService {
     private reconnectInterval: number = 3000;
 
     connect() {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
         if (this.socket?.readyState === WebSocket.OPEN) return;
 
         this.socket = new WebSocket(this.url);
 
         this.socket.onopen = () => {
             console.log("WS Connected");
-            const token = localStorage.getItem("token");
-            if (token) {
-                this.send({ type: "client:hello", token });
+            const freshToken = localStorage.getItem("token");
+            if (freshToken) {
+                this.send({ type: "client:hello", token: freshToken });
             }
         };
 
@@ -71,7 +74,10 @@ class SocketService {
 
         this.socket.onclose = () => {
             console.log("WS Closed, reconnecting...");
-            setTimeout(() => this.connect(), this.reconnectInterval);
+            const freshToken = localStorage.getItem("token");
+            if (freshToken) {
+                setTimeout(() => this.connect(), this.reconnectInterval);
+            }
         };
     }
 
