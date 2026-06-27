@@ -332,6 +332,15 @@ const initDMTables = async () => {
                     ALTER TABLE dm_messages ADD COLUMN profile_id UUID REFERENCES users(id) ON DELETE SET NULL;
                 END IF;
 
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'is_edited'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN is_edited BOOLEAN DEFAULT false;
+                END IF;
+
                 -- Update CHECK constraint to include 'profile'
                 ALTER TABLE dm_messages DROP CONSTRAINT IF EXISTS dm_messages_type_check;
                 ALTER TABLE dm_messages ADD CONSTRAINT dm_messages_type_check CHECK (type IN ('text', 'post', 'profile'));
@@ -1250,7 +1259,7 @@ export const db = {
     },
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
-            `SELECT id, sender_id, text, type, post_id, created_at
+            `SELECT id, sender_id, text, type, post_id, profile_id, is_edited, created_at
              FROM dm_messages
              WHERE conversation_id = $1
              ORDER BY created_at ASC
@@ -1264,10 +1273,53 @@ export const db = {
         const res = await pool.query(
             `INSERT INTO dm_messages (conversation_id, sender_id, text, type, post_id, profile_id)
              VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id, sender_id, text, type, post_id, profile_id, created_at`,
+             RETURNING id, sender_id, text, type, post_id, profile_id, is_edited, created_at`,
             [conversationId, senderId, text, type, postId || null, profileId || null]
         );
         return res.rows[0];
+    },
+
+    async getDMMessageById(messageId: string) {
+        const res = await pool.query(
+            `SELECT m.id, m.conversation_id, m.sender_id, m.text, m.type, m.post_id, m.profile_id, m.is_edited, m.created_at,
+                    c.user_a, c.user_b
+             FROM dm_messages m
+             JOIN dm_conversations c ON c.id = m.conversation_id
+             WHERE m.id = $1`,
+            [messageId]
+        );
+        return res.rows[0] || null;
+    },
+
+    async updateDMMessage(messageId: string, text: string) {
+        const res = await pool.query(
+            `UPDATE dm_messages
+             SET text = $2, is_edited = true
+             WHERE id = $1
+             RETURNING id, conversation_id, sender_id, text, type, post_id, profile_id, is_edited, created_at`,
+            [messageId, text]
+        );
+        return res.rows[0] || null;
+    },
+
+    async deleteDMMessage(messageId: string) {
+        const res = await pool.query(
+            `DELETE FROM dm_messages WHERE id = $1 RETURNING id, conversation_id, sender_id`,
+            [messageId]
+        );
+        return res.rows[0] || null;
+    },
+
+    async getLastDMMessageForConversation(conversationId: string) {
+        const res = await pool.query(
+            `SELECT id, sender_id, text, created_at
+             FROM dm_messages
+             WHERE conversation_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [conversationId]
+        );
+        return res.rows[0] || null;
     },
 
     async markDMConversationRead(conversationId: string, readerId: string) {

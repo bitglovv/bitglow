@@ -131,6 +131,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const unsubscribe = socketService.subscribe((data) => {
             if (data.type === "server:dm:message") {
                 useChatStore.getState().handleIncomingMessage(data.message, user.id, data.clientMsgId);
+            } else if (data.type === "server:dm:edited") {
+                useChatStore.getState().handleMessageEdited(data.message, user.id);
+            } else if (data.type === "server:dm:deleted") {
+                useChatStore.getState().handleMessageDeleted(data);
             }
         });
 

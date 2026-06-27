@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS dm_messages (
   post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
   profile_id UUID REFERENCES users(id) ON DELETE SET NULL,
   read_at TIMESTAMP,
+  is_edited BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT now()
 );
 

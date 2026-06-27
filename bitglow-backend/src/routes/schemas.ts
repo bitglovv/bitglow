@@ -195,3 +195,25 @@ export const liveCreateSchema = {
     },
 } as const;
 
+export const dmMessageParamSchema = {
+    params: {
+        type: "object",
+        required: ["messageId"],
+        properties: {
+            messageId: { type: "string", minLength: 1, maxLength: 64 },
+        },
+    },
+} as const;
+
+export const dmEditSchema = {
+    ...dmMessageParamSchema,
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text"],
+        properties: {
+            text: { type: "string", minLength: 1, maxLength: 2000 },
+        },
+    },
+} as const;
+
