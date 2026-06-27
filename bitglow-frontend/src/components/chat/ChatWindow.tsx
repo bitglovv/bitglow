@@ -1,13 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
-import { useVisualViewportBottomInset } from "../../hooks/useVisualViewportBottomInset";
 import { Conversation, DMMessage } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { Avatar } from "../ui/Avatar";
 import { ChatHeader } from "./ChatHeader";
 import LiveMessageList from "./LiveMessageList";
-import { MessageInput } from "./MessageInput";
+import { MessageComposer } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatWindowProps {
@@ -44,44 +43,63 @@ export const ChatWindow = ({
 }: ChatWindowProps) => {
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const footerRef = useRef<HTMLDivElement>(null);
-  const keyboardInset = useVisualViewportBottomInset();
-  const [isNarrow, setIsNarrow] = useState(false);
-  const [composerPad, setComposerPad] = useState(68);
+  const isAtBottomRef = useRef(true);
 
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setIsNarrow(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-
-  useLayoutEffect(() => {
-    const el = footerRef.current;
-    if (!el || !isNarrow) return;
-    const ro = new ResizeObserver(() => {
-      setComposerPad(Math.ceil(el.getBoundingClientRect().height));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [isNarrow, conversation?.userId]);
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
 
+  // Track if user scroll is at the bottom
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
+
+  // Reset scroll state when conversation changes
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current = true;
+    el.scrollTop = el.scrollHeight;
+  }, [conversation?.userId]);
+
+  // Keep scroll at bottom on container resize (e.g. keyboard viewport adjustments)
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
-    const id = requestAnimationFrame(() => {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: messages.length > 1 || isTyping ? "smooth" : "auto",
-      });
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
     });
 
-    return () => cancelAnimationFrame(id);
-  }, [messages.length, isTyping]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Scroll to bottom on new messages
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const latestMessage = messages[messages.length - 1];
+    const latestIsMine = latestMessage && latestMessage.senderId === currentUserId;
+
+    if (isAtBottomRef.current || latestIsMine) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, currentUserId]);
+
+  // Scroll to bottom on typing state changes
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    if (isAtBottomRef.current && isTyping) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [isTyping]);
 
   if (!conversation) return null;
 
@@ -96,8 +114,8 @@ export const ChatWindow = ({
 
       <div
         ref={scrollRef}
-        className="custom-scrollbar flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth bg-black"
-        style={{ paddingBottom: isNarrow ? composerPad : undefined }}
+        onScroll={handleScroll}
+        className="custom-scrollbar flex-1 min-h-0 overflow-y-auto overscroll-contain bg-black"
       >
         {isLoadingMessages ? (
           <div className="flex h-full items-center justify-center text-sm text-zinc-500 animate-chat-fade">
@@ -166,12 +184,7 @@ export const ChatWindow = ({
       </div>
 
       <div
-        ref={footerRef}
-        className={clsx(
-          "shrink-0 bg-black px-3 pt-1.5 pb-2",
-          isNarrow ? "fixed left-0 right-0 z-50" : "md:px-4 md:py-2.5 md:pb-[max(10px,env(safe-area-inset-bottom))]"
-        )}
-        style={isNarrow ? { bottom: keyboardInset } : undefined}
+        className="shrink-0 bg-black px-3 pt-1.5 pb-[calc(8px+env(safe-area-inset-bottom))] md:px-4 md:py-2.5 md:pb-[max(10px,env(safe-area-inset-bottom))]"
       >
         {isRequest ? (
           <div className="flex flex-col gap-2 p-2 pt-0 md:flex-row md:items-center">
@@ -194,7 +207,7 @@ export const ChatWindow = ({
             </div>
           </div>
         ) : (
-          <MessageInput compact onSendMessage={onSendMessage} onTyping={onTyping} />
+          <MessageComposer compact onSendMessage={onSendMessage} onTyping={onTyping} />
         )}
       </div>
     </div>

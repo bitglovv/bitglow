@@ -3,10 +3,10 @@ import clsx from "clsx";
 import LiveChatIcon from "../assets/icons/live-chat.svg";
 import Header from "../components/common/Header";
 import LiveMessageList from "../components/chat/LiveMessageList";
-import MessageInput from "../components/chat/MessageInput";
+import MessageComposer from "../components/chat/MessageComposer";
 import { useAuth } from "../hooks/useAuth";
 import { useLiveRoom } from "../hooks/useLiveRoom";
-import { useVisualViewportBottomInset } from "../hooks/useVisualViewportBottomInset";
+import { useVisualViewport } from "../hooks/useVisualViewport";
 
 const SCROLL_KEY = "bitglow_live_msg_scroll";
 
@@ -33,7 +33,7 @@ export default function LiveChatPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const previousMessageCountRef = useRef(0);
-  const keyboardInset = useVisualViewportBottomInset();
+  const viewport = useVisualViewport();
 
   useEffect(() => {
     document.title = "BitGlow";
@@ -86,6 +86,21 @@ export default function LiveChatPage() {
     }
   }, [hasJoinedChat]);
 
+  // Keep scroll at bottom on container resize (e.g. keyboard viewport adjustments)
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useLayoutEffect(() => {
     const el = messagesScrollRef.current;
     if (!el || messages.length === 0) return;
@@ -128,7 +143,7 @@ export default function LiveChatPage() {
         "bg-black text-white selection:bg-brand/30",
         hasJoinedChat ? "fixed left-0 right-0 top-0 flex flex-col overflow-hidden" : "flex min-h-svh flex-col"
       )}
-      style={hasJoinedChat ? { bottom: keyboardInset } : undefined}
+      style={hasJoinedChat ? { height: `${viewport.height}px`, top: `${viewport.offsetTop}px` } : undefined}
     >
       {!hasJoinedChat ? (
         // Welcome Screen
@@ -242,7 +257,7 @@ export default function LiveChatPage() {
               className="shrink-0 border-t border-white/[0.06] bg-black/95 px-3 py-2 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-4"
             >
               <div className="mx-auto max-w-[760px]">
-                <MessageInput
+                <MessageComposer
                   onSend={handleSend}
                   onChange={handleTyping}
                   disabled={!canSend}

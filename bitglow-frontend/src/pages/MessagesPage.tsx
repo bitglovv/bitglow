@@ -5,6 +5,8 @@ import { InboxSidebar } from "../components/chat/InboxSidebar";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { EmptyChatState } from "../components/chat/EmptyChatState";
 import { useChatStore } from "../store/chatStore";
+import { useVisualViewport } from "../hooks/useVisualViewport";
+import { api } from "../services/api";
 
 const STACKED_MAX_PX = 767;
 
@@ -42,6 +44,7 @@ export default function MessagesPage() {
       return new Set();
     }
   });
+  const viewport = useVisualViewport();
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${STACKED_MAX_PX}px)`);
@@ -142,7 +145,10 @@ export default function MessagesPage() {
   const showMobileInbox = mobileView === "inbox";
 
   return (
-    <div className="fixed inset-0 bg-black flex flex-col text-white overflow-hidden">
+    <div
+      className="fixed left-0 right-0 top-0 bg-black flex flex-col text-white overflow-hidden"
+      style={{ height: `${viewport.height}px`, top: `${viewport.offsetTop}px` }}
+    >
       <Header hideBottomNav={mobileView === "chat"} />
       <div className="flex-1 min-h-0 flex overflow-hidden bg-black relative">
         {/* Inbox sidebar: shown on mobile inbox view or always on md+ */}

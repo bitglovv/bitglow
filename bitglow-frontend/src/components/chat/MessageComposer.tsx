@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import clsx from "clsx";
 
-interface MessageInputProps {
+export interface MessageComposerProps {
   onSendMessage?: (text: string) => void;
   onTyping?: (isTyping: boolean) => void;
   placeholder?: string;
@@ -13,13 +13,9 @@ interface MessageInputProps {
   variant?: "default" | "live";
 }
 
-function textareaMaxHeightPx() {
-  if (typeof window === "undefined") return 200;
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  return Math.min(Math.round(viewportHeight * 0.36), 220);
-}
+const MAX_TEXTAREA_HEIGHT = 140; // Max height for 5-6 lines
 
-export const MessageInput = ({
+export const MessageComposer = ({
   onSendMessage,
   onTyping,
   placeholder = "Message...",
@@ -28,7 +24,7 @@ export const MessageInput = ({
   disabled,
   compact = false,
   variant = "default",
-}: MessageInputProps) => {
+}: MessageComposerProps) => {
   const [text, setText] = useState("");
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -36,11 +32,10 @@ export const MessageInput = ({
   const syncTextareaHeight = () => {
     const ta = textareaRef.current;
     if (!ta) return;
-    const maxH = textareaMaxHeightPx();
     ta.style.height = "0px";
-    const next = Math.min(Math.max(ta.scrollHeight, 44), maxH);
+    const next = Math.min(Math.max(ta.scrollHeight, 44), MAX_TEXTAREA_HEIGHT);
     ta.style.height = `${next}px`;
-    ta.style.overflowY = ta.scrollHeight > maxH ? "auto" : "hidden";
+    ta.style.overflowY = ta.scrollHeight > MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
   };
 
   useLayoutEffect(() => {
@@ -89,13 +84,6 @@ export const MessageInput = ({
     });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendAction();
-    }
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setText(value);
@@ -128,7 +116,6 @@ export const MessageInput = ({
           ref={textareaRef}
           value={text}
           onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
@@ -159,4 +146,4 @@ export const MessageInput = ({
   );
 };
 
-export default MessageInput;
+export default MessageComposer;
