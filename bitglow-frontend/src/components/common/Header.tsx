@@ -3,7 +3,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { Avatar } from "../ui/Avatar";
 import { Send, Bell, User, House, Search } from "lucide-react";
 import clsx from "clsx";
-import LiveChatIcon from "../../assets/icons/live-chat.svg";
+import LiveChatIcon from "../../assets/icons/LiveChat.png";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../services/api";
 import {

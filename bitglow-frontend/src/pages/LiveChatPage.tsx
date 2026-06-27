@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import LiveChatIcon from "../src/assets/icons/live-chat.svg";
+import LiveChatIcon from "../assets/icons/LiveChat.png";
 import Header from "../components/common/Header";
 import LiveMessageList from "../components/chat/LiveMessageList";
 import MessageComposer from "../components/chat/MessageComposer";
