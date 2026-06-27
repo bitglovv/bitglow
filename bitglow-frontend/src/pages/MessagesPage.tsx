@@ -147,7 +147,7 @@ export default function MessagesPage() {
   return (
     <div
       className="fixed left-0 right-0 top-0 bg-black flex flex-col text-white overflow-hidden"
-      style={{ height: `${viewport.height}px`, top: `${viewport.offsetTop}px` }}
+      style={{ height: `${viewport.height}px` }}
     >
       <Header hideBottomNav={mobileView === "chat"} />
       <div className="flex-1 min-h-0 flex overflow-hidden bg-black relative">

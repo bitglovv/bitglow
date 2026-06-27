@@ -143,7 +143,7 @@ export default function LiveChatPage() {
         "bg-black text-white selection:bg-brand/30",
         hasJoinedChat ? "fixed left-0 right-0 top-0 flex flex-col overflow-hidden" : "flex min-h-svh flex-col"
       )}
-      style={hasJoinedChat ? { height: `${viewport.height}px`, top: `${viewport.offsetTop}px` } : undefined}
+      style={hasJoinedChat ? { height: `${viewport.height}px` } : undefined}
     >
       {!hasJoinedChat ? (
         // Welcome Screen
