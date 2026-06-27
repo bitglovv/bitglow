@@ -298,6 +298,7 @@ const initDMTables = async () => {
                 post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
                 profile_id UUID REFERENCES users(id) ON DELETE SET NULL,
                 read_at TIMESTAMP,
+                edited_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT now()
             );
             DO $$
@@ -310,6 +311,15 @@ const initDMTables = async () => {
                 ) THEN
                     ALTER TABLE dm_messages ADD COLUMN read_at TIMESTAMP;
                     UPDATE dm_messages SET read_at = created_at WHERE read_at IS NULL;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'edited_at'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN edited_at TIMESTAMP;
                 END IF;
                 
                 IF NOT EXISTS (
@@ -1250,7 +1260,7 @@ export const db = {
     },
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
-            `SELECT id, sender_id, text, type, post_id, created_at
+            `SELECT id, sender_id, text, type, post_id, profile_id, edited_at, created_at
              FROM dm_messages
              WHERE conversation_id = $1
              ORDER BY created_at ASC
@@ -1268,6 +1278,59 @@ export const db = {
             [conversationId, senderId, text, type, postId || null, profileId || null]
         );
         return res.rows[0];
+    },
+
+    async updateOwnDMMessage(messageId: string, senderId: string, otherUserId: string, text: string) {
+        const res = await pool.query(
+            `UPDATE dm_messages m
+             SET text = $4, edited_at = now()
+             FROM dm_conversations c
+             WHERE m.id = $1
+               AND m.sender_id = $2
+               AND m.conversation_id = c.id
+               AND ((c.user_a = $2 AND c.user_b = $3) OR (c.user_a = $3 AND c.user_b = $2))
+               AND COALESCE(m.type, 'text') = 'text'
+             RETURNING m.id, m.sender_id, m.text, m.type, m.post_id, m.profile_id,
+                       m.edited_at, m.created_at`,
+            [messageId, senderId, otherUserId, text]
+        );
+        return res.rows[0] || null;
+    },
+
+    async deleteOwnDMMessage(messageId: string, senderId: string, otherUserId: string) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const deleted = await client.query(
+                `DELETE FROM dm_messages m
+                 USING dm_conversations c
+                 WHERE m.id = $1
+                   AND m.sender_id = $2
+                   AND m.conversation_id = c.id
+                   AND ((c.user_a = $2 AND c.user_b = $3) OR (c.user_a = $3 AND c.user_b = $2))
+                 RETURNING m.id, m.conversation_id`,
+                [messageId, senderId, otherUserId]
+            );
+            if (!deleted.rows[0]) {
+                await client.query('ROLLBACK');
+                return null;
+            }
+            const latest = await client.query(
+                `SELECT id, sender_id, text, created_at
+                 FROM dm_messages
+                 WHERE conversation_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [deleted.rows[0].conversation_id]
+            );
+            await client.query('COMMIT');
+            return { deletedId: deleted.rows[0].id, latestMessage: latest.rows[0] || null };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     },
 
     async markDMConversationRead(conversationId: string, readerId: string) {

@@ -11,6 +11,8 @@ export interface MessageComposerProps {
   disabled?: boolean;
   compact?: boolean;
   variant?: "default" | "live";
+  editValue?: string | null;
+  onCancelEdit?: () => void;
 }
 
 const MAX_TEXTAREA_HEIGHT = 140; // Max height for 5-6 lines
@@ -24,6 +26,8 @@ export const MessageComposer = ({
   disabled,
   compact = false,
   variant = "default",
+  editValue = null,
+  onCancelEdit,
 }: MessageComposerProps) => {
   const [text, setText] = useState("");
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,6 +59,15 @@ export const MessageComposer = ({
   }, []);
 
   useEffect(() => {
+    if (editValue === null) return;
+    setText(editValue);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus({ preventScroll: true });
+      textareaRef.current?.setSelectionRange(editValue.length, editValue.length);
+    });
+  }, [editValue]);
+
+  useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
@@ -77,6 +90,7 @@ export const MessageComposer = ({
     }
 
     if (onTyping) onTyping(false);
+    if (editValue !== null) onCancelEdit?.();
 
     requestAnimationFrame(() => {
       syncTextareaHeight();
@@ -102,6 +116,15 @@ export const MessageComposer = ({
   const isLive = variant === "live";
 
   return (
+    <div className="w-full">
+      {editValue !== null && (
+        <div className="mb-1.5 flex items-center justify-between px-2 text-xs text-zinc-400">
+          <span>Editing message</span>
+          <button type="button" onClick={() => { setText(""); onCancelEdit?.(); }} className="font-semibold text-brand">
+            Cancel
+          </button>
+        </div>
+      )}
     <div
       className={clsx(
         "flex w-full max-w-full items-end transition-colors duration-200 ease-out",
@@ -142,6 +165,7 @@ export const MessageComposer = ({
       >
         <Send className="h-5 w-5" />
       </button>
+    </div>
     </div>
   );
 };

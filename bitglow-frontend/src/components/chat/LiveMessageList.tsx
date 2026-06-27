@@ -11,6 +11,7 @@ type ChatMessage = {
   type?: "chat" | "system" | "post" | "profile";
   postId?: string;
   profileId?: string;
+  editedAt?: string | null;
 };
 
 type RoomUser = {
@@ -24,6 +25,8 @@ type Props = {
   selfId: string | null;
   participants?: RoomUser[];
   isLiveChat?: boolean;
+  onEditMessage?: (messageId: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
 };
 
 function isSameDay(a: Date, b: Date) {
@@ -70,7 +73,7 @@ function formatDateSeparator(date: Date): string {
   return `${monthDay} ${time}`;
 }
 
-export default function LiveMessageList({ messages, selfId, participants = [], isLiveChat = false }: Props) {
+export default function LiveMessageList({ messages, selfId, participants = [], isLiveChat = false, onEditMessage, onDeleteMessage }: Props) {
   const userMap = useRef<Record<string, RoomUser>>({});
 
   participants.forEach((p) => {
@@ -131,6 +134,9 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
                   postId={m.postId}
                   profileId={m.profileId}
                   timeLabel={timeLabel}
+                  editedAt={m.editedAt}
+                  onEdit={!isLiveChat && m.userId === selfId && m.type === "chat" && onEditMessage ? () => onEditMessage(String(m.id)) : undefined}
+                  onDelete={!isLiveChat && m.userId === selfId && onDeleteMessage ? () => onDeleteMessage(String(m.id)) : undefined}
                 />
               </div>
             )}

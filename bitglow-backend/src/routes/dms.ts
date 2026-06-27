@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { sanitizeText } from "../services/security";
-import { dmSendSchema, dmUserSchema } from "./schemas";
+import { dmEditSchema, dmMessageSchema, dmSendSchema, dmUserSchema } from "./schemas";
 import { clients } from "../ws";
 import WebSocket from "ws";
 
@@ -64,6 +64,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
             type: m.type || 'text',
             postId: m.post_id,
             profileId: m.profile_id,
+            editedAt: m.edited_at ? new Date(m.edited_at).toISOString() : null,
             createdAt: new Date(m.created_at).toISOString()
         }));
     });
@@ -130,6 +131,62 @@ export async function dmRoutes(fastify: FastifyInstance) {
         return responseMsg;
     });
 
+    fastify.put("/dms/:userId/messages/:messageId", {
+        preHandler: fastify.requireAuth,
+        schema: dmEditSchema,
+    }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const { userId: otherId, messageId } = req.params as { userId: string; messageId: string };
+        const { text } = req.body as { text: string };
+        const cleanText = sanitizeText(text.trim(), 2000);
+        if (!cleanText) return reply.code(400).send({ message: "Message cannot be empty" });
+
+        const saved = await db.updateOwnDMMessage(messageId, req.auth.id, otherId, cleanText);
+        if (!saved) {
+            return reply.code(403).send({ message: "You can only edit your own text messages" });
+        }
+        const message = {
+            id: saved.id,
+            senderId: saved.sender_id,
+            receiverId: otherId,
+            text: saved.text,
+            type: saved.type,
+            postId: saved.post_id,
+            profileId: saved.profile_id,
+            editedAt: new Date(saved.edited_at).toISOString(),
+            createdAt: new Date(saved.created_at).toISOString(),
+        };
+        broadcastDM([req.auth.id, otherId], { type: "server:dm:edited", message });
+        return message;
+    });
+
+    fastify.delete("/dms/:userId/messages/:messageId", {
+        preHandler: fastify.requireAuth,
+        schema: dmMessageSchema,
+    }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const { userId: otherId, messageId } = req.params as { userId: string; messageId: string };
+        const result = await db.deleteOwnDMMessage(messageId, req.auth.id, otherId);
+        if (!result) {
+            return reply.code(403).send({ message: "You can only delete your own messages" });
+        }
+        const latestMessage = result.latestMessage ? {
+            id: result.latestMessage.id,
+            senderId: result.latestMessage.sender_id,
+            text: result.latestMessage.text,
+            createdAt: new Date(result.latestMessage.created_at).toISOString(),
+        } : null;
+        const event = {
+            type: "server:dm:deleted",
+            messageId: result.deletedId,
+            senderId: req.auth.id,
+            receiverId: otherId,
+            latestMessage,
+        };
+        broadcastDM([req.auth.id, otherId], event);
+        return event;
+    });
+
     /**
      * POST /api/dms/:userId/read
      * Mark all incoming messages in this conversation as read.
@@ -187,5 +244,14 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         return { ok: true };
     });
+}
+
+function broadcastDM(userIds: string[], event: object) {
+    const payload = JSON.stringify(event);
+    for (const client of clients) {
+        if (userIds.includes(client.userId || "") && client.socket.readyState === WebSocket.OPEN) {
+            client.socket.send(payload);
+        }
+    }
 }
 

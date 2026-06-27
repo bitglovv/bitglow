@@ -17,9 +17,13 @@ interface ChatState {
   setActiveConversation: (userId: string | null) => void;
   openFriendConversation: (friend: Friend) => void;
   sendMessage: (userId: string, text: string, currentUserId: string) => Promise<void>;
+  editMessage: (userId: string, messageId: string, text: string) => Promise<void>;
+  deleteMessage: (userId: string, messageId: string) => Promise<void>;
   setTyping: (userId: string, isTyping: boolean) => void;
   setOnline: (userId: string, isOnline: boolean) => void;
   handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => void;
+  handleEditedMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string) => void;
+  handleDeletedMessage: (event: { messageId: string; senderId: string; receiverId: string; latestMessage: DMMessage | null }, currentUserId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -163,6 +167,74 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  editMessage: async (userId: string, messageId: string, text: string) => {
+    const previousMessages = get().messages[userId] || [];
+    const previousMessage = previousMessages.find((message) => message.id === messageId);
+    if (!previousMessage) return;
+    const isLatest = previousMessages[previousMessages.length - 1]?.id === messageId;
+    const editedAt = new Date().toISOString();
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [userId]: (state.messages[userId] || []).map((message) =>
+          message.id === messageId ? { ...message, text, editedAt } : message
+        ),
+      },
+      conversations: isLatest
+        ? state.conversations.map((conversation) =>
+            conversation.userId === userId ? { ...conversation, lastMessage: text } : conversation
+          )
+        : state.conversations,
+    }));
+    try {
+      await api.dms.edit(userId, messageId, text);
+    } catch (error) {
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [userId]: (state.messages[userId] || []).map((message) =>
+            message.id === messageId ? previousMessage : message
+          ),
+        },
+        conversations: isLatest
+          ? state.conversations.map((conversation) =>
+              conversation.userId === userId ? { ...conversation, lastMessage: previousMessage.text } : conversation
+            )
+          : state.conversations,
+      }));
+      throw error;
+    }
+  },
+
+  deleteMessage: async (userId: string, messageId: string) => {
+    const previousMessages = get().messages[userId] || [];
+    const previousConversations = get().conversations;
+    const remaining = previousMessages.filter((message) => message.id !== messageId);
+    const latest = remaining[remaining.length - 1];
+    set((state) => ({
+      messages: { ...state.messages, [userId]: remaining },
+      conversations: state.conversations.map((conversation) =>
+        conversation.userId === userId
+          ? {
+              ...conversation,
+              lastMessage: latest?.text || "",
+              lastMessageSenderId: latest?.senderId || null,
+              lastMessageAt: latest?.createdAt || null,
+            }
+          : conversation
+      ),
+    }));
+    try {
+      await api.dms.deleteMessage(userId, messageId);
+    } catch (error) {
+      set((state) => ({
+        messages: { ...state.messages, [userId]: previousMessages },
+        conversations: previousConversations,
+      }));
+      throw error;
+    }
+  },
+
   setTyping: (userId: string, isTyping: boolean) => set((state) => {
     const next = new Set(state.typingUsers);
     if (isTyping) next.add(userId);
@@ -244,5 +316,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!isMe && activeConversationId === otherUserId) {
       void api.dms.markRead(otherUserId);
     }
+  },
+
+  handleEditedMessage: (msg, currentUserId) => {
+    const otherUserId = msg.senderId === currentUserId ? msg.receiverId : msg.senderId;
+    set((state) => {
+      const currentMessages = state.messages[otherUserId] || [];
+      const conversation = state.conversations.find((item) => item.userId === otherUserId);
+      const isLatest = currentMessages[currentMessages.length - 1]?.id === msg.id
+        || conversation?.lastMessageAt === msg.createdAt;
+      return {
+        messages: {
+          ...state.messages,
+          [otherUserId]: currentMessages.map((item) => item.id === msg.id ? { ...item, ...msg } : item),
+        },
+        conversations: isLatest
+          ? state.conversations.map((conversation) =>
+              conversation.userId === otherUserId
+                ? { ...conversation, lastMessage: msg.text }
+                : conversation
+            )
+          : state.conversations,
+      };
+    });
+  },
+
+  handleDeletedMessage: (event, currentUserId) => {
+    const otherUserId = event.senderId === currentUserId ? event.receiverId : event.senderId;
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [otherUserId]: (state.messages[otherUserId] || []).filter((message) => message.id !== event.messageId),
+      },
+      conversations: state.conversations.map((conversation) =>
+        conversation.userId === otherUserId
+          ? {
+              ...conversation,
+              lastMessage: event.latestMessage?.text || "",
+              lastMessageSenderId: event.latestMessage?.senderId || null,
+              lastMessageAt: event.latestMessage?.createdAt || null,
+            }
+          : conversation
+      ),
+    }));
   },
 }));

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 import { Conversation, DMMessage } from "../../services/api";
@@ -19,6 +19,8 @@ interface ChatWindowProps {
   showHeaderBack?: boolean;
   onSendMessage: (text: string) => void;
   onTyping: (isTyping: boolean) => void;
+  onEditMessage: (messageId: string, text: string) => Promise<void>;
+  onDeleteMessage: (messageId: string) => Promise<void>;
   isOnline: boolean;
   isLoadingMessages?: boolean;
   isRequest?: boolean;
@@ -35,6 +37,8 @@ export const ChatWindow = ({
   showHeaderBack = true,
   onSendMessage,
   onTyping,
+  onEditMessage,
+  onDeleteMessage,
   isOnline,
   isLoadingMessages = false,
   isRequest = false,
@@ -44,6 +48,7 @@ export const ChatWindow = ({
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const [editingMessage, setEditingMessage] = useState<DMMessage | null>(null);
 
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
@@ -165,14 +170,28 @@ export const ChatWindow = ({
                     ? user?.username || "You"
                     : conversation.username || "User",
                 text: m.text,
-                type: m.type as any || "chat",
+                type: m.type === "text" || !m.type ? "chat" : m.type,
                 postId: m.postId,
                 profileId: m.profileId,
+                editedAt: m.editedAt,
                 ts: new Date(m.createdAt).getTime(),
                 avatarUrl:
                   m.senderId === currentUserId ? user?.avatarUrl : conversation.avatarUrl,
               }))}
               selfId={currentUserId || null}
+              onEditMessage={(messageId) => {
+                const message = messages.find((item) => item.id === messageId);
+                if (message?.senderId === currentUserId && (message.type || "text") === "text") {
+                  setEditingMessage(message);
+                }
+              }}
+              onDeleteMessage={async (messageId) => {
+                const message = messages.find((item) => item.id === messageId);
+                if (message?.senderId !== currentUserId) return;
+                if (!window.confirm("Delete this message? This will remove it for both people.")) return;
+                if (editingMessage?.id === messageId) setEditingMessage(null);
+                await onDeleteMessage(messageId);
+              }}
             />
             {isTyping && (
               <div className="pl-11 pt-0.5 pb-1 md:pl-13 animate-typing-in">
@@ -207,7 +226,19 @@ export const ChatWindow = ({
             </div>
           </div>
         ) : (
-          <MessageComposer compact onSendMessage={onSendMessage} onTyping={onTyping} />
+          <MessageComposer
+            compact
+            editValue={editingMessage?.text ?? null}
+            onCancelEdit={() => setEditingMessage(null)}
+            onSendMessage={async (text) => {
+              if (editingMessage) {
+                await onEditMessage(editingMessage.id, text);
+              } else {
+                onSendMessage(text);
+              }
+            }}
+            onTyping={onTyping}
+          />
         )}
       </div>
     </div>

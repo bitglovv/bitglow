@@ -74,6 +74,7 @@ export type DMMessage = {
     type: 'text' | 'post' | 'profile';
     postId?: string;
     profileId?: string;
+    editedAt?: string | null;
     createdAt: string;
 };
 
@@ -427,6 +428,21 @@ export const api = {
             });
             if (!res.ok) return null;
             return res.json();
+        },
+        edit: async (userId: string, messageId: string, text: string): Promise<DMMessage> => {
+            const res = await fetchWithAuth(`/dms/${userId}/messages/${messageId}`, {
+                method: "PUT",
+                body: JSON.stringify({ text }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to edit message"));
+            return res.json();
+        },
+        deleteMessage: async (userId: string, messageId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/dms/${userId}/messages/${messageId}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to delete message"));
+            return true;
         },
         markRead: async (userId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/dms/${userId}/read`, {

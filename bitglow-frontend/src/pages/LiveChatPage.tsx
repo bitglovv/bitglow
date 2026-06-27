@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import LiveChatIcon from "../assets/icons/live-chat.svg";
+import LiveChatIcon from "../src/assets/icons/live-chat.svg";
 import Header from "../components/common/Header";
 import LiveMessageList from "../components/chat/LiveMessageList";
 import MessageComposer from "../components/chat/MessageComposer";
@@ -33,25 +33,28 @@ export default function LiveChatPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const previousMessageCountRef = useRef(0);
+  const restoredRoomRef = useRef<string | null>(null);
   const viewport = useVisualViewport();
 
   useEffect(() => {
     document.title = "BitGlow";
   }, []);
 
-  // Restore scroll on mount
+  // Restore the room position once, otherwise start at the latest message.
   useEffect(() => {
-    if (activeRoomId && hasJoinedChat) {
-      const savedScroll = sessionStorage.getItem(`${SCROLL_KEY}_${activeRoomId}`);
-      if (savedScroll && messagesScrollRef.current) {
-        setTimeout(() => {
-          if (messagesScrollRef.current) {
-            messagesScrollRef.current.scrollTop = parseInt(savedScroll);
-          }
-        }, 100);
-      }
-    }
-  }, [hasJoinedChat, activeRoomId]);
+    if (!activeRoomId || !hasJoinedChat || restoredRoomRef.current === activeRoomId) return;
+    restoredRoomRef.current = activeRoomId;
+    previousMessageCountRef.current = messages.length;
+    requestAnimationFrame(() => {
+      const el = messagesScrollRef.current;
+      if (!el) return;
+      const saved = sessionStorage.getItem(`${SCROLL_KEY}_${activeRoomId}`);
+      const savedPosition = saved === null ? Number.NaN : Number(saved);
+      el.scrollTop = Number.isFinite(savedPosition) ? savedPosition : el.scrollHeight;
+      isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+      setShowNewMsgButton(false);
+    });
+  }, [hasJoinedChat, activeRoomId, messages.length]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     const el = messagesScrollRef.current;
@@ -80,12 +83,6 @@ export default function LiveChatPage() {
     if (isAtBottom) setShowNewMsgButton(false);
   };
 
-  useEffect(() => {
-    if (hasJoinedChat && messages.length > 0) {
-      requestAnimationFrame(() => scrollToBottom("auto"));
-    }
-  }, [hasJoinedChat]);
-
   // Keep scroll at bottom on container resize (e.g. keyboard viewport adjustments)
   useEffect(() => {
     const el = messagesScrollRef.current;
@@ -107,21 +104,18 @@ export default function LiveChatPage() {
 
     const previousCount = previousMessageCountRef.current;
     const hasNewMessage = messages.length > previousCount;
-    const latestMessage = messages[messages.length - 1];
-    const latestIsMine = !!latestMessage?.userId && latestMessage.userId === user?.id;
-
     previousMessageCountRef.current = messages.length;
 
     if (!hasNewMessage) return;
 
-    if (isAtBottomRef.current || latestIsMine) {
+    if (isAtBottomRef.current) {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => scrollToBottom(latestIsMine ? "smooth" : "auto"));
+        requestAnimationFrame(() => scrollToBottom("smooth"));
       });
     } else {
       setShowNewMsgButton(true);
     }
-  }, [messages, user?.id]);
+  }, [messages]);
 
   const typingLabel = useMemo(() => {
     const users = Object.values(typingUsers);
@@ -202,7 +196,7 @@ export default function LiveChatPage() {
             <div
               ref={messagesScrollRef}
               onScroll={onScroll}
-              className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.035),transparent_34%)] touch-pan-y"
+              className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.035),transparent_34%)] touch-pan-y [overflow-anchor:none] [-webkit-overflow-scrolling:touch]"
             >
               <div
                 className="mx-auto flex flex-col justify-end min-h-full w-full max-w-[760px] px-3 pb-2 pt-3 sm:px-5 md:pb-3 md:pt-4"

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { Avatar } from "../ui/Avatar";
 import { api, Post } from "../../services/api";
-import { MessageSquare, Heart } from "lucide-react";
+import { Heart, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 interface DMBubbleProps {
   message: { 
@@ -14,8 +14,11 @@ interface DMBubbleProps {
     type?: "text" | "post" | "profile"; 
     postId?: string;
     profileId?: string;
+    editedAt?: string | null;
   };
   isMe: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 interface LiveBubbleProps {
@@ -29,6 +32,9 @@ interface LiveBubbleProps {
   postId?: string;
   profileId?: string;
   timeLabel?: string;
+  editedAt?: string | null;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 type MessageBubbleProps = DMBubbleProps | LiveBubbleProps;
@@ -96,15 +102,39 @@ export function MessageBubble(props: MessageBubbleProps) {
   const postId = "message" in props ? props.message.postId : (props as LiveBubbleProps).postId;
   const profileId = "message" in props ? props.message.profileId : (props as LiveBubbleProps).profileId;
   
-  const { 
+  const {
     username, 
     avatarUrl, 
     isFirstInGroup = true, 
     isLastInGroup = true,
-    timeLabel
+    timeLabel,
+    editedAt,
+    onEdit,
+    onDelete,
   } = "message" in props 
-    ? { username: props.isMe ? "You" : "Other", avatarUrl: undefined, timeLabel: undefined } 
+    ? {
+        username: props.isMe ? "You" : "Other",
+        avatarUrl: undefined,
+        timeLabel: undefined,
+        editedAt: props.message.editedAt,
+        onEdit: props.onEdit,
+        onDelete: props.onDelete,
+      }
     : props;
+  const [showMenu, setShowMenu] = useState(false);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canManage = isMe && !!onEdit && !!onDelete;
+
+  const startLongPress = () => {
+    if (!canManage) return;
+    longPressRef.current = setTimeout(() => setShowMenu(true), 500);
+  };
+  const cancelLongPress = () => {
+    if (longPressRef.current) clearTimeout(longPressRef.current);
+    longPressRef.current = null;
+  };
+
+  useEffect(() => cancelLongPress, []);
 
   const isPost = type === "post" || (type === "chat" && !!postId) || (!type && !!postId);
   const isProfile = type === "profile" || (!type && !!profileId);
@@ -138,6 +168,17 @@ export function MessageBubble(props: MessageBubbleProps) {
           </div>
         )}
         <div
+          onContextMenu={(event) => {
+            if (!canManage) return;
+            event.preventDefault();
+            setShowMenu(true);
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType === "touch") startLongPress();
+          }}
+          onPointerUp={cancelLongPress}
+          onPointerCancel={cancelLongPress}
+          onPointerMove={cancelLongPress}
           className={clsx(
             "transition-all duration-300 ease-out relative group/bubble",
             // Only apply bubble styling for text messages
@@ -157,6 +198,35 @@ export function MessageBubble(props: MessageBubbleProps) {
               : ""
           )}
         >
+          {canManage && (
+            <button
+              type="button"
+              aria-label="Message options"
+              aria-expanded={showMenu}
+              onClick={() => setShowMenu((open) => !open)}
+              className="absolute -left-9 top-1/2 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:flex group-hover/bubble:flex md:flex"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          )}
+          {showMenu && canManage && (
+            <>
+              <button
+                type="button"
+                aria-label="Close message menu"
+                className="fixed inset-0 z-30 cursor-default"
+                onClick={() => setShowMenu(false)}
+              />
+              <div className="absolute bottom-full right-0 z-40 mb-2 min-w-32 overflow-hidden rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-2xl">
+                <button type="button" onClick={() => { setShowMenu(false); onEdit(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/[0.08]">
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </button>
+                <button type="button" onClick={() => { setShowMenu(false); onDelete(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10">
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+              </div>
+            </>
+          )}
           {!isPost && !isProfile && (
             <p className="whitespace-pre-wrap break-words">{text}</p>
           )}
@@ -166,9 +236,9 @@ export function MessageBubble(props: MessageBubbleProps) {
             <p className="whitespace-pre-wrap break-words text-zinc-400 italic text-sm">Shared a profile</p>
           )}
         </div>
-        {timeLabel && (
+        {(timeLabel || editedAt) && (
           <div className={clsx("mt-1 text-[10px] font-bold tracking-wider text-zinc-600", isMe ? "mr-1" : "ml-1")}>
-            {timeLabel}
+            {timeLabel}{editedAt ? `${timeLabel ? " · " : ""}(edited)` : ""}
           </div>
         )}
       </div>

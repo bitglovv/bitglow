@@ -1,0 +1,2 @@
+ALTER TABLE dm_messages
+ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP;

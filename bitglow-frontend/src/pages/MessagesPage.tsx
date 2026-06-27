@@ -31,6 +31,8 @@ export default function MessagesPage() {
     setActiveConversation,
     openFriendConversation,
     sendMessage,
+    editMessage,
+    deleteMessage,
   } = useChatStore();
 
   const [mobileView, setMobileView] = useState<"inbox" | "chat">("inbox");
@@ -189,6 +191,8 @@ export default function MessagesPage() {
               onBack={handleChatBack}
               showHeaderBack={isStackedLayout && mobileView === "chat"}
               onSendMessage={handleSendMessage}
+              onEditMessage={(messageId, text) => editMessage(activeConversation.userId, messageId, text)}
+              onDeleteMessage={(messageId) => deleteMessage(activeConversation.userId, messageId)}
               onTyping={() => {}}
               isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}
               isLoadingMessages={isLoadingMessages}
