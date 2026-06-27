@@ -208,6 +208,17 @@ export const dmEditSchema = {
     },
 } as const;
 
+export const dmForwardSchema = {
+    params: {
+        type: "object",
+        required: ["userId", "messageId"],
+        properties: {
+            userId: { type: "string", minLength: 1, maxLength: 64 },
+            messageId: { type: "string", minLength: 1, maxLength: 64 },
+        },
+    },
+} as const;
+
 export const liveCreateSchema = {
     body: {
         type: "object",

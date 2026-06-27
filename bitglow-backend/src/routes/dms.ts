@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { sanitizeText } from "../services/security";
-import { dmEditSchema, dmMessageSchema, dmSendSchema, dmUserSchema } from "./schemas";
+import { dmEditSchema, dmForwardSchema, dmMessageSchema, dmSendSchema, dmUserSchema } from "./schemas";
 import { clients } from "../ws";
 import WebSocket from "ws";
 
@@ -65,6 +65,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
             postId: m.post_id,
             profileId: m.profile_id,
             editedAt: m.edited_at ? new Date(m.edited_at).toISOString() : null,
+            isForwarded: !!m.is_forwarded,
             createdAt: new Date(m.created_at).toISOString()
         }));
     });
@@ -109,6 +110,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
             type: saved.type,
             postId: saved.post_id,
             profileId: saved.profile_id,
+            isForwarded: !!saved.is_forwarded,
             createdAt: new Date(saved.created_at).toISOString()
         };
 
@@ -129,6 +131,44 @@ export async function dmRoutes(fastify: FastifyInstance) {
         }
 
         return responseMsg;
+    });
+
+    fastify.post("/dms/:userId/forward/:messageId", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+        schema: dmForwardSchema,
+    }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const { userId: targetUserId, messageId } = req.params as { userId: string; messageId: string };
+        if (targetUserId === req.auth.id) {
+            return reply.code(400).send({ message: "Cannot forward a message to yourself" });
+        }
+        const source = await db.getForwardableDMMessage(messageId, req.auth.id);
+        if (!source) return reply.code(404).send({ message: "Message not found" });
+        const conversation = await db.getOrCreateDMConversation(req.auth.id, targetUserId);
+        if (!conversation) return reply.code(403).send({ message: "Messaging blocked" });
+        const saved = await db.saveDMMessage(
+            conversation.id,
+            req.auth.id,
+            source.text,
+            source.type || "text",
+            source.post_id,
+            source.profile_id,
+            true
+        );
+        const message = {
+            id: saved.id,
+            senderId: saved.sender_id,
+            receiverId: targetUserId,
+            text: saved.text,
+            type: saved.type,
+            postId: saved.post_id,
+            profileId: saved.profile_id,
+            isForwarded: true,
+            createdAt: new Date(saved.created_at).toISOString(),
+        };
+        broadcastDM([req.auth.id, targetUserId], { type: "server:dm:message", message });
+        return message;
     });
 
     fastify.put("/dms/:userId/messages/:messageId", {
@@ -173,7 +213,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
         const latestMessage = result.latestMessage ? {
             id: result.latestMessage.id,
             senderId: result.latestMessage.sender_id,
-            text: result.latestMessage.text,
+            text: result.latestMessage.is_forwarded ? `Forwarded: ${result.latestMessage.text}` : result.latestMessage.text,
             createdAt: new Date(result.latestMessage.created_at).toISOString(),
         } : null;
         const event = {

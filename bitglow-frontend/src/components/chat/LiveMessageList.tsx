@@ -12,6 +12,7 @@ type ChatMessage = {
   postId?: string;
   profileId?: string;
   editedAt?: string | null;
+  isForwarded?: boolean;
 };
 
 type RoomUser = {
@@ -27,6 +28,8 @@ type Props = {
   isLiveChat?: boolean;
   onEditMessage?: (messageId: string) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onCopyMessage?: (messageId: string) => void;
+  onForwardMessage?: (messageId: string) => void;
 };
 
 function isSameDay(a: Date, b: Date) {
@@ -73,7 +76,7 @@ function formatDateSeparator(date: Date): string {
   return `${monthDay} ${time}`;
 }
 
-export default function LiveMessageList({ messages, selfId, participants = [], isLiveChat = false, onEditMessage, onDeleteMessage }: Props) {
+export default function LiveMessageList({ messages, selfId, participants = [], isLiveChat = false, onEditMessage, onDeleteMessage, onCopyMessage, onForwardMessage }: Props) {
   const userMap = useRef<Record<string, RoomUser>>({});
 
   participants.forEach((p) => {
@@ -135,8 +138,11 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
                   profileId={m.profileId}
                   timeLabel={timeLabel}
                   editedAt={m.editedAt}
+                  isForwarded={m.isForwarded}
                   onEdit={!isLiveChat && m.userId === selfId && m.type === "chat" && onEditMessage ? () => onEditMessage(String(m.id)) : undefined}
                   onDelete={!isLiveChat && m.userId === selfId && onDeleteMessage ? () => onDeleteMessage(String(m.id)) : undefined}
+                  onCopy={!isLiveChat && onCopyMessage ? () => onCopyMessage(String(m.id)) : undefined}
+                  onForward={!isLiveChat && onForwardMessage ? () => onForwardMessage(String(m.id)) : undefined}
                 />
               </div>
             )}

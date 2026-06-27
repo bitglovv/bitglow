@@ -33,6 +33,7 @@ export default function MessagesPage() {
     sendMessage,
     editMessage,
     deleteMessage,
+    forwardMessage,
   } = useChatStore();
 
   const [mobileView, setMobileView] = useState<"inbox" | "chat">("inbox");
@@ -108,6 +109,26 @@ export default function MessagesPage() {
   );
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
+
+  const forwardTargets = useMemo(() => {
+    const targets = new Map<string, { userId: string; username: string; displayName?: string; avatarUrl?: string }>();
+    conversations.forEach((item) => {
+      if (item.userId !== activeConversationId && item.userId !== user?.id) {
+        targets.set(item.userId, item);
+      }
+    });
+    friends.forEach((item) => {
+      if (item.id !== activeConversationId && item.id !== user?.id && !targets.has(item.id)) {
+        targets.set(item.id, {
+          userId: item.id,
+          username: item.username,
+          displayName: item.displayName,
+          avatarUrl: item.avatarUrl,
+        });
+      }
+    });
+    return [...targets.values()];
+  }, [activeConversationId, conversations, friends, user?.id]);
 
   const pushMobileDmHistory = () => {
     if (!isStackedMessagesLayout()) return;
@@ -193,6 +214,8 @@ export default function MessagesPage() {
               onSendMessage={handleSendMessage}
               onEditMessage={(messageId, text) => editMessage(activeConversation.userId, messageId, text)}
               onDeleteMessage={(messageId) => deleteMessage(activeConversation.userId, messageId)}
+              forwardTargets={forwardTargets}
+              onForwardMessage={(messageId, targetUserId) => forwardMessage(targetUserId, messageId)}
               onTyping={() => {}}
               isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}
               isLoadingMessages={isLoadingMessages}

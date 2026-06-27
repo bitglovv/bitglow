@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { Avatar } from "../ui/Avatar";
 import { api, Post } from "../../services/api";
-import { Heart, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, Forward, Heart, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 interface DMBubbleProps {
   message: { 
@@ -15,10 +15,13 @@ interface DMBubbleProps {
     postId?: string;
     profileId?: string;
     editedAt?: string | null;
+    isForwarded?: boolean;
   };
   isMe: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  onCopy?: () => void;
+  onForward?: () => void;
 }
 
 interface LiveBubbleProps {
@@ -33,8 +36,11 @@ interface LiveBubbleProps {
   profileId?: string;
   timeLabel?: string;
   editedAt?: string | null;
+  isForwarded?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  onCopy?: () => void;
+  onForward?: () => void;
 }
 
 type MessageBubbleProps = DMBubbleProps | LiveBubbleProps;
@@ -109,24 +115,31 @@ export function MessageBubble(props: MessageBubbleProps) {
     isLastInGroup = true,
     timeLabel,
     editedAt,
+    isForwarded,
     onEdit,
     onDelete,
+    onCopy,
+    onForward,
   } = "message" in props 
     ? {
         username: props.isMe ? "You" : "Other",
         avatarUrl: undefined,
         timeLabel: undefined,
         editedAt: props.message.editedAt,
+        isForwarded: props.message.isForwarded,
         onEdit: props.onEdit,
         onDelete: props.onDelete,
+        onCopy: props.onCopy,
+        onForward: props.onForward,
       }
     : props;
   const [showMenu, setShowMenu] = useState(false);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const canManage = isMe && !!onEdit && !!onDelete;
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const hasActions = !!onCopy || !!onForward || (isMe && (!!onEdit || !!onDelete));
 
   const startLongPress = () => {
-    if (!canManage) return;
+    if (!hasActions) return;
     longPressRef.current = setTimeout(() => setShowMenu(true), 500);
   };
   const cancelLongPress = () => {
@@ -169,18 +182,27 @@ export function MessageBubble(props: MessageBubbleProps) {
         )}
         <div
           onContextMenu={(event) => {
-            if (!canManage) return;
+            if (!hasActions) return;
             event.preventDefault();
             setShowMenu(true);
           }}
           onPointerDown={(event) => {
-            if (event.pointerType === "touch") startLongPress();
+            if (event.pointerType === "touch") {
+              pointerStartRef.current = { x: event.clientX, y: event.clientY };
+              startLongPress();
+            }
           }}
-          onPointerUp={cancelLongPress}
-          onPointerCancel={cancelLongPress}
-          onPointerMove={cancelLongPress}
+          onPointerUp={() => { pointerStartRef.current = null; cancelLongPress(); }}
+          onPointerCancel={() => { pointerStartRef.current = null; cancelLongPress(); }}
+          onPointerMove={(event) => {
+            const start = pointerStartRef.current;
+            if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) {
+              pointerStartRef.current = null;
+              cancelLongPress();
+            }
+          }}
           className={clsx(
-            "transition-all duration-300 ease-out relative group/bubble",
+            "relative select-none transition-all duration-300 ease-out group/bubble",
             // Only apply bubble styling for text messages
             !isPost && !isProfile
               ? clsx(
@@ -197,19 +219,23 @@ export function MessageBubble(props: MessageBubbleProps) {
                 )
               : ""
           )}
+          style={{ WebkitTouchCallout: "none" }}
         >
-          {canManage && (
+          {hasActions && (
             <button
               type="button"
               aria-label="Message options"
               aria-expanded={showMenu}
               onClick={() => setShowMenu((open) => !open)}
-              className="absolute -left-9 top-1/2 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:flex group-hover/bubble:flex md:flex"
+              className={clsx(
+                "absolute top-1/2 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:flex md:group-hover/bubble:flex",
+                isMe ? "-left-9" : "-right-9"
+              )}
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
           )}
-          {showMenu && canManage && (
+          {showMenu && hasActions && (
             <>
               <button
                 type="button"
@@ -217,19 +243,36 @@ export function MessageBubble(props: MessageBubbleProps) {
                 className="fixed inset-0 z-30 cursor-default"
                 onClick={() => setShowMenu(false)}
               />
-              <div className="absolute bottom-full right-0 z-40 mb-2 min-w-32 overflow-hidden rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-2xl">
-                <button type="button" onClick={() => { setShowMenu(false); onEdit(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/[0.08]">
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </button>
-                <button type="button" onClick={() => { setShowMenu(false); onDelete(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10">
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
-                </button>
+              <div className={clsx("absolute bottom-full z-40 mb-2 min-w-36 overflow-hidden rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-2xl", isMe ? "right-0" : "left-0")}>
+                {onCopy && (
+                  <button type="button" onClick={() => { setShowMenu(false); onCopy(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/[0.08]">
+                    <Copy className="h-3.5 w-3.5" /> Copy
+                  </button>
+                )}
+                {onForward && (
+                  <button type="button" onClick={() => { setShowMenu(false); onForward(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/[0.08]">
+                    <Forward className="h-3.5 w-3.5" /> Forward
+                  </button>
+                )}
+                {isMe && onEdit && (
+                  <button type="button" onClick={() => { setShowMenu(false); onEdit(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/[0.08]">
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                )}
+                {isMe && onDelete && (
+                  <button type="button" onClick={() => { setShowMenu(false); onDelete(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10">
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                )}
               </div>
             </>
           )}
-          {!isPost && !isProfile && (
-            <p className="whitespace-pre-wrap break-words">{text}</p>
+          {isForwarded && (
+            <div className={clsx("mb-1 text-[10px] font-semibold uppercase tracking-wide", isMe ? "text-black/55" : "text-zinc-500")}>
+              Forwarded
+            </div>
           )}
+          {!isPost && !isProfile && <p className="whitespace-pre-wrap break-words">{text}</p>}
           {isPost && postId && <PostPreview postId={postId} />}
           {isProfile && profileId && <SharedProfileCard profileId={profileId} />}
           {isProfile && !profileId && (

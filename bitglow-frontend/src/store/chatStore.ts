@@ -19,6 +19,7 @@ interface ChatState {
   sendMessage: (userId: string, text: string, currentUserId: string) => Promise<void>;
   editMessage: (userId: string, messageId: string, text: string) => Promise<void>;
   deleteMessage: (userId: string, messageId: string) => Promise<void>;
+  forwardMessage: (targetUserId: string, messageId: string) => Promise<void>;
   setTyping: (userId: string, isTyping: boolean) => void;
   setOnline: (userId: string, isOnline: boolean) => void;
   handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => void;
@@ -217,7 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversation.userId === userId
           ? {
               ...conversation,
-              lastMessage: latest?.text || "",
+              lastMessage: latest ? (latest.isForwarded ? `Forwarded: ${latest.text}` : latest.text) : "",
               lastMessageSenderId: latest?.senderId || null,
               lastMessageAt: latest?.createdAt || null,
             }
@@ -233,6 +234,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
       throw error;
     }
+  },
+
+  forwardMessage: async (targetUserId: string, messageId: string) => {
+    await api.dms.forward(targetUserId, messageId);
   },
 
   setTyping: (userId: string, isTyping: boolean) => set((state) => {
@@ -290,7 +295,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (idx !== -1) {
         const copy = {
           ...convs[idx],
-          lastMessage: msg.text,
+          lastMessage: msg.isForwarded ? `Forwarded: ${msg.text}` : msg.text,
           lastMessageAt: msg.createdAt,
           lastMessageSenderId: msg.senderId,
           unreadCount: convs[idx].unreadCount + unreadDelta,

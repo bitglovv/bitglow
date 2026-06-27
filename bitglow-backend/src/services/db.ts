@@ -299,6 +299,7 @@ const initDMTables = async () => {
                 profile_id UUID REFERENCES users(id) ON DELETE SET NULL,
                 read_at TIMESTAMP,
                 edited_at TIMESTAMP,
+                is_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT now()
             );
             DO $$
@@ -320,6 +321,15 @@ const initDMTables = async () => {
                       AND column_name = 'edited_at'
                 ) THEN
                     ALTER TABLE dm_messages ADD COLUMN edited_at TIMESTAMP;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_messages'
+                      AND column_name = 'is_forwarded'
+                ) THEN
+                    ALTER TABLE dm_messages ADD COLUMN is_forwarded BOOLEAN NOT NULL DEFAULT FALSE;
                 END IF;
                 
                 IF NOT EXISTS (
@@ -1231,14 +1241,14 @@ export const db = {
                     u.username as other_username,
                     u.display_name as other_display_name,
                     u.avatar_url as other_avatar_url,
-                    m.text as last_message,
+                    CASE WHEN m.is_forwarded THEN 'Forwarded: ' || m.text ELSE m.text END as last_message,
                     m.sender_id as last_message_sender_id,
                     m.created_at as last_message_at,
                     COALESCE(unread.count, 0)::int as unread_count
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              LEFT JOIN LATERAL (
-                SELECT text, created_at, sender_id
+                SELECT text, created_at, sender_id, is_forwarded
                 FROM dm_messages
                 WHERE conversation_id = c.id
                 ORDER BY created_at DESC
@@ -1260,7 +1270,7 @@ export const db = {
     },
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
-            `SELECT id, sender_id, text, type, post_id, profile_id, edited_at, created_at
+            `SELECT id, sender_id, text, type, post_id, profile_id, edited_at, is_forwarded, created_at
              FROM dm_messages
              WHERE conversation_id = $1
              ORDER BY created_at ASC
@@ -1270,14 +1280,27 @@ export const db = {
         return res.rows;
     },
 
-    async saveDMMessage(conversationId: string, senderId: string, text: string, type: 'text' | 'post' | 'profile' = 'text', postId?: string, profileId?: string) {
+    async saveDMMessage(conversationId: string, senderId: string, text: string, type: 'text' | 'post' | 'profile' = 'text', postId?: string, profileId?: string, isForwarded = false) {
         const res = await pool.query(
-            `INSERT INTO dm_messages (conversation_id, sender_id, text, type, post_id, profile_id)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id, sender_id, text, type, post_id, profile_id, created_at`,
-            [conversationId, senderId, text, type, postId || null, profileId || null]
+            `INSERT INTO dm_messages (conversation_id, sender_id, text, type, post_id, profile_id, is_forwarded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id, sender_id, text, type, post_id, profile_id, is_forwarded, created_at`,
+            [conversationId, senderId, text, type, postId || null, profileId || null, isForwarded]
         );
         return res.rows[0];
+    },
+
+    async getForwardableDMMessage(messageId: string, userId: string) {
+        const res = await pool.query(
+            `SELECT m.text, m.type, m.post_id, m.profile_id
+             FROM dm_messages m
+             JOIN dm_conversations c ON c.id = m.conversation_id
+             WHERE m.id = $1
+               AND (c.user_a = $2 OR c.user_b = $2)
+             LIMIT 1`,
+            [messageId, userId]
+        );
+        return res.rows[0] || null;
     },
 
     async updateOwnDMMessage(messageId: string, senderId: string, otherUserId: string, text: string) {
@@ -1316,7 +1339,7 @@ export const db = {
                 return null;
             }
             const latest = await client.query(
-                `SELECT id, sender_id, text, created_at
+                `SELECT id, sender_id, text, is_forwarded, created_at
                  FROM dm_messages
                  WHERE conversation_id = $1
                  ORDER BY created_at DESC

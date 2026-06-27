@@ -75,6 +75,7 @@ export type DMMessage = {
     postId?: string;
     profileId?: string;
     editedAt?: string | null;
+    isForwarded?: boolean;
     createdAt: string;
 };
 
@@ -443,6 +444,13 @@ export const api = {
             });
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to delete message"));
             return true;
+        },
+        forward: async (userId: string, messageId: string): Promise<DMMessage> => {
+            const res = await fetchWithAuth(`/dms/${userId}/forward/${messageId}`, {
+                method: "POST",
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to forward message"));
+            return res.json();
         },
         markRead: async (userId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/dms/${userId}/read`, {

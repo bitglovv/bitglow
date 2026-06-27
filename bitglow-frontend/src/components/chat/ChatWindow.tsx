@@ -21,6 +21,8 @@ interface ChatWindowProps {
   onTyping: (isTyping: boolean) => void;
   onEditMessage: (messageId: string, text: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
+  forwardTargets: Array<{ userId: string; username: string; displayName?: string; avatarUrl?: string }>;
+  onForwardMessage: (messageId: string, targetUserId: string) => Promise<void>;
   isOnline: boolean;
   isLoadingMessages?: boolean;
   isRequest?: boolean;
@@ -39,6 +41,8 @@ export const ChatWindow = ({
   onTyping,
   onEditMessage,
   onDeleteMessage,
+  forwardTargets,
+  onForwardMessage,
   isOnline,
   isLoadingMessages = false,
   isRequest = false,
@@ -49,6 +53,8 @@ export const ChatWindow = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const [editingMessage, setEditingMessage] = useState<DMMessage | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<DMMessage | null>(null);
+  const [isForwarding, setIsForwarding] = useState(false);
 
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
@@ -174,6 +180,7 @@ export const ChatWindow = ({
                 postId: m.postId,
                 profileId: m.profileId,
                 editedAt: m.editedAt,
+                isForwarded: m.isForwarded,
                 ts: new Date(m.createdAt).getTime(),
                 avatarUrl:
                   m.senderId === currentUserId ? user?.avatarUrl : conversation.avatarUrl,
@@ -191,6 +198,14 @@ export const ChatWindow = ({
                 if (!window.confirm("Delete this message? This will remove it for both people.")) return;
                 if (editingMessage?.id === messageId) setEditingMessage(null);
                 await onDeleteMessage(messageId);
+              }}
+              onCopyMessage={(messageId) => {
+                const message = messages.find((item) => item.id === messageId);
+                if (message) void copyText(message.text);
+              }}
+              onForwardMessage={(messageId) => {
+                const message = messages.find((item) => item.id === messageId);
+                if (message) setForwardingMessage(message);
               }}
             />
             {isTyping && (
@@ -241,6 +256,69 @@ export const ChatWindow = ({
           />
         )}
       </div>
+
+      {forwardingMessage && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+          <button type="button" aria-label="Close forward dialog" className="absolute inset-0" onClick={() => !isForwarding && setForwardingMessage(null)} />
+          <div role="dialog" aria-modal="true" aria-label="Forward message" className="relative z-10 max-h-[70%] w-full overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 shadow-2xl sm:max-w-sm sm:rounded-3xl">
+            <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+              <div>
+                <h2 className="font-bold text-white">Forward message</h2>
+                <p className="mt-0.5 text-xs text-zinc-500">Choose a person from your inbox</p>
+              </div>
+              <button type="button" disabled={isForwarding} onClick={() => setForwardingMessage(null)} className="rounded-full px-3 py-1.5 text-sm font-semibold text-zinc-400 hover:bg-white/[0.07] hover:text-white">
+                Cancel
+              </button>
+            </div>
+            <div className="custom-scrollbar max-h-[50vh] overflow-y-auto p-2">
+              {forwardTargets.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-zinc-500">No other inbox contacts available.</p>
+              ) : (
+                forwardTargets.map((target) => (
+                  <button
+                    key={target.userId}
+                    type="button"
+                    disabled={isForwarding}
+                    onClick={async () => {
+                      setIsForwarding(true);
+                      try {
+                        await onForwardMessage(forwardingMessage.id, target.userId);
+                        setForwardingMessage(null);
+                      } catch (error) {
+                        window.alert(error instanceof Error ? error.message : "Failed to forward message");
+                      } finally {
+                        setIsForwarding(false);
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-white/[0.06] disabled:opacity-50"
+                  >
+                    <Avatar src={target.avatarUrl} alt={target.username} size="sm" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white">{target.displayName || target.username}</div>
+                      <div className="truncate text-xs text-zinc-500">@{target.username}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+}
