@@ -20,10 +20,6 @@ interface ChatState {
   setTyping: (userId: string, isTyping: boolean) => void;
   setOnline: (userId: string, isOnline: boolean) => void;
   handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => void;
-  editMessage: (messageId: string, text: string) => Promise<void>;
-  deleteMessage: (messageId: string) => Promise<void>;
-  handleMessageEdited: (msg: DMMessage & { receiverId?: string }, currentUserId: string) => void;
-  handleMessageDeleted: (data: { messageId: string; conversationId?: string; userId: string; otherUserId: string; lastMessage?: string; lastMessageSenderId?: string | null; lastMessageAt?: string | null }) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -248,79 +244,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!isMe && activeConversationId === otherUserId) {
       void api.dms.markRead(otherUserId);
     }
-  },
-
-  editMessage: async (messageId: string, text: string) => {
-    await api.dms.edit(messageId, text);
-  },
-
-  deleteMessage: async (messageId: string) => {
-    await api.dms.deleteMessage(messageId);
-  },
-
-  handleMessageEdited: (msg: DMMessage & { receiverId?: string }, currentUserId: string) => {
-    set((state) => {
-      let targetUser = msg.senderId === currentUserId ? (msg.receiverId || "") : msg.senderId;
-      if (!targetUser || !state.messages[targetUser]) {
-        for (const uid in state.messages) {
-          if (state.messages[uid].some(m => m.id === msg.id)) {
-            targetUser = uid;
-            break;
-          }
-        }
-      }
-      if (!targetUser || !state.messages[targetUser]) return {};
-
-      const list = state.messages[targetUser] || [];
-      const nextList = list.map(m => m.id === msg.id ? { ...m, text: msg.text, isEdited: true } : m);
-      
-      const lastM = nextList[nextList.length - 1];
-      const convs = state.conversations.map(c => {
-        if (c.userId === targetUser && lastM && lastM.id === msg.id) {
-          return { ...c, lastMessage: msg.text };
-        }
-        return c;
-      });
-
-      return {
-        messages: { ...state.messages, [targetUser]: nextList },
-        conversations: convs
-      };
-    });
-  },
-
-  handleMessageDeleted: (data: { messageId: string; conversationId?: string; userId: string; otherUserId: string; lastMessage?: string; lastMessageSenderId?: string | null; lastMessageAt?: string | null }) => {
-    set((state) => {
-      let targetUser = "";
-      for (const uid in state.messages) {
-        if (state.messages[uid].some(m => m.id === data.messageId)) {
-          targetUser = uid;
-          break;
-        }
-      }
-      if (!targetUser) {
-        targetUser = data.userId === data.otherUserId ? data.userId : (data.otherUserId || data.userId);
-      }
-
-      const list = state.messages[targetUser] || [];
-      const nextList = list.filter(m => m.id !== data.messageId);
-
-      const convs = state.conversations.map(c => {
-        if (c.userId === targetUser) {
-          return {
-            ...c,
-            lastMessage: data.lastMessage !== undefined ? data.lastMessage : (nextList.length > 0 ? nextList[nextList.length - 1].text : ""),
-            lastMessageSenderId: data.lastMessageSenderId !== undefined ? data.lastMessageSenderId : (nextList.length > 0 ? nextList[nextList.length - 1].senderId : null),
-            lastMessageAt: data.lastMessageAt !== undefined ? data.lastMessageAt : (nextList.length > 0 ? nextList[nextList.length - 1].createdAt : null)
-          };
-        }
-        return c;
-      });
-
-      return {
-        messages: { ...state.messages, [targetUser]: nextList },
-        conversations: convs
-      };
-    });
   },
 }));

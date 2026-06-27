@@ -74,7 +74,6 @@ export type DMMessage = {
     type: 'text' | 'post' | 'profile';
     postId?: string;
     profileId?: string;
-    isEdited?: boolean;
     createdAt: string;
 };
 
@@ -437,20 +436,6 @@ export const api = {
         },
         deleteConversation: async (userId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/dms/${userId}`, {
-                method: "DELETE",
-            });
-            return res.ok;
-        },
-        edit: async (messageId: string, text: string): Promise<DMMessage | null> => {
-            const res = await fetchWithAuth(`/dms/message/${messageId}`, {
-                method: "PUT",
-                body: JSON.stringify({ text }),
-            });
-            if (!res.ok) return null;
-            return res.json();
-        },
-        deleteMessage: async (messageId: string): Promise<boolean> => {
-            const res = await fetchWithAuth(`/dms/message/${messageId}`, {
                 method: "DELETE",
             });
             return res.ok;

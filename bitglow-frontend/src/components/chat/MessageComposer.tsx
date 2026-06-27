@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Send, Pencil, X, Check } from "lucide-react";
+import { Send } from "lucide-react";
 import clsx from "clsx";
 
 export interface MessageComposerProps {
@@ -11,9 +11,6 @@ export interface MessageComposerProps {
   disabled?: boolean;
   compact?: boolean;
   variant?: "default" | "live";
-  editingMessage?: { id: string; text: string } | null;
-  onCancelEdit?: () => void;
-  onSaveEdit?: (messageId: string, text: string) => void;
 }
 
 const MAX_TEXTAREA_HEIGHT = 140; // Max height for 5-6 lines
@@ -27,28 +24,10 @@ export const MessageComposer = ({
   disabled,
   compact = false,
   variant = "default",
-  editingMessage,
-  onCancelEdit,
-  onSaveEdit,
 }: MessageComposerProps) => {
   const [text, setText] = useState("");
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (editingMessage) {
-      setText(editingMessage.text);
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus({ preventScroll: true });
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = textareaRef.current.value.length;
-          textareaRef.current.selectionEnd = textareaRef.current.value.length;
-        }
-      });
-    } else {
-      setText("");
-    }
-  }, [editingMessage]);
 
   const syncTextareaHeight = () => {
     const ta = textareaRef.current;
@@ -87,13 +66,6 @@ export const MessageComposer = ({
     const finalMsg = text.trim();
     const textarea = textareaRef.current;
 
-    if (editingMessage && onSaveEdit) {
-      onSaveEdit(editingMessage.id, finalMsg);
-      setText("");
-      if (onCancelEdit) onCancelEdit();
-      return;
-    }
-
     if (onSendMessage) onSendMessage(finalMsg);
     if (onSend) onSend(finalMsg);
 
@@ -118,7 +90,7 @@ export const MessageComposer = ({
 
     if (onChange) onChange(value);
 
-    if (onTyping && !editingMessage) {
+    if (onTyping) {
       onTyping(true);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
@@ -130,71 +102,48 @@ export const MessageComposer = ({
   const isLive = variant === "live";
 
   return (
-    <div className="flex flex-col w-full">
-      {editingMessage && (
-        <div className="flex items-center justify-between px-3 py-1.5 mb-1.5 bg-brand/10 border border-brand/20 rounded-xl text-xs">
-          <div className="flex items-center gap-2 truncate">
-            <Pencil className="w-3.5 h-3.5 text-brand shrink-0" />
-            <span className="font-semibold text-brand tracking-wide">Editing message</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setText("");
-              if (onCancelEdit) onCancelEdit();
-            }}
-            className="text-zinc-400 hover:text-white p-0.5 rounded-md transition-colors"
-            title="Cancel edit"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div
+      className={clsx(
+        "flex w-full max-w-full items-end transition-colors duration-200 ease-out",
+        isLive
+          ? "gap-2.5 rounded-[28px] border border-white/[0.08] bg-zinc-950/95 p-2 shadow-[0_-10px_34px_rgba(0,0,0,0.32)]"
+          : "gap-2 bg-black",
+        !isLive && (compact ? "p-0 py-0" : "p-3 bg-black")
       )}
-      <div
+    >
+      <div className="relative min-h-11 min-w-0 flex-1 rounded-[22px]">
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={1}
+          className={clsx(
+            "box-border min-h-[44px] w-full max-w-full resize-none rounded-[22px] border-0 px-4 py-2.5 text-[16px] leading-[1.4] text-white placeholder:text-zinc-500 outline-none ring-0 transition-[background-color] duration-200 ease-out focus:ring-0 md:text-[15px]",
+            isLive
+              ? "bg-white/[0.07] hover:bg-white/[0.085] focus:bg-white/[0.095]"
+              : "bg-white/[0.055] hover:bg-white/[0.07] focus:bg-white/[0.08]",
+            disabled && "cursor-not-allowed opacity-50"
+          )}
+        />
+      </div>
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={handleSendAction}
+        disabled={!text.trim() || disabled}
+        aria-label="Send message"
         className={clsx(
-          "flex w-full max-w-full items-end transition-colors duration-200 ease-out",
-          isLive
-            ? "gap-2.5 rounded-[28px] border border-white/[0.08] bg-zinc-950/95 p-2 shadow-[0_-10px_34px_rgba(0,0,0,0.32)]"
-            : "gap-2 bg-black",
-          !isLive && (compact ? "p-0 py-0" : "p-3 bg-black")
+          "mb-0.5 flex shrink-0 self-end items-center justify-center rounded-full bg-brand text-black transition-all duration-200 ease-out hover:bg-brand-light focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/25 active:scale-95 disabled:scale-100 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-60",
+          isLive ? "h-11 w-11 shadow-[0_10px_24px_rgba(16,185,129,0.22)]" : "h-10 w-10"
         )}
       >
-        <div className="relative min-h-11 min-w-0 flex-1 rounded-[22px]">
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleInputChange}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className={clsx(
-              "box-border min-h-[44px] w-full max-w-full resize-none rounded-[22px] border-0 px-4 py-2.5 text-[16px] leading-[1.4] text-white placeholder:text-zinc-500 outline-none ring-0 transition-[background-color] duration-200 ease-out focus:ring-0 md:text-[15px]",
-              isLive
-                ? "bg-white/[0.07] hover:bg-white/[0.085] focus:bg-white/[0.095]"
-                : "bg-white/[0.055] hover:bg-white/[0.07] focus:bg-white/[0.08]",
-              disabled && "cursor-not-allowed opacity-50"
-            )}
-          />
-        </div>
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => e.preventDefault()}
-          onClick={handleSendAction}
-          disabled={!text.trim() || disabled}
-          aria-label={editingMessage ? "Save message" : "Send message"}
-          className={clsx(
-            "mb-0.5 flex shrink-0 self-end items-center justify-center rounded-full bg-brand text-black transition-all duration-200 ease-out hover:bg-brand-light focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/25 active:scale-95 disabled:scale-100 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-60",
-            isLive ? "h-11 w-11 shadow-[0_10px_24px_rgba(16,185,129,0.22)]" : "h-10 w-10"
-          )}
-        >
-          {editingMessage ? <Check className="h-5 w-5 stroke-[2.5]" /> : <Send className="h-5 w-5" />}
-        </button>
-      </div>
+        <Send className="h-5 w-5" />
+      </button>
     </div>
   );
 };
-
-export default MessageComposer;
 
 export default MessageComposer;

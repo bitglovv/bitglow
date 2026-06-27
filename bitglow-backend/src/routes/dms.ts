@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { sanitizeText } from "../services/security";
-import { dmEditSchema, dmMessageParamSchema, dmSendSchema, dmUserSchema } from "./schemas";
+import { dmSendSchema, dmUserSchema } from "./schemas";
 import { clients } from "../ws";
 import WebSocket from "ws";
 
@@ -64,7 +64,6 @@ export async function dmRoutes(fastify: FastifyInstance) {
             type: m.type || 'text',
             postId: m.post_id,
             profileId: m.profile_id,
-            isEdited: !!m.is_edited,
             createdAt: new Date(m.created_at).toISOString()
         }));
     });
@@ -109,7 +108,6 @@ export async function dmRoutes(fastify: FastifyInstance) {
             type: saved.type,
             postId: saved.post_id,
             profileId: saved.profile_id,
-            isEdited: !!saved.is_edited,
             createdAt: new Date(saved.created_at).toISOString()
         };
 
@@ -130,115 +128,6 @@ export async function dmRoutes(fastify: FastifyInstance) {
         }
 
         return responseMsg;
-    });
-
-    /**
-     * PUT /api/dms/message/:messageId
-     * Edit a message sent by current user
-     */
-    fastify.put("/dms/message/:messageId", { preHandler: fastify.requireAuth, schema: dmEditSchema }, async (req, reply) => {
-        if (!req.auth) {
-            return reply.code(401).send({ message: "Not authenticated" });
-        }
-
-        const userId = req.auth.id;
-        const { messageId } = req.params as { messageId: string };
-        const { text } = req.body as { text: string };
-
-        const existing = await db.getDMMessageById(messageId);
-        if (!existing) {
-            return reply.code(404).send({ message: "Message not found" });
-        }
-        if (existing.sender_id !== userId) {
-            return reply.code(403).send({ message: "Access denied" });
-        }
-
-        const cleanText = sanitizeText(text.trim(), 2000);
-        if (!cleanText) {
-            return reply.code(400).send({ message: "Invalid text" });
-        }
-
-        const updated = await db.updateDMMessage(messageId, cleanText);
-        if (!updated) {
-            return reply.code(500).send({ message: "Failed to update message" });
-        }
-
-        const otherUserId = existing.user_a === userId ? existing.user_b : existing.user_a;
-        const responseMsg = {
-            id: updated.id,
-            conversationId: updated.conversation_id,
-            senderId: updated.sender_id,
-            receiverId: otherUserId,
-            text: updated.text,
-            type: updated.type,
-            postId: updated.post_id,
-            profileId: updated.profile_id,
-            isEdited: true,
-            createdAt: new Date(updated.created_at).toISOString()
-        };
-
-        const payload = JSON.stringify({
-            type: "server:dm:edited",
-            message: responseMsg
-        });
-
-        for (const client of clients) {
-            if (
-                (client.userId === existing.user_a || client.userId === existing.user_b) &&
-                client.socket.readyState === WebSocket.OPEN
-            ) {
-                client.socket.send(payload);
-            }
-        }
-
-        return responseMsg;
-    });
-
-    /**
-     * DELETE /api/dms/message/:messageId
-     * Delete a message sent by current user
-     */
-    fastify.delete("/dms/message/:messageId", { preHandler: fastify.requireAuth, schema: dmMessageParamSchema }, async (req, reply) => {
-        if (!req.auth) {
-            return reply.code(401).send({ message: "Not authenticated" });
-        }
-
-        const userId = req.auth.id;
-        const { messageId } = req.params as { messageId: string };
-
-        const existing = await db.getDMMessageById(messageId);
-        if (!existing) {
-            return reply.code(404).send({ message: "Message not found" });
-        }
-        if (existing.sender_id !== userId) {
-            return reply.code(403).send({ message: "Access denied" });
-        }
-
-        await db.deleteDMMessage(messageId);
-        const lastMsg = await db.getLastDMMessageForConversation(existing.conversation_id);
-        const otherUserId = existing.user_a === userId ? existing.user_b : existing.user_a;
-
-        const payload = JSON.stringify({
-            type: "server:dm:deleted",
-            messageId: existing.id,
-            conversationId: existing.conversation_id,
-            userId,
-            otherUserId,
-            lastMessage: lastMsg ? lastMsg.text : "",
-            lastMessageSenderId: lastMsg ? lastMsg.sender_id : null,
-            lastMessageAt: lastMsg ? new Date(lastMsg.created_at).toISOString() : null
-        });
-
-        for (const client of clients) {
-            if (
-                (client.userId === existing.user_a || client.userId === existing.user_b) &&
-                client.socket.readyState === WebSocket.OPEN
-            ) {
-                client.socket.send(payload);
-            }
-        }
-
-        return { ok: true, messageId: existing.id };
     });
 
     /**
