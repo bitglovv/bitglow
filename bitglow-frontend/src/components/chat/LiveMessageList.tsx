@@ -13,6 +13,7 @@ type ChatMessage = {
   profileId?: string;
   editedAt?: string | null;
   isForwarded?: boolean;
+  canEdit?: boolean;
 };
 
 type RoomUser = {
@@ -139,7 +140,7 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
                   timeLabel={timeLabel}
                   editedAt={m.editedAt}
                   isForwarded={m.isForwarded}
-                  onEdit={!isLiveChat && m.userId === selfId && m.type === "chat" && onEditMessage ? () => onEditMessage(String(m.id)) : undefined}
+                  onEdit={!isLiveChat && m.userId === selfId && m.type === "chat" && m.canEdit && onEditMessage ? () => onEditMessage(String(m.id)) : undefined}
                   onDelete={!isLiveChat && m.userId === selfId && onDeleteMessage ? () => onDeleteMessage(String(m.id)) : undefined}
                   onCopy={!isLiveChat && onCopyMessage ? () => onCopyMessage(String(m.id)) : undefined}
                   onForward={!isLiveChat && onForwardMessage ? () => onForwardMessage(String(m.id)) : undefined}

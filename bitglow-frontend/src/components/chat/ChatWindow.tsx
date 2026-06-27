@@ -55,9 +55,18 @@ export const ChatWindow = ({
   const [editingMessage, setEditingMessage] = useState<DMMessage | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<DMMessage | null>(null);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [deletingMessage, setDeletingMessage] = useState<DMMessage | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [now, setNow] = useState(Date.now());
 
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Track if user scroll is at the bottom
   const handleScroll = () => {
@@ -181,6 +190,7 @@ export const ChatWindow = ({
                 profileId: m.profileId,
                 editedAt: m.editedAt,
                 isForwarded: m.isForwarded,
+                canEdit: now - new Date(m.createdAt).getTime() <= 5 * 60 * 1000,
                 ts: new Date(m.createdAt).getTime(),
                 avatarUrl:
                   m.senderId === currentUserId ? user?.avatarUrl : conversation.avatarUrl,
@@ -195,9 +205,8 @@ export const ChatWindow = ({
               onDeleteMessage={async (messageId) => {
                 const message = messages.find((item) => item.id === messageId);
                 if (message?.senderId !== currentUserId) return;
-                if (!window.confirm("Delete this message? This will remove it for both people.")) return;
-                if (editingMessage?.id === messageId) setEditingMessage(null);
-                await onDeleteMessage(messageId);
+                setDeleteError("");
+                setDeletingMessage(message);
               }}
               onCopyMessage={(messageId) => {
                 const message = messages.find((item) => item.id === messageId);
@@ -304,9 +313,71 @@ export const ChatWindow = ({
           </div>
         </div>
       )}
+
+      {deletingMessage && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Close delete dialog"
+            className="absolute inset-0"
+            onClick={() => !isDeleting && setDeletingMessage(null)}
+          />
+          <div role="alertdialog" aria-modal="true" aria-labelledby="delete-message-title" className="relative z-10 w-full max-w-sm rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-2xl">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+              <TrashIcon />
+            </div>
+            <h2 id="delete-message-title" className="text-lg font-bold text-white">Delete message?</h2>
+            <p className="mt-2 text-sm leading-5 text-zinc-400">
+              This message will be removed from both conversations. This action cannot be undone.
+            </p>
+            <div className="mt-3 truncate rounded-xl bg-white/[0.04] px-3 py-2 text-xs text-zinc-500">
+              {deletingMessage.text}
+            </div>
+            {deleteError && <p className="mt-3 text-xs font-medium text-red-400">{deleteError}</p>}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingMessage(null)}
+                className="flex-1 rounded-full bg-white/[0.07] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.1] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  setDeleteError("");
+                  try {
+                    if (editingMessage?.id === deletingMessage.id) setEditingMessage(null);
+                    await onDeleteMessage(deletingMessage.id);
+                    setDeletingMessage(null);
+                  } catch (error) {
+                    setDeleteError(error instanceof Error ? error.message : "Failed to delete message");
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+function TrashIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6" />
+    </svg>
+  );
+}
 
 async function copyText(text: string) {
   try {

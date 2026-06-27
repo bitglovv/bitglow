@@ -1313,6 +1313,7 @@ export const db = {
                AND m.conversation_id = c.id
                AND ((c.user_a = $2 AND c.user_b = $3) OR (c.user_a = $3 AND c.user_b = $2))
                AND COALESCE(m.type, 'text') = 'text'
+               AND m.created_at >= now() - INTERVAL '5 minutes'
              RETURNING m.id, m.sender_id, m.text, m.type, m.post_id, m.profile_id,
                        m.edited_at, m.created_at`,
             [messageId, senderId, otherUserId, text]

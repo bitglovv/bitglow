@@ -155,7 +155,7 @@ export function MessageBubble(props: MessageBubbleProps) {
   return (
     <div
       className={clsx(
-        "group flex w-full px-2 transition-all duration-300 ease-out",
+        "group/message flex w-full px-2 transition-all duration-300 ease-out",
         isMe ? "justify-end" : "justify-start",
         isFirstInGroup ? "mt-3" : "mt-0.5",
         isLastInGroup ? "mb-1.5" : "mb-0"
@@ -228,7 +228,7 @@ export function MessageBubble(props: MessageBubbleProps) {
               aria-expanded={showMenu}
               onClick={() => setShowMenu((open) => !open)}
               className={clsx(
-                "absolute top-1/2 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:flex md:group-hover/bubble:flex",
+                "absolute top-1/2 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:flex md:group-hover/message:flex",
                 isMe ? "-left-9" : "-right-9"
               )}
             >
@@ -268,7 +268,11 @@ export function MessageBubble(props: MessageBubbleProps) {
             </>
           )}
           {isForwarded && (
-            <div className={clsx("mb-1 text-[10px] font-semibold uppercase tracking-wide", isMe ? "text-black/55" : "text-zinc-500")}>
+            <div className={clsx(
+              "mb-1.5 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em]",
+              isMe ? "border-black/15 bg-black/10 text-black/65" : "border-brand/20 bg-brand/10 text-brand/80"
+            )}>
+              <Forward className="h-2.5 w-2.5" />
               Forwarded
             </div>
           )}

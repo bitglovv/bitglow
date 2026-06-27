@@ -183,7 +183,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         const saved = await db.updateOwnDMMessage(messageId, req.auth.id, otherId, cleanText);
         if (!saved) {
-            return reply.code(403).send({ message: "You can only edit your own text messages" });
+            return reply.code(403).send({ message: "Messages can only be edited by their sender within 5 minutes" });
         }
         const message = {
             id: saved.id,
