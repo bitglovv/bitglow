@@ -107,9 +107,16 @@ server.setErrorHandler(async (error, request, reply) => {
     });
   }
   const statusCode = Number((error as any).statusCode);
-  if (statusCode >= 400 && statusCode < 500) {
-    return reply.code(statusCode).send({ message: statusCode === 404 ? "Not found" : error.message });
-  }
+ if (statusCode >= 400 && statusCode < 500) {
+    const message =
+        error instanceof Error
+            ? error.message
+            : "Request failed";
+
+    return reply.code(statusCode).send({
+        message: statusCode === 404 ? "Not found" : message,
+    });
+}
   if ((error as any).code === "23505") {
     return reply.code(409).send({ message: "Resource already exists" });
   }

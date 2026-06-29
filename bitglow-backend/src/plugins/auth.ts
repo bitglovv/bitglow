@@ -15,7 +15,7 @@ declare module "fastify" {
 }
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
-    fastify.decorateRequest("auth", null);
+    fastify.decorateRequest("auth", undefined);
 
     fastify.decorate("requireAuth", async (request: any, reply: any) => {
         const token = parseBearerToken(request.headers.authorization);
