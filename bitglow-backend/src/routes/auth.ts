@@ -190,16 +190,30 @@ export async function authRoutes(fastify: FastifyInstance) {
         if (!session) {
             return reply.code(401).send({ message: "Invalid or expired refresh token" });
         }
-        if (dbUser.is_banned) {
-            await logSecurityEvent("login_failure", req, { identifier: normalizedIdentifier, reason: "account_disabled" }, dbUser.id);
-            return reply.code(401).send({ message: "Invalid username/email or password" });
-        }
-
         const user = await db.getUserById(session.user_id);
-        if (!user) {
-            await db.revokeSessionById(session.id);
-            return reply.code(401).send({ message: "Invalid or expired refresh token" });
-        }
+
+if (!user) {
+    await db.revokeSessionById(session.id);
+    return reply.code(401).send({
+        message: "Invalid or expired refresh token"
+    });
+}
+
+if (user.is_banned) {
+    await db.revokeSessionById(session.id);
+
+    await logSecurityEvent(
+        "token_refresh_denied",
+        req,
+        { reason: "account_disabled" },
+        user.id
+    );
+
+    return reply.code(403).send({
+        message: "Account has been disabled"
+    });
+}
+       
 
         const token = issueAccessToken({ id: user.id, username: user.username, sid: session.sid });
         const nextRefreshToken = issueRefreshToken();
