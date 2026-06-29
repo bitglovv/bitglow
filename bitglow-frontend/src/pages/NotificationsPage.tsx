@@ -5,6 +5,7 @@ import { ArrowLeft, UserPlus } from "lucide-react";
 import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
 import { navigateBack } from "../utils/navigateBack";
+import Header from "../components/common/Header";
 import clsx from "clsx";
 import {
     dispatchNotificationsUpdated,
@@ -318,22 +319,27 @@ export default function NotificationsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-black text-white selection:bg-blue-500/30">
-            <header className="sticky top-0 z-20 bg-black/80 backdrop-blur-xl transition-all">
-                <div className="mx-auto flex max-w-lg items-center gap-2 px-2 py-3">
+        <div className="h-screen bg-black text-white relative selection:bg-blue-500/30 flex flex-col overflow-hidden">
+            {/* Background */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[520px] bg-brand/5 blur-[140px] opacity-50" />
+                <div className="absolute inset-0 bg-mesh opacity-[0.012]" />
+            </div>
+
+            <Header />
+
+            <main className="relative z-10 flex-1 w-full px-4 md:px-6 pt-6 pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-8 space-y-6 max-w-5xl mx-auto overflow-y-auto custom-scrollbar">
+                <div className="flex items-center gap-3 pb-3 border-b border-white/5">
                     <button
                         type="button"
                         onClick={() => navigateBack(navigate, "/home")}
-                        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-all hover:bg-white/10 active:scale-95"
-                        aria-label="Go back"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.04] text-white transition hover:bg-white/[0.08] active:scale-95"
+                        aria-label="Back"
                     >
-                        <ArrowLeft className="h-6 w-6" />
+                        <ArrowLeft className="h-5 w-5" />
                     </button>
-                    <h1 className="text-xl font-bold tracking-tight">Notifications</h1>
+                    <h1 className="text-[24px] font-black tracking-tight">Notifications</h1>
                 </div>
-            </header>
-
-            <main className="mx-auto max-w-lg pb-[calc(80px+env(safe-area-inset-bottom))]">
                 {loading ? (
                     <div className="flex justify-center py-32">
                         <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-800 border-t-white/80" />

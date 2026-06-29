@@ -18,9 +18,9 @@ export const Button: React.FC<ButtonProps> = ({
     const baseStyles = 'inline-flex items-center justify-center font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100';
 
     const variants = {
-        primary: 'bg-[#F7E7CE] text-[#102C26] shadow-[0_12px_28px_-14px_rgba(247,231,206,0.28)] hover:-translate-y-[1px] hover:brightness-[1.03] focus:ring-2 focus:ring-[#F7E7CE]/25',
-        secondary: 'bg-transparent text-[#F7E7CE] border border-[#102C26] backdrop-blur-xl hover:bg-[#102C26]/28 hover:border-[#1b463c] shadow-[0_4px_15px_-3px_rgba(0,0,0,0.4)] active:bg-[#102C26]/36 transition-all',
-        ghost: 'text-[rgba(247,231,206,0.56)] hover:text-[#F7E7CE] hover:bg-[#102C26]/24 focus:ring-2 focus:ring-[#F7E7CE]/10',
+        primary: 'bg-brand text-black shadow-lg shadow-brand/20 hover:-translate-y-[1px] hover:brightness-[1.03] focus:ring-2 focus:ring-brand/25',
+        secondary: 'bg-transparent text-white border border-white/10 hover:bg-white/5 shadow-[0_4px_15px_-3px_rgba(0,0,0,0.4)] active:scale-[0.98] transition-all',
+        ghost: 'text-zinc-400 hover:text-white hover:bg-white/5 focus:ring-2 focus:ring-white/10',
         danger: 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 focus:ring-2 focus:ring-red-500/40',
     };
 

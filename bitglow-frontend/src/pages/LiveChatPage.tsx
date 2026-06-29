@@ -143,7 +143,7 @@ export default function LiveChatPage() {
         // Welcome Screen
         <>
           <Header hideActions={true} hideBottomNav={false} />
-          <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-6 pb-[80px]">
+          <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-6 pb-[80px] w-full max-w-5xl mx-auto px-4 md:px-6">
             <div className="max-w-sm w-full flex flex-col items-center justify-center text-center">
               <img src={LiveChatIcon} alt="Live Chat" className="live-icon-xl mx-auto mb-6" />
               <h1 className="text-3xl font-black mb-2 tracking-tight text-white">{roomTitle}</h1>
@@ -192,7 +192,7 @@ export default function LiveChatPage() {
             }
           />
 
-          <main className="flex min-h-0 flex-1 flex-col">
+          <main className="flex min-h-0 flex-1 flex-col w-full max-w-5xl mx-auto px-4 md:px-6">
             <div
               ref={messagesScrollRef}
               onScroll={onScroll}

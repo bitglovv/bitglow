@@ -13,14 +13,14 @@ export function LandingNav() {
                 <div className="flex items-center gap-2 sm:gap-3">
                     <Link
                         to="/login"
-                        className="inline-flex h-10 items-center justify-center rounded-full border border-[#102C26] px-4 text-sm font-medium text-[#F7E7CE] transition duration-200 hover:bg-[#102C26]/28 hover:text-[#F7E7CE]"
+                        className="inline-flex h-10 items-center justify-center rounded-full border border-brand/40 px-4 text-sm font-medium text-brand transition duration-200 hover:bg-brand/10 hover:border-brand/60"
                     >
                         Log in
                     </Link>
 
                     <Link
                         to="/signup"
-                        className="hidden sm:inline-flex h-10 items-center justify-center rounded-full bg-[#F7E7CE] px-4 text-sm font-semibold text-[#102C26] shadow-[0_16px_36px_-26px_rgba(247,231,206,0.45)] transition duration-200 hover:-translate-y-[1px] hover:brightness-[1.03] active:translate-y-[1px] sm:px-5"
+                        className="hidden sm:inline-flex h-10 items-center justify-center rounded-full bg-brand px-4 text-sm font-semibold text-black shadow-lg shadow-brand/20 transition duration-200 hover:-translate-y-[1px] hover:brightness-[1.03] active:translate-y-[1px] sm:px-5"
                     >
                         Sign up
                     </Link>

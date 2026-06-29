@@ -114,7 +114,7 @@ export function HeroSection() {
                     >
                         <Link
                             to="/signup"
-                            className="relative inline-flex h-14 w-full items-center justify-center overflow-hidden rounded-full bg-[#F7E7CE] px-6 text-sm font-semibold text-[#102C26] shadow-[0_22px_48px_-24px_rgba(247,231,206,0.34)] transition duration-200 hover:-translate-y-[3px] hover:scale-[1.02] hover:brightness-[1.03] active:translate-y-[1px] sm:w-auto sm:min-w-[10rem]"
+                            className="relative inline-flex h-14 w-full items-center justify-center overflow-hidden rounded-full bg-brand px-6 text-sm font-semibold text-black shadow-lg shadow-brand/20 transition duration-200 hover:-translate-y-[3px] hover:scale-[1.02] hover:brightness-[1.03] active:translate-y-[1px] sm:w-auto sm:min-w-[10rem]"
                         >
                             <span className="pointer-events-none absolute inset-x-6 top-2 h-5 rounded-full bg-white/35 blur-md" />
                             <span className="relative z-10">Sign up</span>
@@ -122,7 +122,7 @@ export function HeroSection() {
 
                         <Link
                             to="/login"
-                            className="inline-flex h-14 w-full items-center justify-center rounded-full border border-[#102C26] bg-transparent px-6 text-sm font-medium text-[#F7E7CE] shadow-[0_16px_34px_-24px_rgba(0,0,0,0.26)] transition duration-200 hover:-translate-y-[2px] hover:border-[#1b463c] hover:bg-[#102C26]/28 hover:shadow-[0_18px_38px_-24px_rgba(16,44,38,0.3)] active:translate-y-[1px] sm:w-auto sm:min-w-[10rem]"
+                            className="inline-flex h-14 w-full items-center justify-center rounded-full border border-brand/40 bg-transparent px-6 text-sm font-medium text-brand shadow-[0_16px_34px_-24px_rgba(0,0,0,0.26)] transition duration-200 hover:-translate-y-[2px] hover:border-brand/60 hover:bg-brand/10 hover:shadow-[0_18px_38px_-24px_rgba(16,44,38,0.3)] active:translate-y-[1px] sm:w-auto sm:min-w-[10rem]"
                         >
                             Log in
                         </Link>

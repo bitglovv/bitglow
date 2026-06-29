@@ -356,8 +356,8 @@ export default function HomePage() {
 
       <Header />
 
-      <main className="relative z-10 flex-1 w-full px-3 sm:px-6 pt-6 pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-8 space-y-6 md:max-w-4xl md:mx-auto overflow-y-auto custom-scrollbar">
-        <div className="space-y-4" id="compose">
+      <main className="relative z-10 flex-1 w-full px-4 md:px-6 pt-6 pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-8 space-y-6 md:max-w-5xl md:mx-auto overflow-y-auto custom-scrollbar">
+        <div className="space-y-4 max-w-4xl mx-auto w-full" id="compose">
           <Composer user={user} onPostCreated={(p) => setPosts((prev) => [p, ...prev])} />
           {isLoading || isLoadingFeed ? (
             <div className="space-y-4">
