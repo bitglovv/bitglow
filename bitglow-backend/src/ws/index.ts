@@ -4,11 +4,29 @@ import { randomUUID } from "crypto";
 import { ClientMeta, handleMessage, broadcastPresence, broadcastRoomPresence, roomUsers, userMessageTimestamps } from "./handlers";
 import type { FastifyInstance } from "fastify";
 import { db } from "../services/db";
+import { env } from "../config/env";
 
 export const clients = new Set<ClientMeta>();
 
 export function startWS(httpServer: any) {
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = new WebSocketServer({
+    server: httpServer,
+    maxPayload: env.WS_MAX_PAYLOAD_BYTES,
+    verifyClient: ({ origin }, done) => {
+      if (!origin || env.CORS_ORIGINS.includes(origin)) {
+        done(true);
+        return;
+      }
+      done(false, 403, "Origin not allowed");
+    },
+  });
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) client.ping();
+    }
+  }, 30_000);
+  heartbeat.unref();
+  wss.on("close", () => clearInterval(heartbeat));
 
     wss.on("connection", (socket: WebSocket, request: any) => {
         const userId = randomUUID();
@@ -21,6 +39,8 @@ export function startWS(httpServer: any) {
             isAuth: false,
             helloReceived: false,
             lastMessageAt: 0,
+            lastTypingAt: 0,
+            lastPresenceAt: 0,
             ipAddress: request.socket?.remoteAddress?.toString(),
             userAgent: request.headers?.["user-agent"]?.toString(),
             rooms: new Set(),
@@ -36,7 +56,12 @@ export function startWS(httpServer: any) {
 
     // Handle incoming messages
     socket.on("message", (raw) => {
-        handleMessage(meta, raw, clients);
+        void handleMessage(meta, raw, clients).catch((error: unknown) => {
+          console.error("[ws] message handler failed", error);
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "server:error", message: "Unable to process message", ts: Date.now() }));
+          }
+        });
     });
 
     const helloTimeout = setTimeout(() => {
@@ -64,7 +89,10 @@ export function startWS(httpServer: any) {
         // STEP 4 & 10: REMOVE USER FROM GLOBAL STORE
         const users = roomUsers.get(roomId);
         if (users) {
-          users.delete(meta.userId);
+          const hasAnotherConnection = Array.from(clients).some(
+            (client) => client.userId === meta.userId && client.rooms.has(roomId)
+          );
+          if (!hasAnotherConnection) users.delete(meta.userId);
           if (users.size === 0) {
             roomUsers.delete(roomId);
           }

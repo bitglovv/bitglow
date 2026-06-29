@@ -11,6 +11,7 @@ export type AuthTokenPayload = {
     id: string;
     username: string;
     sid: string;
+    type: "access";
 };
 
 export type RequestActor = {
@@ -22,8 +23,10 @@ export type RequestActor = {
 
 export function parseBearerToken(header?: string | null) {
     if (!header) return null;
-    const [scheme, token] = header.split(" ");
-    if (scheme !== "Bearer" || !token) return null;
+    const parts = header.trim().split(/\s+/);
+    if (parts.length !== 2) return null;
+    const [scheme, token] = parts;
+    if (scheme.toLowerCase() !== "bearer" || !token) return null;
     return token.trim();
 }
 
@@ -40,7 +43,7 @@ export function getRequestIp(req: any) {
 }
 
 export function getRequestUserAgent(req: any) {
-    return (req.headers["user-agent"] || req.headers["User-Agent"] || "").toString();
+    return (req.headers["user-agent"] || "").toString().slice(0, 512);
 }
 
 export function sanitizeText(input: string, maxLength = 5000) {
@@ -49,7 +52,7 @@ export function sanitizeText(input: string, maxLength = 5000) {
 }
 
 export function validatePassword(password: string) {
-    return typeof password === "string" && password.length >= 8;
+    return typeof password === "string" && password.length >= 8 && password.length <= 128;
 }
 
 export function validateUsername(username: string) {
@@ -92,29 +95,53 @@ function isLocalOrPrivateHost(hostname: string) {
     return false;
 }
 
-export function issueAccessToken(payload: AuthTokenPayload) {
-    return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "7d" });
+export function issueAccessToken(payload: Omit<AuthTokenPayload, "type">) {
+    return jwt.sign(
+        { ...payload, type: "access" },
+        env.JWT_SECRET,
+        {
+            algorithm: "HS256",
+            expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
+            issuer: env.JWT_ISSUER,
+            audience: env.JWT_AUDIENCE,
+        }
+    );
 }
 
 export function verifyAccessToken(token: string) {
-    return jwt.verify(token, env.JWT_SECRET) as AuthTokenPayload;
+    const payload = jwt.verify(token, env.JWT_SECRET, {
+        algorithms: ["HS256"],
+        issuer: env.JWT_ISSUER,
+        audience: env.JWT_AUDIENCE,
+    }) as AuthTokenPayload;
+    if (payload.type !== "access" || !payload.id || !payload.sid || !payload.username) {
+        throw new Error("Invalid access token payload");
+    }
+    return payload;
 }
 
-export async function createSession(userId: string, sid: string, token: string, req: any) {
-    return db.createSession({
+export function issueRefreshToken() {
+    return crypto.randomBytes(48).toString("base64url");
+}
+
+export async function createSession(userId: string, sid: string, token: string, refreshToken: string, req: any) {
+    const session = await db.createSession({
         userId,
         sid,
         tokenHash: hashToken(token),
+        refreshTokenHash: hashToken(refreshToken),
         ipAddress: getRequestIp(req),
         userAgent: getRequestUserAgent(req),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + env.ACCESS_TOKEN_TTL_SECONDS * 1000),
+        refreshExpiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_SECONDS * 1000),
     });
+    return session;
 }
 
 export async function logSecurityEvent(
     type: string,
     req: any,
-    details: Record<string, any> = {},
+    details: Record<string, unknown> = {},
     userId?: string | null
 ) {
     if (!env.LOG_SECURITY_EVENTS) return;

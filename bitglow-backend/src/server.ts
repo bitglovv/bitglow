@@ -13,7 +13,7 @@ import { notificationRoutes } from "./routes/notifications";
 import { settingsRoutes } from "./routes/settings";
 import authPlugin from "./plugins/auth";
 import { env } from "./config/env";
-import { db } from "./services/db";
+import { db, initializeDatabase } from "./services/db";
 
 function isPrivateOrLoopbackHost(hostname: string) {
   return hostname === "localhost"
@@ -43,7 +43,7 @@ function isAllowedOrigin(origin?: string) {
 
 const server = Fastify({ 
     logger: true,
-    bodyLimit: 5 * 1024 * 1024,
+    bodyLimit: 1024 * 1024,
     trustProxy: env.TRUST_PROXY ? 1 : false,
 });
 
@@ -67,10 +67,24 @@ server.register(rateLimit, {
 });
 
 server.register(helmet, {
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  hsts: env.NODE_ENV === "production"
+    ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+    : false,
+  referrerPolicy: { policy: "no-referrer" },
 });
 
 server.register(authPlugin);
+
+server.addHook("onSend", async (_request, reply) => {
+  reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  reply.header("Cache-Control", "no-store");
+});
 
 server.setErrorHandler(async (error, request, reply) => {
   if ((error as any).statusCode === 429) {
@@ -90,10 +104,17 @@ server.setErrorHandler(async (error, request, reply) => {
   if ((error as any).validation) {
     return reply.code(400).send({
       message: "Invalid request payload",
-      details: (error as any).validation,
     });
   }
-  reply.send(error);
+  const statusCode = Number((error as any).statusCode);
+  if (statusCode >= 400 && statusCode < 500) {
+    return reply.code(statusCode).send({ message: statusCode === 404 ? "Not found" : error.message });
+  }
+  if ((error as any).code === "23505") {
+    return reply.code(409).send({ message: "Resource already exists" });
+  }
+  request.log.error({ err: error, requestId: request.id }, "request failed");
+  return reply.code(500).send({ message: "Internal server error" });
 });
 
 server.register(authRoutes, { prefix: "/api/auth" });
@@ -105,29 +126,39 @@ server.register(postRoutes, { prefix: "/api" });
 server.register(notificationRoutes, { prefix: "/api" });
 server.register(settingsRoutes, { prefix: "/api/settings" });
 
-server.get("/health", async () => {
-  return { status: "ok" };
+server.get("/health", async (_request, reply) => {
+  try {
+    await db.healthCheck();
+    return { status: "ok" };
+  } catch {
+    return reply.code(503).send({ status: "unavailable" });
+  }
 });
 
-server.listen({ port: env.PORT, host: env.HOST }, (err, address) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-  console.log(`Server listening at ${address}`);
-
+async function start() {
+  await initializeDatabase();
+  const address = await server.listen({ port: env.PORT, host: env.HOST });
+  server.log.info({ address }, "server listening");
   startWS(server.server);
   setInterval(() => {
-    db.cleanupExpiredLiveMessages().catch((error: unknown) => {
+    db.cleanupExpiredLiveMessages(env.LIVE_MESSAGE_TTL_SECONDS * 1000).catch((error: unknown) => {
       server.log.error({ error }, "failed to clean up expired live messages");
     });
   }, 5 * 60 * 1000).unref();
-  
-  // Print registered routes
-  server.ready().then(() => {
-    console.log("Registered routes:");
-    server.printRoutes();
-  });
+}
+
+async function shutdown(signal: string) {
+  server.log.info({ signal }, "shutting down");
+  await server.close();
+  await db.close();
+}
+
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));
+
+start().catch((error: unknown) => {
+  server.log.fatal({ error }, "failed to start server");
+  process.exitCode = 1;
 });
 
 

@@ -33,8 +33,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
             }
 
             const user = await db.getUserById(decoded.id);
-            if (!user) {
-                return reply.code(401).send({ message: "User not found" });
+            if (!user || user.is_banned) {
+                return reply.code(401).send({ message: "Invalid or expired token" });
             }
 
             await db.touchSession(session.id);

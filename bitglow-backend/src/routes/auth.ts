@@ -5,14 +5,17 @@ import {
     compareAgainstFakeHash,
     createSession,
     getRequestIp,
+    hashToken,
     issueAccessToken,
+    issueRefreshToken,
     logSecurityEvent,
     normalizeIdentifier,
     sanitizeText,
     validatePassword,
     validateUsername,
 } from "../services/security";
-import { authLoginSchema, authSignupSchema, logoutSchema } from "./schemas";
+import { env } from "../config/env";
+import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema } from "./schemas";
 
 export async function authRoutes(fastify: FastifyInstance) {
 
@@ -77,10 +80,11 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         const sid = randomUUID();
         const token = issueAccessToken({ id: user.id, username: user.username, sid });
-        await createSession(user.id, sid, token, req);
+        const refreshToken = issueRefreshToken();
+        await createSession(user.id, sid, token, refreshToken, req);
         await db.pruneUserSessions(user.id, 5);
         await logSecurityEvent("signup", req, { identifier: normalizedEmail }, user.id);
-        return { token, user };
+        return { token, refreshToken, user };
     });
 
     fastify.post("/login", {
@@ -155,18 +159,63 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         const sid = randomUUID();
         const token = issueAccessToken({ id: user.id, username: user.username, sid });
-        await createSession(user.id, sid, token, req);
+        const refreshToken = issueRefreshToken();
+        await createSession(user.id, sid, token, refreshToken, req);
         await db.pruneUserSessions(user.id, 5);
         await logSecurityEvent("login_success", req, { identifier: normalizedIdentifier }, user.id);
-        return { token, user };
+        return { token, refreshToken, user };
     });
 
     fastify.post("/logout", { schema: logoutSchema }, async (req, reply) => {
         await fastify.requireAuth(req, reply);
         if (reply.sent) return;
-        await db.revokeSessionsForUser(req.auth!.id);
+        await db.revokeSessionById(req.auth!.sessionId);
         await logSecurityEvent("logout", req, {}, req.auth?.id);
         return { ok: true };
+    });
+
+    fastify.post("/logout-all", { preHandler: fastify.requireAuth }, async (req) => {
+        await db.revokeSessionsForUser(req.auth!.id);
+        await logSecurityEvent("logout_all_devices", req, {}, req.auth!.id);
+        return { ok: true };
+    });
+
+    fastify.post("/refresh", {
+        config: { rateLimit: { max: 20, timeWindow: "15 minutes" } },
+        schema: refreshSchema,
+    }, async (req, reply) => {
+        const { refreshToken } = req.body as { refreshToken: string };
+        const currentHash = hashToken(refreshToken);
+        const session = await db.getActiveSessionByRefreshToken(currentHash);
+        if (!session) {
+            return reply.code(401).send({ message: "Invalid or expired refresh token" });
+        }
+        if (dbUser.is_banned) {
+            await logSecurityEvent("login_failure", req, { identifier: normalizedIdentifier, reason: "account_disabled" }, dbUser.id);
+            return reply.code(401).send({ message: "Invalid username/email or password" });
+        }
+
+        const user = await db.getUserById(session.user_id);
+        if (!user) {
+            await db.revokeSessionById(session.id);
+            return reply.code(401).send({ message: "Invalid or expired refresh token" });
+        }
+
+        const token = issueAccessToken({ id: user.id, username: user.username, sid: session.sid });
+        const nextRefreshToken = issueRefreshToken();
+        const rotated = await db.rotateSession(
+            currentHash,
+            hashToken(token),
+            hashToken(nextRefreshToken),
+            new Date(Date.now() + env.ACCESS_TOKEN_TTL_SECONDS * 1000),
+            new Date(Date.now() + env.REFRESH_TOKEN_TTL_SECONDS * 1000)
+        );
+        if (!rotated) {
+            return reply.code(401).send({ message: "Invalid or expired refresh token" });
+        }
+
+        await logSecurityEvent("token_refresh", req, {}, user.id);
+        return { token, refreshToken: nextRefreshToken };
     });
 }
 

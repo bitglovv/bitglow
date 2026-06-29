@@ -6,7 +6,7 @@ export const authSignupSchema = {
         properties: {
             username: { type: "string", minLength: 3, maxLength: 30 },
             displayName: { type: "string", minLength: 1, maxLength: 64 },
-            email: { type: "string", minLength: 3, maxLength: 255 },
+            email: { type: "string", format: "email", minLength: 3, maxLength: 255 },
             password: { type: "string", minLength: 8, maxLength: 128 },
         },
     },
@@ -77,7 +77,7 @@ export const followSchema = {
         type: "object",
         required: ["id"],
         properties: {
-            id: { type: "string", minLength: 1, maxLength: 64 },
+            id: { type: "string", format: "uuid" },
         },
     },
     body: {
@@ -95,7 +95,7 @@ export const idParamSchema = {
         type: "object",
         required: ["id"],
         properties: {
-            id: { type: "string", minLength: 1, maxLength: 64 },
+            id: { type: "string", format: "uuid" },
         },
     },
 } as const;
@@ -185,12 +185,34 @@ export const dmSendSchema = {
     },
 } as const;
 
+export const refreshSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["refreshToken"],
+        properties: {
+            refreshToken: { type: "string", minLength: 32, maxLength: 512 },
+        },
+    },
+} as const;
+
+export const paginationSchema = {
+    querystring: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+            limit: { type: "string", pattern: "^[0-9]{1,3}$" },
+            offset: { type: "string", pattern: "^[0-9]{1,9}$" },
+        },
+    },
+} as const;
+
 export const dmMessageSchema = {
     params: {
         type: "object",
         required: ["userId", "messageId"],
         properties: {
-            userId: { type: "string", minLength: 1, maxLength: 64 },
+            userId: { type: "string", format: "uuid" },
             messageId: { type: "string", minLength: 1, maxLength: 64 },
         },
     },
@@ -225,6 +247,66 @@ export const liveCreateSchema = {
         additionalProperties: false,
         properties: {
             ownerId: { type: "string", minLength: 1, maxLength: 64 },
+        },
+    },
+} as const;
+
+export const emailUpdateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["currentPassword", "newEmail"],
+        properties: {
+            currentPassword: { type: "string", minLength: 1, maxLength: 128 },
+            newEmail: { type: "string", format: "email", maxLength: 255 },
+        },
+    },
+} as const;
+
+export const passwordUpdateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["currentPassword", "newPassword"],
+        properties: {
+            currentPassword: { type: "string", minLength: 1, maxLength: 128 },
+            newPassword: { type: "string", minLength: 8, maxLength: 128 },
+        },
+    },
+} as const;
+
+export const privacyUpdateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["isPrivate"],
+        properties: {
+            isPrivate: { type: "boolean" },
+        },
+    },
+} as const;
+
+export const onlineStatusUpdateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["isVisible"],
+        properties: {
+            isVisible: { type: "boolean" },
+        },
+    },
+} as const;
+
+export const reportSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "reason"],
+        properties: {
+            type: { type: "string", enum: ["account", "post"] },
+            reportedUserId: { type: "string", minLength: 1, maxLength: 64 },
+            postId: { type: "string", minLength: 1, maxLength: 64 },
+            reason: { type: "string", minLength: 1, maxLength: 1000 },
         },
     },
 } as const;

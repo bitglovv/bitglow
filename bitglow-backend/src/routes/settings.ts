@@ -1,13 +1,24 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
-import { compareAgainstFakeHash, getRequestIp, logSecurityEvent, normalizeIdentifier, validatePassword } from "../services/security";
-import { idParamSchema } from "./schemas";
+import { getRequestIp, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
+import {
+    emailUpdateSchema,
+    idParamSchema,
+    onlineStatusUpdateSchema,
+    passwordUpdateSchema,
+    privacyUpdateSchema,
+    reportSchema,
+} from "./schemas";
 
 export async function settingsRoutes(fastify: FastifyInstance) {
     /**
      * PUT /api/settings/email
      */
-    fastify.put("/email", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.put("/email", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
+        schema: emailUpdateSchema,
+    }, async (req, reply) => {
         const userId = req.auth!.id;
         const { currentPassword, newEmail } = req.body as any;
         const normalizedEmail = normalizeIdentifier(String(newEmail || ""));
@@ -45,7 +56,11 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     /**
      * PUT /api/settings/password
      */
-    fastify.put("/password", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.put("/password", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
+        schema: passwordUpdateSchema,
+    }, async (req, reply) => {
         const userId = req.auth!.id;
         const { currentPassword, newPassword } = req.body as any;
         const ipAddress = getRequestIp(req);
@@ -84,7 +99,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     /**
      * PUT /api/settings/privacy
      */
-    fastify.put("/privacy", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.put("/privacy", { preHandler: fastify.requireAuth, schema: privacyUpdateSchema }, async (req, reply) => {
         const userId = req.auth!.id;
         const { isPrivate } = req.body as any;
 
@@ -100,7 +115,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     /**
      * PUT /api/settings/online-status
      */
-    fastify.put("/online-status", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.put("/online-status", { preHandler: fastify.requireAuth, schema: onlineStatusUpdateSchema }, async (req, reply) => {
         const userId = req.auth!.id;
         const { isVisible } = req.body as any;
 
@@ -134,6 +149,8 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return;
         }
 
+        const blockedUser = await db.getUserById(blockedId);
+        if (!blockedUser) return reply.code(404).send({ message: "User not found" });
         await db.blockUser(userId, blockedId);
         return { ok: true };
     });
@@ -161,7 +178,11 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     /**
      * POST /api/reports
      */
-    fastify.post("/reports", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.post("/reports", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 10, timeWindow: "1 hour" } },
+        schema: reportSchema,
+    }, async (req, reply) => {
         const userId = req.auth!.id;
         const { type, reportedUserId, postId, reason } = req.body as any;
 
@@ -170,7 +191,10 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        await db.saveReport(userId, type, reportedUserId, postId, reason);
+        if ((type === "account" && !reportedUserId) || (type === "post" && !postId)) {
+            return reply.code(400).send({ message: "Report target is required" });
+        }
+        await db.saveReport(userId, type, reportedUserId, postId, sanitizeText(reason, 1000));
         return { ok: true };
     });
 }

@@ -22,6 +22,14 @@ function parseBoolean(value: string | undefined, defaultValue: boolean) {
     return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+function parsePositiveInteger(name: string, value: string | undefined, defaultValue: number) {
+    const parsed = Number(value ?? defaultValue);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+        throw new Error(`${name} must be a positive integer`);
+    }
+    return parsed;
+}
+
 const port = Number(process.env.PORT || 3003);
 const host = process.env.HOST || "0.0.0.0";
 
@@ -36,9 +44,17 @@ export const env = {
     HOST: host,
     DATABASE_URL: requireEnv("DATABASE_URL"),
     JWT_SECRET: requireEnv("JWT_SECRET"),
+    JWT_ISSUER: process.env.JWT_ISSUER || "bitglow-backend",
+    JWT_AUDIENCE: process.env.JWT_AUDIENCE || "bitglow-api",
+    ACCESS_TOKEN_TTL_SECONDS: parsePositiveInteger("ACCESS_TOKEN_TTL_SECONDS", process.env.ACCESS_TOKEN_TTL_SECONDS, 7 * 24 * 60 * 60),
+    REFRESH_TOKEN_TTL_SECONDS: parsePositiveInteger("REFRESH_TOKEN_TTL_SECONDS", process.env.REFRESH_TOKEN_TTL_SECONDS, 30 * 24 * 60 * 60),
     CORS_ORIGINS: parseCsv(corsOriginsRaw),
     LOG_SECURITY_EVENTS: process.env.LOG_SECURITY_EVENTS !== "false",
     TRUST_PROXY: parseBoolean(process.env.TRUST_PROXY, false),
+    DB_STATEMENT_TIMEOUT_MS: parsePositiveInteger("DB_STATEMENT_TIMEOUT_MS", process.env.DB_STATEMENT_TIMEOUT_MS, 15_000),
+    DB_CONNECTION_TIMEOUT_MS: parsePositiveInteger("DB_CONNECTION_TIMEOUT_MS", process.env.DB_CONNECTION_TIMEOUT_MS, 10_000),
+    LIVE_MESSAGE_TTL_SECONDS: parsePositiveInteger("LIVE_MESSAGE_TTL_SECONDS", process.env.LIVE_MESSAGE_TTL_SECONDS, 300),
+    WS_MAX_PAYLOAD_BYTES: parsePositiveInteger("WS_MAX_PAYLOAD_BYTES", process.env.WS_MAX_PAYLOAD_BYTES, 16_384),
 };
 
 if (env.NODE_ENV === "production" && env.JWT_SECRET.length < 32) {

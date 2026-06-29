@@ -2,7 +2,7 @@
 import WebSocket from "ws";
 import { WSMessage, ClientHello } from "./types";
 import { db } from "../services/db";
-import { hashToken, verifyAccessToken } from "../services/security";
+import { hashToken, sanitizeText, verifyAccessToken } from "../services/security";
 const RATE_LIMIT_MS    = 1_000;          // 1 second anti-spam cooldown
 const MESSAGE_TTL      = 5 * 60 * 1_000; // 5 minutes — messages expire globally
 const MAX_MESSAGES     = 100;            // max messages kept in history
@@ -25,6 +25,8 @@ export type ClientMeta = {
     isAuth: boolean;
     helloReceived: boolean;
     lastMessageAt: number;
+    lastTypingAt: number;
+    lastPresenceAt: number;
     ipAddress?: string;
     userAgent?: string;
     rooms: Set<string>;
@@ -87,7 +89,11 @@ export async function handleMessage(
     let msg: WSMessage;
     try {
         const text = raw.toString();
-        msg = JSON.parse(text);
+        const parsed: unknown = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
+            throw new Error("Invalid message envelope");
+        }
+        msg = parsed as WSMessage;
     } catch (err) {
         meta.socket.send(
             JSON.stringify({ type: "server:error", message: "Invalid JSON", ts: Date.now() })
@@ -100,6 +106,15 @@ export async function handleMessage(
     switch (msg.type) {
         case "client:hello": {
             const m = msg as ClientHello;
+            if (meta.helloReceived) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication has already been attempted",
+                    ts: Date.now(),
+                }));
+                meta.socket.close(1008, "Duplicate authentication");
+                return;
+            }
             meta.helloReceived = true;
 
             if (!m.token) {
@@ -190,7 +205,7 @@ export async function handleMessage(
 
             const m = msg as any;
             const roomId = String(m.roomId || "");
-            if (!roomId) {
+            if (!isUuid(roomId)) {
                 meta.socket.send(JSON.stringify({
                     type: "server:error",
                     message: "roomId is required",
@@ -260,7 +275,10 @@ export async function handleMessage(
 
                 // STEP 4: LEAVE ROOM
                 const users = roomUsers.get(roomId);
-                users?.delete(meta.userId);
+                const hasAnotherConnection = Array.from(clients).some(
+                    (client) => client !== meta && client.userId === meta.userId && client.rooms.has(roomId)
+                );
+                if (!hasAnotherConnection) users?.delete(meta.userId);
                 if (users && users.size === 0) {
                     roomUsers.delete(roomId);
                 }
@@ -286,7 +304,26 @@ export async function handleMessage(
         case "client:room:presence": {
             const m = msg as any;
             const roomId = String(m.roomId || "");
-            if (!roomId) return;
+            if (!meta.isAuth || !roomId) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Authentication required",
+                    ts: Date.now(),
+                }));
+                return;
+            }
+            const now = Date.now();
+            if (now - meta.lastPresenceAt < 1_000) return;
+            meta.lastPresenceAt = now;
+            const allowed = await db.canAccessOwnerRoom(meta.userId, roomId);
+            if (!allowed) {
+                meta.socket.send(JSON.stringify({
+                    type: "server:error",
+                    message: "Access denied for room",
+                    ts: Date.now(),
+                }));
+                return;
+            }
 
             // STEP 7: SUPPORT PRE-ENTRY COUNT
             const count = roomUsers.get(roomId)?.size || 0;
@@ -319,6 +356,9 @@ export async function handleMessage(
                 }));
                 return;
             }
+            const now = Date.now();
+            if (now - meta.lastTypingAt < 500) return;
+            meta.lastTypingAt = now;
 
             const payload = JSON.stringify({
                 type: "server:room:typing",
@@ -394,7 +434,7 @@ export async function handleMessage(
             const m = msg as any;
             const roomId = String(m.roomId || "");
             // STEP 5b: Enforce MAX_LENGTH
-            const text = String(m.text || "").slice(0, MAX_LENGTH).trim();
+            const text = sanitizeText(String(m.text || "").slice(0, MAX_LENGTH), MAX_LENGTH);
 
             if (!roomId) {
                 meta.socket.send(JSON.stringify({
@@ -461,6 +501,12 @@ export async function handleMessage(
                         if (!allowed) {
                             c.rooms.delete(room.id);
                             c.roomOwners.delete(room.id);
+                            const users = roomUsers.get(room.id);
+                            const hasAnotherConnection = Array.from(clients).some(
+                                (client) => client !== c && client.userId === c.userId && client.rooms.has(room.id)
+                            );
+                            if (!hasAnotherConnection) users?.delete(c.userId);
+                            if (users?.size === 0) roomUsers.delete(room.id);
                             c.socket.send(JSON.stringify({
                                 type: "server:error",
                                 message: "Access denied for room",
@@ -491,6 +537,9 @@ export async function handleMessage(
     }
 }
 
+function isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 
 

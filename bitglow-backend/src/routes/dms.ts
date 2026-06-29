@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { sanitizeText } from "../services/security";
-import { dmEditSchema, dmForwardSchema, dmMessageSchema, dmSendSchema, dmUserSchema } from "./schemas";
+import { dmEditSchema, dmForwardSchema, dmMessageSchema, dmSendSchema, dmUserSchema, paginationSchema } from "./schemas";
 import { clients } from "../ws";
 import WebSocket from "ws";
 
@@ -10,7 +10,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
      * GET /api/dms
      * List conversations for current user
      */
-    fastify.get("/dms", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.get("/dms", { preHandler: fastify.requireAuth, schema: paginationSchema }, async (req, reply) => {
         if (!req.auth) {
             return reply.code(401).send({ message: "Not authenticated" });
         }

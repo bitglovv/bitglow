@@ -93,6 +93,10 @@ export interface SecurityLogRow {
 
 const pool = new Pool({
     connectionString: env.DATABASE_URL,
+    connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
+    statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
+    idle_in_transaction_session_timeout: env.DB_STATEMENT_TIMEOUT_MS,
+    max: 20,
 });
 
 const BCRYPT_ROUNDS = 12;
@@ -114,6 +118,8 @@ const initCoreTables = async () => {
                 followers_count INTEGER DEFAULT 0,
                 follows_count INTEGER DEFAULT 0,
                 role TEXT DEFAULT 'user',
+                is_verified BOOLEAN DEFAULT false,
+                is_banned BOOLEAN DEFAULT false,
                 is_private BOOLEAN DEFAULT false,
                 online_status_visible BOOLEAN DEFAULT true,
                 created_at TIMESTAMP DEFAULT now(),
@@ -124,10 +130,12 @@ const initCoreTables = async () => {
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 sid TEXT UNIQUE,
-                token_hash TEXT NOT NULL,
+                token_hash TEXT UNIQUE NOT NULL,
+                refresh_token_hash TEXT UNIQUE,
                 ip_address TEXT,
                 user_agent TEXT,
                 expires_at TIMESTAMP NOT NULL,
+                refresh_expires_at TIMESTAMP,
                 revoked_at TIMESTAMP,
                 last_used_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT now()
@@ -145,6 +153,7 @@ const initCoreTables = async () => {
         `);
     } catch (err) {
         console.error("Failed to ensure core tables", err);
+        throw err;
     }
 };
 
@@ -223,6 +232,7 @@ const initPostsTable = async () => {
         `);
     } catch (err) {
         console.error("Failed to ensure posts table", err);
+        throw err;
     }
 };
 
@@ -248,6 +258,8 @@ const initSecurityTables = async () => {
             -- (ADD COLUMN IF NOT EXISTS not supported inside DO $ in older PG)
             ALTER TABLE user_sessions
             ADD COLUMN IF NOT EXISTS sid TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS refresh_token_hash TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS refresh_expires_at TIMESTAMP,
             ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP,
             ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;
 
@@ -255,7 +267,12 @@ const initSecurityTables = async () => {
             CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
             CREATE INDEX IF NOT EXISTS idx_user_sessions_sid ON user_sessions(sid);
             CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_expires_at ON user_sessions(refresh_expires_at);
             CREATE INDEX IF NOT EXISTS idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
+
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false,
+            ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
 
             CREATE TABLE IF NOT EXISTS security_logs (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -270,9 +287,19 @@ const initSecurityTables = async () => {
             CREATE INDEX IF NOT EXISTS idx_security_logs_event_type ON security_logs(event_type);
             CREATE INDEX IF NOT EXISTS idx_security_logs_user_id ON security_logs(user_id);
             CREATE INDEX IF NOT EXISTS idx_security_logs_created_at ON security_logs(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS user_reports (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                reported_user UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                reported_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                reason TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_reports_reported_user ON user_reports(reported_user);
         `);
     } catch (err) {
         console.error("Failed to ensure security tables", err);
+        throw err;
     }
 };
  
@@ -362,6 +389,7 @@ const initDMTables = async () => {
         `);
     } catch (err) {
         console.error("Failed to ensure DM tables", err);
+        throw err;
     }
 };
  
@@ -394,6 +422,7 @@ const initLiveTables = async () => {
         `);
     } catch (err) {
         console.error("Failed to ensure Live tables", err);
+        throw err;
     }
 };
 
@@ -415,19 +444,13 @@ const initLegacyMessagesTable = async () => {
 };
 
 // Sequential startup — each step awaits the previous to avoid race conditions
-void (async () => {
-    try {
-        console.log('[DB] Initializing tables sequentially...');
-        await initCoreTables();
-        await initPostsTable();
-        await initSecurityTables();
-        await initDMTables();
-        await initLiveTables();
-        console.log('[DB] All tables initialized successfully.');
-    } catch (err) {
-        console.error('[DB] Fatal error during table initialization:', err);
-    }
-})();
+export async function initializeDatabase() {
+    await initCoreTables();
+    await initPostsTable();
+    await initSecurityTables();
+    await initDMTables();
+    await initLiveTables();
+}
 
 type Queryable = Pick<PoolClient, 'query'>;
 
@@ -535,6 +558,14 @@ async function getCanonicalLiveRoomByRequestedId(client: Queryable, roomId: stri
 export const db = {
     query: (text: string, params?: any[]) => pool.query(text, params),
 
+    async healthCheck() {
+        await pool.query("SELECT 1");
+    },
+
+    async close() {
+        await pool.end();
+    },
+
     async hashPassword(password: string): Promise<string> {
         return await bcrypt.hash(password, BCRYPT_ROUNDS);
     },
@@ -543,14 +574,63 @@ export const db = {
         return await bcrypt.compare(password, hashedPassword);
     },
 
-    async createSession(input: { userId: string; sid: string; tokenHash: string; ipAddress?: string; userAgent?: string; expiresAt: Date; }) {
+    async createSession(input: {
+        userId: string;
+        sid: string;
+        tokenHash: string;
+        refreshTokenHash: string;
+        ipAddress?: string;
+        userAgent?: string;
+        expiresAt: Date;
+        refreshExpiresAt: Date;
+    }) {
         const res = await pool.query(
-            `INSERT INTO user_sessions (user_id, sid, token_hash, ip_address, user_agent, expires_at)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id, user_id, sid, token_hash, ip_address, user_agent, created_at, expires_at`,
-            [input.userId, input.sid, input.tokenHash, input.ipAddress || null, input.userAgent || null, input.expiresAt]
+            `INSERT INTO user_sessions
+                (user_id, sid, token_hash, refresh_token_hash, ip_address, user_agent, expires_at, refresh_expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, user_id, sid, ip_address, user_agent, created_at, expires_at, refresh_expires_at`,
+            [
+                input.userId,
+                input.sid,
+                input.tokenHash,
+                input.refreshTokenHash,
+                input.ipAddress || null,
+                input.userAgent || null,
+                input.expiresAt,
+                input.refreshExpiresAt,
+            ]
         );
         return res.rows[0];
+    },
+
+    async rotateSession(refreshTokenHash: string, newTokenHash: string, newRefreshTokenHash: string, expiresAt: Date, refreshExpiresAt: Date) {
+        const res = await pool.query(
+            `UPDATE user_sessions
+             SET token_hash = $2,
+                 refresh_token_hash = $3,
+                 expires_at = $4,
+                 refresh_expires_at = $5,
+                 last_used_at = now()
+             WHERE refresh_token_hash = $1
+               AND revoked_at IS NULL
+               AND refresh_expires_at > now()
+             RETURNING id, user_id, sid`,
+            [refreshTokenHash, newTokenHash, newRefreshTokenHash, expiresAt, refreshExpiresAt]
+        );
+        return res.rows[0] || null;
+    },
+
+    async getActiveSessionByRefreshToken(refreshTokenHash: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, sid
+             FROM user_sessions
+             WHERE refresh_token_hash = $1
+               AND revoked_at IS NULL
+               AND refresh_expires_at > now()
+             LIMIT 1`,
+            [refreshTokenHash]
+        );
+        return res.rows[0] || null;
     },
 
     async getActiveSessionByToken(tokenHash: string) {
@@ -568,7 +648,10 @@ export const db = {
 
     async touchSession(sessionId: string) {
         await pool.query(
-            `UPDATE user_sessions SET last_used_at = now() WHERE id = $1`,
+            `UPDATE user_sessions
+             SET last_used_at = now()
+             WHERE id = $1
+               AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')`,
             [sessionId]
         );
     },
@@ -685,7 +768,7 @@ export const db = {
     async findUserByLoginIdentifier(identifier: string) {
         const normalizedIdentifier = identifier.trim().toLowerCase();
         const res = await pool.query(
-            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
+            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
             [normalizedIdentifier]
         );
         return res.rows[0];
@@ -696,11 +779,16 @@ export const db = {
         return res.rows[0];
     },
 
-    async deleteUserAccount(userId: string) {
+    async deleteUserAccount(userId: string, audit?: { ipAddress?: string; userAgent?: string }) {
         const client = await pool.connect();
         try {
             await client.query("BEGIN");
 
+            await client.query(
+                `INSERT INTO security_logs (event_type, user_id, ip_address, user_agent, details)
+                 VALUES ('delete_account', $1, $2, $3, '{}'::jsonb)`,
+                [userId, audit?.ipAddress || null, audit?.userAgent?.slice(0, 512) || null]
+            );
             await client.query("DELETE FROM user_sessions WHERE user_id = $1", [userId]);
             await client.query("DELETE FROM post_comment_likes WHERE user_id = $1 OR comment_id IN (SELECT id FROM post_comments WHERE author_id = $1 OR post_id IN (SELECT id FROM posts WHERE author_id = $1))", [userId]);
             await client.query("DELETE FROM post_comments WHERE author_id = $1 OR post_id IN (SELECT id FROM posts WHERE author_id = $1)", [userId]);
@@ -751,7 +839,7 @@ export const db = {
     },
 
     async getUserById(id: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1', [id]);
         return res.rows[0];
     },
 
@@ -776,6 +864,13 @@ export const db = {
             [userId, otherId]
         );
         return (res.rowCount ?? 0) > 0;
+    },
+
+    async revokeSessionById(sessionId: string) {
+        await pool.query(
+            `UPDATE user_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`,
+            [sessionId]
+        );
     },
 
     async canViewPost(postId: string, userId: string) {
@@ -985,13 +1080,14 @@ export const db = {
     },
 
     async acceptFollow(userId: string, followerId: string) {
-        await pool.query(
+        if (await this.isBlockedEitherDirection(userId, followerId)) return false;
+        const result = await pool.query(
             `UPDATE friends
              SET status = 'accepted'
-             WHERE user_id = $1 AND friend_id = $2`,
+             WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'`,
             [followerId, userId]
         );
-        return true;
+        return (result.rowCount ?? 0) > 0;
     },
 
     async unfollowUser(userId: string, friendId: string) {
@@ -1215,12 +1311,18 @@ export const db = {
     },
 
     async createDMConversation(userId: string, otherId: string) {
+        if (userId === otherId) return null;
         const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
         const res = await pool.query(
-            'INSERT INTO dm_conversations (user_a, user_b) VALUES ($1, $2) RETURNING id, user_a, user_b, created_at',
+            `INSERT INTO dm_conversations (user_a, user_b)
+             SELECT $1, $2
+             WHERE EXISTS (SELECT 1 FROM users WHERE id = $1)
+               AND EXISTS (SELECT 1 FROM users WHERE id = $2)
+             ON CONFLICT (user_a, user_b) DO UPDATE SET user_a = EXCLUDED.user_a
+             RETURNING id, user_a, user_b, created_at`,
             [userA, userB]
         );
-        return res.rows[0];
+        return res.rows[0] || null;
     },
 
     async getOrCreateDMConversation(userId: string, otherId: string) {
@@ -1261,7 +1363,13 @@ export const db = {
                   AND sender_id <> $1
                   AND read_at IS NULL
              ) unread ON true
-             WHERE c.user_a = $1 OR c.user_b = $1
+             WHERE (c.user_a = $1 OR c.user_b = $1)
+               AND NOT EXISTS (
+                   SELECT 1 FROM friends f
+                   WHERE ((f.user_id = $1 AND f.friend_id = u.id)
+                       OR (f.user_id = u.id AND f.friend_id = $1))
+                     AND f.status = 'blocked'
+               )
              ORDER BY m.created_at DESC NULLS LAST, c.created_at DESC
              LIMIT $2 OFFSET $3`,
             [userId, cappedLimit, safeOffset]
@@ -1453,34 +1561,53 @@ export const db = {
     },
 
     async toggleLike(userId: string, postId: string) {
+        if (!await this.canViewPost(postId, userId)) return null;
         const existing = await pool.query(
-            'SELECT 1 FROM post_likes WHERE user_id = $1 AND post_id = $2',
+            `DELETE FROM post_likes
+             WHERE user_id = $1 AND post_id = $2
+             RETURNING 1`,
             [userId, postId]
         );
-        if ((existing.rowCount ?? 0) > 0) {
-            await pool.query('DELETE FROM post_likes WHERE user_id = $1 AND post_id = $2', [userId, postId]);
-        } else {
-            await pool.query('INSERT INTO post_likes (user_id, post_id) VALUES ($1, $2)', [userId, postId]);
+        let liked = false;
+        if ((existing.rowCount ?? 0) === 0) {
+            const inserted = await pool.query(
+                `INSERT INTO post_likes (user_id, post_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING
+                 RETURNING 1`,
+                [userId, postId]
+            );
+            liked = (inserted.rowCount ?? 0) > 0;
         }
         const countRes = await pool.query('SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id = $1', [postId]);
-        return { liked: (existing.rowCount ?? 0) === 0, count: countRes.rows[0].count };
+        return { liked, count: countRes.rows[0].count };
     },
 
     async toggleSave(userId: string, postId: string) {
+        if (!await this.canViewPost(postId, userId)) return null;
         const existing = await pool.query(
-            'SELECT 1 FROM post_saves WHERE user_id = $1 AND post_id = $2',
+            `DELETE FROM post_saves
+             WHERE user_id = $1 AND post_id = $2
+             RETURNING 1`,
             [userId, postId]
         );
-        if ((existing.rowCount ?? 0) > 0) {
-            await pool.query('DELETE FROM post_saves WHERE user_id = $1 AND post_id = $2', [userId, postId]);
-        } else {
-            await pool.query('INSERT INTO post_saves (user_id, post_id) VALUES ($1, $2)', [userId, postId]);
+        let saved = false;
+        if ((existing.rowCount ?? 0) === 0) {
+            const inserted = await pool.query(
+                `INSERT INTO post_saves (user_id, post_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING
+                 RETURNING 1`,
+                [userId, postId]
+            );
+            saved = (inserted.rowCount ?? 0) > 0;
         }
         const countRes = await pool.query('SELECT COUNT(*)::int AS count FROM post_saves WHERE post_id = $1', [postId]);
-        return { saved: (existing.rowCount ?? 0) === 0, count: countRes.rows[0].count };
+        return { saved, count: countRes.rows[0].count };
     },
 
     async addComment(userId: string, postId: string, content: string) {
+        if (!await this.canViewPost(postId, userId)) return null;
         const res = await pool.query(
             `INSERT INTO post_comments (post_id, author_id, content)
              VALUES ($1, $2, $3)
@@ -1496,29 +1623,51 @@ export const db = {
     },
 
     async toggleCommentLike(userId: string, commentId: string) {
+        const allowed = await pool.query(
+            `SELECT 1
+             FROM post_comments c
+             JOIN posts p ON p.id = c.post_id
+             WHERE c.id = $1
+               AND (
+                   p.visibility = 'public'
+                   OR p.author_id = $2
+                   OR EXISTS (
+                       SELECT 1 FROM friends f
+                       WHERE f.user_id = $2
+                         AND f.friend_id = p.author_id
+                         AND f.status = 'accepted'
+                   )
+               )
+             LIMIT 1`,
+            [commentId, userId]
+        );
+        if ((allowed.rowCount ?? 0) === 0) return null;
         const existing = await pool.query(
-            'SELECT 1 FROM post_comment_likes WHERE user_id = $1 AND comment_id = $2',
+            `DELETE FROM post_comment_likes
+             WHERE user_id = $1 AND comment_id = $2
+             RETURNING 1`,
             [userId, commentId]
         );
-        if (existing.rowCount === 0) {
-            await pool.query(
-                'INSERT INTO post_comment_likes (user_id, comment_id) VALUES ($1, $2)',
+        let liked = false;
+        if ((existing.rowCount ?? 0) === 0) {
+            const inserted = await pool.query(
+                `INSERT INTO post_comment_likes (user_id, comment_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING
+                 RETURNING 1`,
                 [userId, commentId]
             );
-        } else {
-            await pool.query(
-                'DELETE FROM post_comment_likes WHERE user_id = $1 AND comment_id = $2',
-                [userId, commentId]
-            );
+            liked = (inserted.rowCount ?? 0) > 0;
         }
         const countRes = await pool.query(
             'SELECT COUNT(*)::int AS count FROM post_comment_likes WHERE comment_id = $1',
             [commentId]
         );
-        return { liked: existing.rowCount === 0, likesCount: countRes.rows[0].count };
+        return { liked, likesCount: countRes.rows[0].count };
     },
 
     async getComments(postId: string, userId: string, limit = 50) {
+        if (!await this.canViewPost(postId, userId)) return null;
         const res = await pool.query(
             `SELECT c.id, c.content, c.created_at, u.id as author_id, u.username, u.display_name, u.avatar_url,
                     COALESCE(l.count, 0) AS "likesCount",
@@ -1735,6 +1884,16 @@ export const db = {
                 SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
             ) s ON true
             WHERE p.id = $1
+              AND (
+                  p.visibility = 'public'
+                  OR p.author_id = $2
+                  OR EXISTS (
+                      SELECT 1 FROM friends f
+                      WHERE f.user_id = $2
+                        AND f.friend_id = p.author_id
+                        AND f.status = 'accepted'
+                  )
+              )
             `,
             [postId, userId]
         );
@@ -1802,19 +1961,35 @@ export const db = {
     },
 
     async blockUser(userId: string, blockedId: string) {
-        await pool.query(
-            `DELETE FROM friends
-             WHERE (user_id = $1 AND friend_id = $2)
-                OR (user_id = $2 AND friend_id = $1)`,
-            [userId, blockedId]
-        );
-        
-        await pool.query(
-            `INSERT INTO friends (user_id, friend_id, status)
-             VALUES ($1, $2, 'blocked')
-             ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'blocked'`,
-            [userId, blockedId]
-        );
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            await client.query(
+                `DELETE FROM friends
+                 WHERE (user_id = $1 AND friend_id = $2)
+                    OR (user_id = $2 AND friend_id = $1)`,
+                [userId, blockedId]
+            );
+            await client.query(
+                `INSERT INTO friends (user_id, friend_id, status)
+                 SELECT $1, $2, 'blocked'
+                 WHERE EXISTS (SELECT 1 FROM users WHERE id = $2)
+                 ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'blocked'`,
+                [userId, blockedId]
+            );
+            await client.query(
+                `DELETE FROM dm_conversations
+                 WHERE (user_a = $1 AND user_b = $2)
+                    OR (user_a = $2 AND user_b = $1)`,
+                [userId, blockedId]
+            );
+            await client.query("COMMIT");
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
     },
 
     async unblockUser(userId: string, unblockedId: string) {
@@ -1855,6 +2030,16 @@ export const db = {
                 SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
             ) s ON true
             WHERE ps_main.user_id = $1
+              AND (
+                  p.visibility = 'public'
+                  OR p.author_id = $1
+                  OR EXISTS (
+                      SELECT 1 FROM friends f
+                      WHERE f.user_id = $1
+                        AND f.friend_id = p.author_id
+                        AND f.status = 'accepted'
+                  )
+              )
             ORDER BY ps_main.created_at DESC
             `,
             [userId]

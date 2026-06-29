@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { hashToken, parseBearerToken, validateUsername, sanitizeText, validateUrl, verifyAccessToken } from "../services/security";
-import { deleteAccountSchema, followSchema, idParamSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
+import { deleteAccountSchema, followSchema, idParamSchema, paginationSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
 
 export async function userRoutes(fastify: FastifyInstance) {
     /**
@@ -41,7 +41,7 @@ export async function userRoutes(fastify: FastifyInstance) {
      * GET /api/users
      * Returns all users (public info)
      */
-    fastify.get("/users", async (req, reply) => {
+    fastify.get("/users", { schema: paginationSchema }, async (req, reply) => {
         const requesterId = await getOptionalRequesterId(req);
         const { limit = "50", offset = "0" } = (req.query || {}) as { limit?: string; offset?: string };
         const users = await db.getAllUsers(Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
@@ -57,7 +57,7 @@ export async function userRoutes(fastify: FastifyInstance) {
      * GET /api/users/:id
      * Returns a specific user by ID
      */
-    fastify.get("/users/:id", async (req, reply) => {
+    fastify.get("/users/:id", { schema: idParamSchema }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const dbUser = await db.getUserById(id);
 
@@ -183,12 +183,9 @@ export async function userRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        await db.revokeSessionsForUser(userId);
-        await db.deleteUserAccount(userId);
-        await db.insertSecurityLog({
-            eventType: "delete_account",
-            userId,
-            details: { identifier },
+        await db.deleteUserAccount(userId, {
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"]?.toString(),
         });
         return { ok: true };
     });
@@ -274,7 +271,8 @@ export async function userRoutes(fastify: FastifyInstance) {
     fastify.post("/follow/requests/:id/accept", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
         const userId = req.auth!.id;
         const { id } = req.params as { id: string };
-        await db.acceptFollow(userId, id);
+        const accepted = await db.acceptFollow(userId, id);
+        if (!accepted) return reply.code(404).send({ message: "Follow request not found" });
         return { ok: true };
     });
 

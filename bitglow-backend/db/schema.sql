@@ -35,10 +35,12 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sid TEXT UNIQUE,
   token_hash TEXT UNIQUE NOT NULL,
+  refresh_token_hash TEXT UNIQUE,
   ip_address TEXT,
   user_agent TEXT,
   created_at TIMESTAMP DEFAULT now(),
   expires_at TIMESTAMP NOT NULL,
+  refresh_expires_at TIMESTAMP,
   revoked_at TIMESTAMP,
   last_used_at TIMESTAMP
 );
@@ -47,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_sid ON user_sessions(sid);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_expires_at ON user_sessions(refresh_expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_revoked ON user_sessions(user_id, revoked_at);
 
 CREATE TABLE IF NOT EXISTS security_logs (
@@ -56,6 +59,14 @@ CREATE TABLE IF NOT EXISTS security_logs (
   ip_address TEXT,
   user_agent TEXT,
   details JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_reports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  reported_user UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reported_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT now()
 );
 
