@@ -57,7 +57,7 @@ export default function NotificationsPage() {
     const [loading, setLoading] = useState(true);
     const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
     const [followLoading, setFollowLoading] = useState<Set<string>>(new Set());
-    
+
     const [seenIds, setSeenIds] = useState<Set<string>>(() => {
         try {
             const raw = localStorage.getItem("bitglow:seen_notifications");
@@ -129,15 +129,15 @@ export default function NotificationsPage() {
 
             const isUnread = !seenIds.has(id);
             const section = getSection(n.createdAt, isUnread);
-            
+
             // Simple grouping for likes: if multiple likes for same postId in same section
             if (n.type === "like" && n.postId) {
-                const samePost = activity.filter(other => 
-                    other.type === "like" && 
-                    other.postId === n.postId && 
+                const samePost = activity.filter(other =>
+                    other.type === "like" &&
+                    other.postId === n.postId &&
                     getSection(other.createdAt, !seenIds.has(notificationStableId(other))) === section
                 );
-                
+
                 if (samePost.length > 1) {
                     sections[section].push({
                         id: `group-like-${n.postId}-${section}`,
@@ -220,9 +220,9 @@ export default function NotificationsPage() {
 
             if (isFollowing) {
                 return (
-                    <Button 
-                        variant="secondary" 
-                        size="sm" 
+                    <Button
+                        variant="secondary"
+                        size="sm"
                         className="h-8 px-4 rounded-lg bg-zinc-900 border-none text-zinc-300 font-semibold text-xs"
                         onClick={(e) => { e.preventDefault(); handleUnfollow(user.id); }}
                         disabled={isLoading}
@@ -233,8 +233,8 @@ export default function NotificationsPage() {
             }
 
             return (
-                <Button 
-                    size="sm" 
+                <Button
+                    size="sm"
                     className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 border-none text-white font-semibold text-xs"
                     onClick={(e) => { e.preventDefault(); handleFollow(user.id, user.username); }}
                     disabled={isLoading}
@@ -252,7 +252,7 @@ export default function NotificationsPage() {
         const othersCount = item.count - 1;
 
         const UserLink = ({ user }: { user: User }) => (
-            <span 
+            <span
                 className="font-semibold text-white hover:underline cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); navigate(`/profile/${user.username}`); }}
             >
@@ -323,7 +323,7 @@ export default function NotificationsPage() {
             {/* Background */}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[520px] bg-brand/5 blur-[140px] opacity-50" />
-                <div className="absolute inset-0 bg-mesh opacity-[0.012]" />
+                <div className="absolute inset-0" />
             </div>
 
             <Header />
@@ -364,8 +364,8 @@ export default function NotificationsPage() {
                                     <div className="mt-1">
                                         {sectionItems.map((item) => {
                                             const isPostAction = item.type === "like" || item.type === "comment" || item.type === "comment_like" || (item.type === "mention" && item.postId);
-                                            const targetUrl = isPostAction && item.postId 
-                                                ? `/posts/${item.postId}` 
+                                            const targetUrl = isPostAction && item.postId
+                                                ? `/posts/${item.postId}`
                                                 : `/profile/${item.users[0].username}`;
 
                                             return (

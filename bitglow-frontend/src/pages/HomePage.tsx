@@ -228,29 +228,29 @@ export default function HomePage() {
     if (!comment) return;
 
     const liked = !comment.likedByMe;
-    
+
     // Optimistic update
-    setComments(prev => prev.map(c => 
-      c.id === commentId 
-        ? { ...c, likedByMe: liked, likesCount: (c.likesCount || 0) + (liked ? 1 : -1) } 
+    setComments(prev => prev.map(c =>
+      c.id === commentId
+        ? { ...c, likedByMe: liked, likesCount: (c.likesCount || 0) + (liked ? 1 : -1) }
         : c
     ));
 
     try {
       const res = await api.posts.likeComment(commentId);
       if (res) {
-        setComments(prev => prev.map(c => 
-          c.id === commentId 
-            ? { ...c, likedByMe: res.liked, likesCount: res.likesCount } 
+        setComments(prev => prev.map(c =>
+          c.id === commentId
+            ? { ...c, likedByMe: res.liked, likesCount: res.likesCount }
             : c
         ));
       }
     } catch (err) {
       console.error("Failed to like comment", err);
       // Revert on error
-      setComments(prev => prev.map(c => 
-        c.id === commentId 
-          ? { ...c, likedByMe: !liked, likesCount: (c.likesCount || 0) + (!liked ? 1 : -1) } 
+      setComments(prev => prev.map(c =>
+        c.id === commentId
+          ? { ...c, likedByMe: !liked, likesCount: (c.likesCount || 0) + (!liked ? 1 : -1) }
           : c
       ));
     }
@@ -351,7 +351,7 @@ export default function HomePage() {
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[520px] bg-brand/5 blur-[140px] opacity-50" />
-        <div className="absolute inset-0 bg-mesh opacity-[0.02]" />
+        <div className="absolute inset-0" />
       </div>
 
       <Header />
@@ -399,9 +399,9 @@ export default function HomePage() {
       </main>
 
       {/* Modals */}
-      <BottomSheet 
-        isOpen={!!commentingPost} 
-        onClose={() => setCommentingPost(null)} 
+      <BottomSheet
+        isOpen={!!commentingPost}
+        onClose={() => setCommentingPost(null)}
         title="Comments"
         footer={
           <div className="flex gap-2 items-center">
@@ -458,7 +458,7 @@ export default function HomePage() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button 
+                    <button
                       onClick={() => handleCommentLike(c.id)}
                       className={clsx(
                         "transition-all active:scale-125",

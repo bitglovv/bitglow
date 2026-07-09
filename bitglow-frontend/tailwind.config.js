@@ -50,8 +50,11 @@ export default {
             },
             backgroundImage: {
                 'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-                'mesh': "url('https://grainy-gradients.vercel.app/noise.svg')",
-                'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0))',
+
+                'mesh':
+                    'radial-gradient(circle at 20% 20%, rgba(16,185,129,.08), transparent 40%), radial-gradient(circle at 80% 80%, rgba(16,44,38,.08), transparent 45%)',
+
+                'glass-gradient': 'linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,0))',
             },
             backdropBlur: {
                 xs: '2px',

@@ -20,7 +20,7 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
         <div className="relative h-[100svh] overflow-hidden bg-black font-sans text-white selection:bg-brand/30">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute left-1/2 top-[10%] h-[35rem] w-[35rem] -translate-x-1/2 rounded-full bg-[#102C26]/40 blur-[160px]" />
-                <div className="absolute inset-0 bg-mesh opacity-[0.01]" />
+                <div className="absolute inset-0" />
             </div>
 
             <div className="relative z-10 flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
