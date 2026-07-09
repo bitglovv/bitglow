@@ -93,6 +93,11 @@ export interface SecurityLogRow {
 
 const pool = new Pool({
     connectionString: env.DATABASE_URL,
+
+    ssl: {
+        rejectUnauthorized: false,
+    },
+
     connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
     statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
     idle_in_transaction_session_timeout: env.DB_STATEMENT_TIMEOUT_MS,
@@ -302,7 +307,7 @@ const initSecurityTables = async () => {
         throw err;
     }
 };
- 
+
 const initDMTables = async () => {
     try {
         await pool.query(`
@@ -392,7 +397,7 @@ const initDMTables = async () => {
         throw err;
     }
 };
- 
+
 const initLiveTables = async () => {
     try {
         await pool.query(`
@@ -1105,7 +1110,7 @@ export const db = {
                 OR (user_a = $2 AND user_b = $1)`,
             [userId, friendId]
         );
-        
+
         if (convRes.rowCount && convRes.rowCount > 0) {
             for (const row of convRes.rows) {
                 await pool.query('DELETE FROM dm_messages WHERE conversation_id = $1', [row.id]);
