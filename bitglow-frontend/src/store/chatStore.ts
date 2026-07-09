@@ -104,7 +104,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           {
             userId: friend.id,
             username: friend.username,
-            displayName: friend.displayName || friend.username,
             avatarUrl: friend.avatarUrl,
             lastMessage: "",
             unreadCount: 0,
@@ -121,6 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: `temp-${Date.now()}`,
       senderId: currentUserId,
       text,
+      type: 'text',
       createdAt: new Date().toISOString(),
     };
 
@@ -298,7 +298,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           lastMessage: msg.isForwarded ? `Forwarded: ${msg.text}` : msg.text,
           lastMessageAt: msg.createdAt,
           lastMessageSenderId: msg.senderId,
-          unreadCount: convs[idx].unreadCount + unreadDelta,
+          unreadCount: (convs[idx].unreadCount ?? 0) + unreadDelta,
         };
         convs.splice(idx, 1);
         convs.unshift(copy);
