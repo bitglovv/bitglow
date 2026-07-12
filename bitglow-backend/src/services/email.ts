@@ -18,8 +18,8 @@ export async function sendPasswordResetEmail(email: string, token: string) {
         return;
     }
 
-    // Assuming the frontend URL will handle the token
-    const frontendUrl = env.CORS_ORIGINS[0] || 'http://localhost:5173';
+    // Find the first HTTPS origin for production, fallback to local
+    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
     try {
@@ -52,7 +52,7 @@ export async function sendEmailChangeVerification(email: string, token: string) 
         return;
     }
 
-    const frontendUrl = env.CORS_ORIGINS[0] || 'http://localhost:5173';
+    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
     const verifyLink = `${frontendUrl}/verify-email?token=${token}`;
 
     try {
