@@ -156,6 +156,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [formLoading, setFormLoading] = useState(false);
@@ -171,6 +172,7 @@ export default function SettingsPage() {
     setCurrentPassword("");
     setNewEmail("");
     setNewPassword("");
+    setConfirmPassword("");
     setFormError("");
     setFormSuccess("");
   };
@@ -195,6 +197,17 @@ export default function SettingsPage() {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
+
+    if (newPassword !== confirmPassword) {
+      setFormError("New passwords do not match.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setFormError("Password must be at least 8 characters.");
+      return;
+    }
+
     setFormLoading(true);
     try {
       await api.settings.changePassword(currentPassword, newPassword);
@@ -269,6 +282,7 @@ export default function SettingsPage() {
                 <form onSubmit={handlePasswordSubmit} className="space-y-3">
                   <Input label="Current Password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
                   <Input label="New Password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  <Input label="Confirm New Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
                   {formError && <p className="text-red-400 text-sm">{formError}</p>}
                   <div className="flex gap-2">
                     <Button type="submit" isLoading={formLoading} disabled={formLoading}>Update Password</Button>

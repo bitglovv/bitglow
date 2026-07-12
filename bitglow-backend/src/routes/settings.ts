@@ -54,7 +54,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
         await db.createEmailChangeToken(userId, normalizedEmail, tokenHash, expiresAt);
-        await sendEmailChangeVerification(normalizedEmail, rawToken);
+        await sendEmailChangeVerification(dbUser.email, rawToken);
 
         await logSecurityEvent("change_email_requested", req, { newEmail: normalizedEmail }, userId);
 

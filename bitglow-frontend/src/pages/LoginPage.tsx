@@ -109,11 +109,6 @@ export default function LoginPage() {
                             error={passwordError}
                             required
                         />
-                        <div className="flex justify-end pt-1">
-                            <Link to="/forgot-password" className="text-sm font-medium text-brand hover:text-brand-light transition-colors">
-                                Forgot password?
-                            </Link>
-                        </div>
                     </div>
                 </div>
 
@@ -126,7 +121,12 @@ export default function LoginPage() {
                     Sign In
                 </Button>
 
-                <div className="text-center">
+                <div className="text-center space-y-2">
+                    <p className="text-sm text-zinc-500">
+                        <Link to="/forgot-password" className="font-medium text-zinc-300 hover:text-white transition-colors">
+                            Forgot your password?
+                        </Link>
+                    </p>
                     <p className="text-sm text-zinc-500">
                         New to BitGlow?{" "}
                         <Link to="/signup" className="font-bold text-zinc-100 transition-colors hover:text-brand">
