@@ -109,6 +109,11 @@ export default function LoginPage() {
                             error={passwordError}
                             required
                         />
+                        <div className="flex justify-end pt-1">
+                            <Link to="/forgot-password" className="text-sm font-medium text-brand hover:text-brand-light transition-colors">
+                                Forgot password?
+                            </Link>
+                        </div>
                     </div>
                 </div>
 

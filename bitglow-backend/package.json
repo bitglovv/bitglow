@@ -26,6 +26,7 @@
     "fastify-plugin": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.17.2",
+    "resend": "^6.17.2",
     "sanitize-html": "^2.17.3",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",

@@ -157,6 +157,7 @@ export default function SettingsPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
   const [formLoading, setFormLoading] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -171,16 +172,19 @@ export default function SettingsPage() {
     setNewEmail("");
     setNewPassword("");
     setFormError("");
+    setFormSuccess("");
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
+    setFormSuccess("");
     setFormLoading(true);
     try {
-      await api.settings.changeEmail(currentPassword, newEmail);
-      if (user) user.email = newEmail;
-      closeForm();
+      const res = await api.settings.changeEmail(currentPassword, newEmail);
+      setFormSuccess(res.message || "A verification email has been sent.");
+      // Don't close form immediately so they can read the success message
+      setCurrentPassword("");
     } catch (err: any) {
       setFormError(err.message);
     } finally {
@@ -251,8 +255,9 @@ export default function SettingsPage() {
                   <Input label="New Email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
                   <Input label="Current Password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
                   {formError && <p className="text-red-400 text-sm">{formError}</p>}
+                  {formSuccess && <p className="text-brand text-sm font-medium">{formSuccess}</p>}
                   <div className="flex gap-2">
-                    <Button type="submit" isLoading={formLoading} disabled={formLoading}>Save Email</Button>
+                    <Button type="submit" isLoading={formLoading} disabled={formLoading || !!formSuccess}>Save Email</Button>
                     <Button type="button" variant="secondary" onClick={closeForm}>Cancel</Button>
                   </div>
                 </form>

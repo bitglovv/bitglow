@@ -1,6 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import SignupPage from "../pages/SignupPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
+import VerifyEmailPage from "../pages/VerifyEmailPage";
 import IndexPage from "../pages/IndexPage";
 import PrivacyPage from "../pages/PrivacyPage";
 import TermsPage from "../pages/TermsPage";
@@ -37,6 +40,9 @@ export default function Router() {
             {/* Auth Routes - block if already logged in */}
             <Route path="/login" element={token && user ? <Navigate to="/home" replace /> : <LoginPage />} />
             <Route path="/signup" element={token && user ? <Navigate to="/home" replace /> : <SignupPage />} />
+            <Route path="/forgot-password" element={token && user ? <Navigate to="/home" replace /> : <ForgotPasswordPage />} />
+            <Route path="/reset-password" element={token && user ? <Navigate to="/home" replace /> : <ResetPasswordPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
 
             {/* Public legal pages — also accessible from within the app */}
             <Route path="/privacy" element={<PrivacyPage />} />

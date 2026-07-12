@@ -24,6 +24,29 @@ export const authLoginSchema = {
     },
 } as const;
 
+export const forgotPasswordSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["email"],
+        properties: {
+            email: { type: "string", format: "email", maxLength: 255 },
+        },
+    },
+} as const;
+
+export const resetPasswordSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["token", "newPassword"],
+        properties: {
+            token: { type: "string", minLength: 1, maxLength: 255 },
+            newPassword: { type: "string", minLength: 8, maxLength: 128 },
+        },
+    },
+} as const;
+
 export const logoutSchema = {
     headers: {
         type: "object",

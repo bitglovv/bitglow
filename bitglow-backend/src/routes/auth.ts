@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { db } from "../services/db";
 import {
     compareAgainstFakeHash,
@@ -15,13 +15,89 @@ import {
     validateUsername,
 } from "../services/security";
 import { env } from "../config/env";
-import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema } from "./schemas";
+import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema } from "./schemas";
+import { sendPasswordResetEmail } from "../services/email";
 
 export async function authRoutes(fastify: FastifyInstance) {
 
     // Helpful pointers for developers trying to visit routes in browser
     fastify.get("/login", async () => ({ message: "Please use POST /api/auth/login with {identifier, password} to login." }));
     fastify.get("/signup", async () => ({ message: "Please use POST /api/auth/signup to create an account." }));
+
+    fastify.post("/forgot-password", {
+        config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
+        schema: forgotPasswordSchema,
+    }, async (req, reply) => {
+        const { email } = req.body as any;
+        const normalizedEmail = normalizeIdentifier(String(email || ""));
+
+        if (!normalizedEmail) {
+            return reply.code(400).send({ message: "Email is required" });
+        }
+
+        const dbUser = await db.findUserByEmail(normalizedEmail);
+        
+        // Security best practice: Always return 200 to prevent email enumeration
+        if (!dbUser) {
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 100)); // random delay
+            return { ok: true, message: "If an account with that email exists, we sent a password reset link." };
+        }
+
+        // Rate limit resets per user (e.g., max 3 active unexpired tokens)
+        // For simplicity, we just generate one and email it.
+
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+        await db.createPasswordResetToken(dbUser.id, tokenHash, expiresAt);
+        await sendPasswordResetEmail(dbUser.email, rawToken);
+
+        await logSecurityEvent("password_reset_requested", req, {}, dbUser.id);
+        
+        return { ok: true, message: "If an account with that email exists, we sent a password reset link." };
+    });
+
+    fastify.post("/reset-password", {
+        config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+        schema: resetPasswordSchema,
+    }, async (req, reply) => {
+        const { token, newPassword } = req.body as any;
+
+        if (!validatePassword(String(newPassword))) {
+            return reply.code(400).send({ message: "Password must be at least 8 characters" });
+        }
+
+        const tokenHash = hashToken(token);
+        const resetToken = await db.getPasswordResetToken(tokenHash);
+
+        if (!resetToken) {
+            return reply.code(400).send({ message: "Invalid or expired token" });
+        }
+
+        if (resetToken.used_at) {
+            return reply.code(400).send({ message: "Token has already been used" });
+        }
+
+        if (new Date(resetToken.expires_at).getTime() < Date.now()) {
+            return reply.code(400).send({ message: "Token has expired" });
+        }
+
+        const passwordHash = await db.hashPassword(newPassword);
+        
+        // Update user's password
+        await db.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, resetToken.user_id]);
+        
+        // Mark token as used
+        await db.markPasswordResetTokenUsed(resetToken.id);
+        
+        // Revoke all sessions for security
+        await db.revokeSessionsForUser(resetToken.user_id);
+        
+        await logSecurityEvent("password_reset_completed", req, {}, resetToken.user_id);
+
+        return { ok: true, message: "Password updated successfully. You have been logged out of all devices." };
+    });
 
     fastify.post("/signup", {
         config: {

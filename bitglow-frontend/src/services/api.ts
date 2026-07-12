@@ -286,6 +286,28 @@ export const api = {
             }
             return readAuthResponse(res);
         },
+        forgotPassword: async (email: string): Promise<{ message: string }> => {
+            const res = await fetch(`${API_URL}/auth/forgot-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to request password reset"));
+            }
+            return res.json();
+        },
+        resetPassword: async (token: string, newPassword: string): Promise<{ message: string }> => {
+            const res = await fetch(`${API_URL}/auth/reset-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token, newPassword }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to reset password"));
+            }
+            return res.json();
+        },
         me: async (): Promise<User> => {
             const res = await fetchWithAuth("/api/me");
             if (!res.ok) {
@@ -589,6 +611,13 @@ export const api = {
                 body: JSON.stringify({ currentPassword, newEmail }),
             });
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to change email"));
+            return res.json();
+        },
+        verifyEmail: async (token: string) => {
+            const res = await fetchWithAuth(`/settings/verify-email?token=${encodeURIComponent(token)}`, {
+                method: "GET"
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to verify email"));
             return res.json();
         },
         changePassword: async (currentPassword: string, newPassword: string) => {

@@ -288,10 +288,30 @@ const initSecurityTables = async () => {
                 details JSONB DEFAULT '{}'::jsonb,
                 created_at TIMESTAMP DEFAULT now()
             );
+            CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_security_logs_type ON security_logs(event_type);
+            CREATE INDEX IF NOT EXISTS idx_security_logs_created ON security_logs(created_at DESC);
 
-            CREATE INDEX IF NOT EXISTS idx_security_logs_event_type ON security_logs(event_type);
-            CREATE INDEX IF NOT EXISTS idx_security_logs_user_id ON security_logs(user_id);
-            CREATE INDEX IF NOT EXISTS idx_security_logs_created_at ON security_logs(created_at DESC);
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_pwd_reset_token ON password_reset_tokens(token_hash);
+
+            CREATE TABLE IF NOT EXISTS email_change_tokens (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                new_email TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_email_change_token ON email_change_tokens(token_hash);
 
             CREATE TABLE IF NOT EXISTS user_reports (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -2082,7 +2102,6 @@ export const db = {
 
     async saveReport(userId: string | undefined, type: string, reportedUserId: string | undefined, postId: string | undefined, reason: string) {
         // Simple insert into a generic reports table, or create user_reports if it exists
-        // Wait, schema.sql has user_reports
         if (type === 'account' && reportedUserId) {
             await pool.query(
                 `INSERT INTO user_reports (reported_user, reported_by, reason)
@@ -2097,6 +2116,56 @@ export const db = {
                 ['report', userId || null, JSON.stringify({ type, reportedUserId, postId, reason })]
             );
         }
+    },
+
+    async createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date) {
+        await pool.query(
+            `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+             VALUES ($1, $2, $3)`,
+            [userId, tokenHash, expiresAt]
+        );
+    },
+
+    async getPasswordResetToken(tokenHash: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, expires_at, used_at
+             FROM password_reset_tokens
+             WHERE token_hash = $1`,
+            [tokenHash]
+        );
+        return res.rows[0] || null;
+    },
+
+    async markPasswordResetTokenUsed(id: string) {
+        await pool.query(
+            `UPDATE password_reset_tokens SET used_at = now() WHERE id = $1`,
+            [id]
+        );
+    },
+
+    async createEmailChangeToken(userId: string, newEmail: string, tokenHash: string, expiresAt: Date) {
+        await pool.query(
+            `INSERT INTO email_change_tokens (user_id, new_email, token_hash, expires_at)
+             VALUES ($1, $2, $3, $4)`,
+            [userId, newEmail, tokenHash, expiresAt]
+        );
+    },
+
+    async getEmailChangeToken(tokenHash: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, new_email, expires_at, used_at
+             FROM email_change_tokens
+             WHERE token_hash = $1`,
+            [tokenHash]
+        );
+        return res.rows[0] || null;
+    },
+
+    async markEmailChangeTokenUsed(id: string) {
+        await pool.query(
+            `UPDATE email_change_tokens SET used_at = now() WHERE id = $1`,
+            [id]
+        );
     }
 };
 

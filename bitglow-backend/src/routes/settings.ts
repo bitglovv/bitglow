@@ -1,6 +1,8 @@
 import { FastifyInstance } from "fastify";
+import { randomBytes } from "crypto";
 import { db } from "../services/db";
-import { getRequestIp, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
+import { getRequestIp, hashToken, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
+import { sendEmailChangeVerification } from "../services/email";
 import {
     emailUpdateSchema,
     idParamSchema,
@@ -47,10 +49,51 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        await db.updateUserEmail(userId, normalizedEmail);
-        await logSecurityEvent("change_email_success", req, { newEmail: normalizedEmail }, userId);
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
-        return { ok: true, email: normalizedEmail };
+        await db.createEmailChangeToken(userId, normalizedEmail, tokenHash, expiresAt);
+        await sendEmailChangeVerification(normalizedEmail, rawToken);
+
+        await logSecurityEvent("change_email_requested", req, { newEmail: normalizedEmail }, userId);
+
+        return { ok: true, message: "A verification email has been sent to the new address." };
+    });
+
+    fastify.get("/verify-email", {
+        config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+    }, async (req, reply) => {
+        const { token } = req.query as any;
+
+        if (!token) {
+            return reply.code(400).send({ message: "Verification token is required" });
+        }
+
+        const tokenHash = hashToken(token);
+        const changeToken = await db.getEmailChangeToken(tokenHash);
+
+        if (!changeToken) {
+            return reply.code(400).send({ message: "Invalid or expired token" });
+        }
+
+        if (changeToken.used_at) {
+            return reply.code(400).send({ message: "Token has already been used" });
+        }
+
+        if (new Date(changeToken.expires_at).getTime() < Date.now()) {
+            return reply.code(400).send({ message: "Token has expired" });
+        }
+
+        // Update the user's email
+        await db.updateUserEmail(changeToken.user_id, changeToken.new_email);
+        
+        // Mark token as used
+        await db.markEmailChangeTokenUsed(changeToken.id);
+
+        await logSecurityEvent("change_email_success", req, { newEmail: changeToken.new_email }, changeToken.user_id);
+
+        return { ok: true, message: "Email updated successfully" };
     });
 
     /**
