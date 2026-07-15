@@ -1,7 +1,7 @@
 /* bitglow-backend/src/ws/index.ts */
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
-import { ClientMeta, handleMessage, broadcastPresence, broadcastRoomPresence, roomUsers, userMessageTimestamps } from "./handlers";
+import { ClientMeta, handleMessage, broadcastPresence, broadcastRoomPresence, broadcastUserStatus, roomUsers, userMessageTimestamps } from "./handlers";
 import type { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { env } from "../config/env";
@@ -84,6 +84,12 @@ export function startWS(httpServer: any) {
       console.log(`❌ Client ${userId} disconnected. Total: ${clients.size}`);
       
       broadcastPresence(clients);
+
+      // Broadcast offline status if no other connections for this user
+      const stillConnected = Array.from(clients).some(c => c.userId === meta.userId && c.isAuth);
+      if (!stillConnected && meta.isAuth && meta.onlineVisible) {
+        broadcastUserStatus(meta.userId, false, clients);
+      }
       
       for (const roomId of joinedRooms) {
         // STEP 4 & 10: REMOVE USER FROM GLOBAL STORE

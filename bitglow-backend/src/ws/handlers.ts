@@ -52,6 +52,24 @@ export function broadcastPresence(clients: Set<ClientMeta>) {
     }
 }
 
+/**
+ * Broadcast a specific user's online/offline status to all connected clients.
+ * This allows the frontend to update individual user indicators in real-time.
+ */
+export function broadcastUserStatus(userId: string, isOnline: boolean, clients: Set<ClientMeta>) {
+    const message = JSON.stringify({
+        type: "server:user_status",
+        userId,
+        isOnline,
+        ts: Date.now(),
+    });
+    for (const c of clients) {
+        if (c.socket.readyState === WebSocket.OPEN && c.userId !== userId) {
+            c.socket.send(message);
+        }
+    }
+}
+
 export function broadcastRoomPresence(clients: Set<ClientMeta>, roomId: string) {
     const usersInRoom = roomUsers.get(roomId) || new Set();
     const count = usersInRoom.size;
@@ -189,6 +207,11 @@ export async function handleMessage(
                     ts: Date.now(),
                 })
             );
+
+            // Broadcast this user is now online to all connected clients
+            if (meta.isAuth && meta.onlineVisible) {
+                broadcastUserStatus(meta.userId, true, clients);
+            }
             return;
         }
 

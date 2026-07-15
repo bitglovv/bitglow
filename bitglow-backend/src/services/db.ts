@@ -321,6 +321,14 @@ const initSecurityTables = async () => {
                 created_at TIMESTAMP DEFAULT now()
             );
             CREATE INDEX IF NOT EXISTS idx_user_reports_reported_user ON user_reports(reported_user);
+
+            CREATE TABLE IF NOT EXISTS muted_users (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                muted_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (user_id, muted_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_muted_users_user ON muted_users(user_id);
         `);
     } catch (err) {
         console.error("Failed to ensure security tables", err);
@@ -356,6 +364,15 @@ const initDMTables = async () => {
             );
             DO $$
             BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'dm_conversations'
+                      AND column_name = 'status'
+                ) THEN
+                    ALTER TABLE dm_conversations ADD COLUMN status TEXT DEFAULT 'accepted' CHECK (status IN ('pending', 'accepted'));
+                END IF;
+
                 IF NOT EXISTS (
                     SELECT 1
                     FROM information_schema.columns
@@ -1115,6 +1132,27 @@ export const db = {
         return (result.rowCount ?? 0) > 0;
     },
 
+    async rejectFollow(userId: string, followerId: string) {
+        const result = await pool.query(
+            `DELETE FROM friends
+             WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'`,
+            [followerId, userId]
+        );
+        return (result.rowCount ?? 0) > 0;
+    },
+
+    async getFollowRequests(userId: string) {
+        const res = await pool.query(
+            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+             FROM friends f
+             JOIN users u ON u.id = f.user_id
+             WHERE f.friend_id = $1 AND f.status = 'pending'
+             ORDER BY f.created_at DESC`,
+            [userId]
+        );
+        return res.rows;
+    },
+
     async unfollowUser(userId: string, friendId: string) {
         await pool.query(
             `DELETE FROM friends
@@ -1356,7 +1394,50 @@ export const db = {
         }
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
-        return await this.createDMConversation(userId, otherId);
+        
+        // Check if other user is private and we are not friends
+        const otherUser = await this.getUserById(otherId);
+        const areFriends = await this.areFriends(userId, otherId);
+        const status = (otherUser?.is_private && !areFriends && userId !== otherId) ? 'pending' : 'accepted';
+        
+        return await this.createDMConversationWithStatus(userId, otherId, status);
+    },
+
+    async createDMConversationWithStatus(userId: string, otherId: string, status: 'pending' | 'accepted' = 'accepted') {
+        if (userId === otherId) return null;
+        const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
+        const res = await pool.query(
+            `INSERT INTO dm_conversations (user_a, user_b, status)
+             SELECT $1, $2, $3
+             WHERE EXISTS (SELECT 1 FROM users WHERE id = $1)
+               AND EXISTS (SELECT 1 FROM users WHERE id = $2)
+             ON CONFLICT (user_a, user_b) DO UPDATE SET user_a = EXCLUDED.user_a
+             RETURNING id, user_a, user_b, status, created_at`,
+            [userA, userB, status]
+        );
+        return res.rows[0] || null;
+    },
+
+    async acceptDMRequest(userId: string, otherId: string) {
+        const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
+        const res = await pool.query(
+            `UPDATE dm_conversations SET status = 'accepted'
+             WHERE user_a = $1 AND user_b = $2 AND status = 'pending'
+             AND ($3 = user_a OR $3 = user_b)`,
+            [userA, userB, userId]
+        );
+        return (res.rowCount ?? 0) > 0;
+    },
+
+    async rejectDMRequest(userId: string, otherId: string) {
+        const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
+        const res = await pool.query(
+            `DELETE FROM dm_conversations
+             WHERE user_a = $1 AND user_b = $2 AND status = 'pending'
+             AND ($3 = user_a OR $3 = user_b)`,
+            [userA, userB, userId]
+        );
+        return (res.rowCount ?? 0) > 0;
     },
 
     async listDMConversations(userId: string, limit = 50, offset = 0) {
@@ -1364,6 +1445,7 @@ export const db = {
         const safeOffset = Math.max(offset, 0);
         const res = await pool.query(
             `SELECT c.id as conversation_id,
+                    c.status,
                     u.id as other_id,
                     u.username as other_username,
                     u.display_name as other_display_name,
@@ -1395,11 +1477,15 @@ export const db = {
                        OR (f.user_id = u.id AND f.friend_id = $1))
                      AND f.status = 'blocked'
                )
+               AND NOT EXISTS (
+                   SELECT 1 FROM muted_users m
+                   WHERE m.user_id = $1 AND m.muted_id = u.id
+               )
              ORDER BY m.created_at DESC NULLS LAST, c.created_at DESC
              LIMIT $2 OFFSET $3`,
             [userId, cappedLimit, safeOffset]
         );
-        return res.rows;
+        return res.rows.map((r: any) => ({ ...r, conversationStatus: r.status || 'accepted' }));
     },
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
@@ -1553,11 +1639,22 @@ export const db = {
                 SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
             ) s ON true
             WHERE
-                p.visibility = 'public'
-                OR p.author_id = $1
-                OR EXISTS (
+                (
+                    (p.visibility = 'public' AND u.is_private = false)
+                    OR p.author_id = $1
+                    OR EXISTS (
+                        SELECT 1 FROM friends f
+                        WHERE f.user_id = $1 AND f.friend_id = p.author_id AND f.status = 'accepted'
+                    )
+                )
+                AND NOT EXISTS (
                     SELECT 1 FROM friends f
-                    WHERE f.user_id = $1 AND f.friend_id = p.author_id AND f.status = 'accepted'
+                    WHERE (f.user_id = $1 AND f.friend_id = p.author_id AND f.status = 'blocked')
+                       OR (f.user_id = p.author_id AND f.friend_id = $1 AND f.status = 'blocked')
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM muted_users m
+                    WHERE m.user_id = $1 AND m.muted_id = p.author_id
                 )
             ORDER BY p.created_at DESC
             LIMIT $2 OFFSET $3
@@ -1865,6 +1962,13 @@ export const db = {
                  WHERE (c.user_a = $1 OR c.user_b = $1)
                    AND m.sender_id <> $1
              ) notifications
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM muted_users m
+                 WHERE m.user_id = $1 AND m.muted_id = notifications.user_id
+             ) AND NOT EXISTS (
+                 SELECT 1 FROM friends f
+                 WHERE ((f.user_id = $1 AND f.friend_id = notifications.user_id) OR (f.user_id = notifications.user_id AND f.friend_id = $1)) AND f.status = 'blocked'
+             )
              ORDER BY created_at DESC
              LIMIT $2 OFFSET $3`,
             [userId, cappedLimit, safeOffset]
@@ -2023,6 +2127,43 @@ export const db = {
              WHERE user_id = $1 AND friend_id = $2 AND status = 'blocked'`,
             [userId, unblockedId]
         );
+    },
+
+    async muteUser(userId: string, mutedId: string) {
+        await pool.query(
+            `INSERT INTO muted_users (user_id, muted_id)
+             SELECT $1, $2
+             WHERE EXISTS (SELECT 1 FROM users WHERE id = $2)
+             ON CONFLICT (user_id, muted_id) DO NOTHING`,
+            [userId, mutedId]
+        );
+    },
+
+    async unmuteUser(userId: string, mutedId: string) {
+        await pool.query(
+            `DELETE FROM muted_users WHERE user_id = $1 AND muted_id = $2`,
+            [userId, mutedId]
+        );
+    },
+
+    async getMutedUsers(userId: string) {
+        const res = await pool.query(
+            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+             FROM muted_users m
+             JOIN users u ON u.id = m.muted_id
+             WHERE m.user_id = $1
+             ORDER BY u.username`,
+            [userId]
+        );
+        return res.rows;
+    },
+
+    async isMuted(userId: string, mutedId: string) {
+        const res = await pool.query(
+            `SELECT 1 FROM muted_users WHERE user_id = $1 AND muted_id = $2`,
+            [userId, mutedId]
+        );
+        return (res.rowCount ?? 0) > 0;
     },
 
     async getSavedPosts(userId: string) {

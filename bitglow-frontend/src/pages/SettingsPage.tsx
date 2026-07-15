@@ -149,6 +149,24 @@ export default function SettingsPage() {
     }
   }, [user, hydrateFromUser]);
 
+  const handlePrivacyToggle = async (next: boolean) => {
+    setPrivateAccount(next);
+    try {
+      await api.settings.updatePrivacy(next);
+    } catch {
+      setPrivateAccount(!next); // revert on error
+    }
+  };
+
+  const handleOnlineStatusToggle = async (next: boolean) => {
+    setOnlineStatusVisible(next);
+    try {
+      await api.settings.updateOnlineStatus(next);
+    } catch {
+      setOnlineStatusVisible(!next); // revert on error
+    }
+  };
+
   // Modals state
   const [activeModal, setActiveModal] = useState<"email" | "password" | "theme" | null>(null);
 
@@ -294,9 +312,10 @@ export default function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="Privacy">
-            <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: privateAccount, onChange: setPrivateAccount }} />
-            <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: setOnlineStatusVisible }} />
+            <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: privateAccount, onChange: handlePrivacyToggle }} />
+            <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: handleOnlineStatusToggle }} />
             <SettingsItem icon={<UserX className="h-5 w-5" />} title="Blocked Users" subtitle="Review accounts you blocked" to="/settings/blocked-users" />
+            <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Muted Users" subtitle="Review accounts you muted" to="/settings/muted-users" />
           </SettingsSection>
 
           <SettingsSection title="Account & App">

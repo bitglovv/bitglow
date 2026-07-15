@@ -27,7 +27,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
             lastMessage: r.last_message || "",
             lastMessageSenderId: r.last_message_sender_id || null,
             lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
-            unreadCount: Number(r.unread_count || 0)
+            unreadCount: Number(r.unread_count || 0),
+            conversationStatus: r.conversationStatus || r.status || "accepted"
         }));
 
         return conversations;
@@ -284,6 +285,33 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         return { ok: true };
     });
+
+    /**
+     * POST /api/dms/:userId/accept
+     * Accept a message request from another user
+     */
+    fastify.post("/dms/:userId/accept", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const userId = req.auth.id;
+        const { userId: otherId } = req.params as { userId: string };
+        const ok = await db.acceptDMRequest(userId, otherId);
+        if (!ok) return reply.code(404).send({ message: "Message request not found" });
+        broadcastDM([userId, otherId], { type: "dm_request_accepted", fromUserId: otherId, toUserId: userId });
+        return { ok: true };
+    });
+
+    /**
+     * POST /api/dms/:userId/reject
+     * Reject (delete) a message request from another user
+     */
+    fastify.post("/dms/:userId/reject", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const userId = req.auth.id;
+        const { userId: otherId } = req.params as { userId: string };
+        const ok = await db.rejectDMRequest(userId, otherId);
+        if (!ok) return reply.code(404).send({ message: "Message request not found" });
+        return { ok: true };
+    });
 }
 
 function broadcastDM(userIds: string[], event: object) {
@@ -294,4 +322,3 @@ function broadcastDM(userIds: string[], event: object) {
         }
     }
 }
-

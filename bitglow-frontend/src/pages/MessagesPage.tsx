@@ -40,13 +40,6 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
   const [isStackedLayout, setIsStackedLayout] = useState(isStackedMessagesLayout);
-  const [acceptedRequests, setAcceptedRequests] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem("bitglow:accepted_requests") || "[]"));
-    } catch (e) {
-      return new Set();
-    }
-  });
   const viewport = useVisualViewport();
 
   useEffect(() => {
@@ -219,45 +212,25 @@ export default function MessagesPage() {
               onTyping={() => {}}
               isOnline={activeConversationId ? onlineUsers.has(activeConversationId) : false}
               isLoadingMessages={isLoadingMessages}
-              isRequest={activeConversationId ? (
-                !friends.some(f => f.id === activeConversationId) && 
-                activeConversation?.lastMessageSenderId !== user?.id &&
-                !!activeConversation?.lastMessageSenderId &&
-                !acceptedRequests.has(activeConversationId)
-              ) : false}
+              isRequest={activeConversation?.conversationStatus === 'pending'}
               onAcceptRequest={async () => {
                 if (activeConversationId) {
                   try {
-                    // 1. Follow back so it forms a path to mutual follow
-                    await api.user.follow(activeConversationId, activeConversation.username);
-                    // 2. Also try accepting their follow request in case they already tried following us
-                    await api.user.acceptFollow(activeConversationId).catch(() => {});
-
-                    // 3. Mark as accepted in localStorage to move out of requests instantly
-                    const accepted = new Set(JSON.parse(localStorage.getItem("bitglow:accepted_requests") || "[]"));
-                    accepted.add(activeConversationId);
-                    localStorage.setItem("bitglow:accepted_requests", JSON.stringify([...accepted]));
-                    setAcceptedRequests(accepted);
-
+                    await api.settings.acceptDMRequest(activeConversationId);
                     await fetchConversationsAndFriends();
                   } catch (e) {
-                    console.error("Failed to accept request", e);
+                    console.error("Failed to accept message request", e);
                   }
                 }
               }}
               onRejectRequest={async () => {
                 if (activeConversationId) {
                   try {
-                    await api.dms.deleteConversation(activeConversationId);
-                    // Add them to restricted local storage list so they can't message again (front-end hack)
-                    const restricted = new Set(JSON.parse(localStorage.getItem("bitglow:restricted_users") || "[]"));
-                    restricted.add(activeConversationId);
-                    localStorage.setItem("bitglow:restricted_users", JSON.stringify([...restricted]));
-                    
+                    await api.settings.rejectDMRequest(activeConversationId);
                     await fetchConversationsAndFriends();
                     handleChatBack();
                   } catch (e) {
-                    console.error("Failed to reject request", e);
+                    console.error("Failed to reject message request", e);
                   }
                 }
               }}

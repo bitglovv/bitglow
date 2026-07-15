@@ -276,6 +276,15 @@ export async function userRoutes(fastify: FastifyInstance) {
         return { ok: true };
     });
 
+    // Reject a follow request
+    fastify.post("/follow/requests/:id/reject", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id } = req.params as { id: string };
+        const rejected = await db.rejectFollow(userId, id);
+        if (!rejected) return reply.code(404).send({ message: "Follow request not found" });
+        return { ok: true };
+    });
+
     /**
      * DELETE /api/users/:id/follow
      * Unfollow a user (removes mutual link)

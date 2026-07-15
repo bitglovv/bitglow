@@ -442,51 +442,64 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
-              <CountButton
-                label="Followers"
-                count={followersCount}
-                onClick={isOwner ? () => setShowFollowers(true) : undefined}
-                disabled={!isOwner}
-              />
-              <CountButton
-                label="Following"
-                count={followingCount}
-                onClick={isOwner ? () => setShowFollowing(true) : undefined}
-                disabled={!isOwner}
-              />
-              <CountButton
-                label="Friends"
-                count={friendsCount}
-                onClick={isOwner ? () => setShowFriends(true) : undefined}
-                disabled={!isOwner}
-              />
-            </div>
-
-            <div className="mt-6 space-y-2 text-center md:text-left">
-              <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
-                {profile.bio || "No bio yet."}
+            {profile.isPrivate && !isOwner && !isFollowing && !isMutualFriend ? (
+              <div className="mt-8 text-center md:text-left">
+                <div className="inline-flex items-center justify-center p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="flex items-center gap-3 text-zinc-400">
+                    <UserX className="w-5 h-5" />
+                    <span className="font-medium">This account is private</span>
+                  </div>
+                </div>
               </div>
-
-              {profile.website && (
-                <div className="pt-1">
-                  <a
-                    className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
-                    href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {profile.website}
-                  </a>
+            ) : (
+              <>
+                <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
+                  <CountButton
+                    label="Followers"
+                    count={followersCount}
+                    onClick={isOwner ? () => setShowFollowers(true) : undefined}
+                    disabled={!isOwner}
+                  />
+                  <CountButton
+                    label="Following"
+                    count={followingCount}
+                    onClick={isOwner ? () => setShowFollowing(true) : undefined}
+                    disabled={!isOwner}
+                  />
+                  <CountButton
+                    label="Friends"
+                    count={friendsCount}
+                    onClick={isOwner ? () => setShowFriends(true) : undefined}
+                    disabled={!isOwner}
+                  />
                 </div>
-              )}
 
-              {profile.location && (
-                <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
-                  {profile.location}
+                <div className="mt-6 space-y-2 text-center md:text-left">
+                  <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
+                    {profile.bio || "No bio yet."}
+                  </div>
+
+                  {profile.website && (
+                    <div className="pt-1">
+                      <a
+                        className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
+                        href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {profile.website}
+                      </a>
+                    </div>
+                  )}
+
+                  {profile.location && (
+                    <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
+                      {profile.location}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             <div className="mt-8 flex flex-wrap justify-center md:justify-start gap-4">
               {isOwner ? (

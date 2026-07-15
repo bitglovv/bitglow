@@ -82,12 +82,14 @@ export type DMMessage = {
 export type Conversation = {
     userId: string;
     username: string;
+    displayName?: string;
     avatarUrl?: string;
     lastMessage?: string;
     lastMessageSenderId?: string | null;
     lastMessageAt?: string | null;
     unreadCount?: number;
     pinned?: boolean;
+    conversationStatus?: 'pending' | 'accepted';
 };
 
 export type LiveRoom = {
@@ -673,6 +675,48 @@ export const api = {
             });
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to submit report"));
             return res.json();
-        }
+        },
+        getMutedUsers: async () => {
+            const res = await fetchWithAuth("/settings/muted");
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.mutedUsers || [];
+        },
+        muteUser: async (userId: string) => {
+            const res = await fetchWithAuth(`/settings/muted/${userId}`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to mute user"));
+            return res.json();
+        },
+        unmuteUser: async (userId: string) => {
+            const res = await fetchWithAuth(`/settings/muted/${userId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to unmute user"));
+            return res.json();
+        },
+        getFollowRequests: async () => {
+            const res = await fetchWithAuth("/follow/requests");
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.requests || [];
+        },
+        acceptFollowRequest: async (userId: string) => {
+            const res = await fetchWithAuth(`/follow/requests/${userId}/accept`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to accept request"));
+            return res.json();
+        },
+        rejectFollowRequest: async (userId: string) => {
+            const res = await fetchWithAuth(`/follow/requests/${userId}/reject`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to reject request"));
+            return res.json();
+        },
+        acceptDMRequest: async (userId: string) => {
+            const res = await fetchWithAuth(`/dms/${userId}/accept`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to accept message request"));
+            return res.json();
+        },
+        rejectDMRequest: async (userId: string) => {
+            const res = await fetchWithAuth(`/dms/${userId}/reject`, { method: "POST" });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to reject message request"));
+            return res.json();
+        },
     }
 };

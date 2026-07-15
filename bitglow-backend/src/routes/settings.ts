@@ -210,6 +210,44 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     });
 
     /**
+     * GET /api/settings/muted
+     */
+    fastify.get("/muted", { preHandler: fastify.requireAuth }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const mutedUsers = await db.getMutedUsers(userId);
+        return { mutedUsers };
+    });
+
+    /**
+     * POST /api/settings/muted/:id
+     */
+    fastify.post("/muted/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id: mutedId } = req.params as { id: string };
+
+        if (userId === mutedId) {
+            reply.code(400).send({ message: "Cannot mute yourself" });
+            return;
+        }
+
+        const userToMute = await db.getUserById(mutedId);
+        if (!userToMute) return reply.code(404).send({ message: "User not found" });
+        await db.muteUser(userId, mutedId);
+        return { ok: true };
+    });
+
+    /**
+     * DELETE /api/settings/muted/:id
+     */
+    fastify.delete("/muted/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id: unmutedId } = req.params as { id: string };
+
+        await db.unmuteUser(userId, unmutedId);
+        return { ok: true };
+    });
+
+    /**
      * GET /api/settings/saved
      */
     fastify.get("/saved", { preHandler: fastify.requireAuth }, async (req, reply) => {
