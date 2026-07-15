@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import AuthLayout from "../layouts/AuthLayout";
 import { Button } from "../components/ui/Button";
 import { api } from "../services/api";
@@ -9,6 +9,7 @@ export default function VerifyEmailPage() {
     
     const [searchParams] = useSearchParams();
     const token = searchParams.get("token");
+    const navigate = useNavigate();
 
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
     const [error, setError] = useState("");
@@ -62,7 +63,7 @@ export default function VerifyEmailPage() {
                                 Your email address has been successfully updated.
                             </p>
                         </div>
-                        <Button as={Link} to="/home" className="w-full">
+                        <Button onClick={() => navigate("/home")} className="w-full">
                             Continue to BitGlow
                         </Button>
                     </div>
@@ -79,7 +80,7 @@ export default function VerifyEmailPage() {
                             <h3 className="text-xl font-bold text-white">Verification Failed</h3>
                             <p className="text-red-400 text-sm">{error}</p>
                         </div>
-                        <Button as={Link} to="/settings" className="w-full">
+                        <Button onClick={() => navigate("/settings")} className="w-full">
                             Return to Settings
                         </Button>
                     </div>

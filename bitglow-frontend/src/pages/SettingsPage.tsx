@@ -270,7 +270,7 @@ export default function SettingsPage() {
                   {formError && <p className="text-red-400 text-sm">{formError}</p>}
                   {formSuccess && <p className="text-brand text-sm font-medium">{formSuccess}</p>}
                   <div className="flex gap-2">
-                    <Button type="submit" isLoading={formLoading} disabled={formLoading || !!formSuccess}>Save Email</Button>
+                    <Button type="submit" isLoading={formLoading} disabled={formLoading || !!formSuccess}>Send Verification</Button>
                     <Button type="button" variant="secondary" onClick={closeForm}>Cancel</Button>
                   </div>
                 </form>
