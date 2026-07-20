@@ -77,11 +77,13 @@ export default function LoginPage() {
                     <Input
                         label="Email or Username"
                         type="text"
-                        placeholder="name@example.com or bitglow"
+                        placeholder="Enter your email or username"
                         value={identifier}
-                        onChange={(e) => setIdentifier(e.target.value)}
+                        onChange={(e) => setIdentifier(e.target.value.trim())}
                         onBlur={() => setTouched((prev) => ({ ...prev, identifier: true }))}
                         error={identifierError}
+                        helperText="Use the email or username you signed up with."
+                        autoFocus
                         required
                     />
 
@@ -89,7 +91,7 @@ export default function LoginPage() {
                         <Input
                             label="Password"
                             type={showPassword ? "text" : "password"}
-                            placeholder="••••••••"
+                            placeholder="Enter your password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
@@ -106,6 +108,7 @@ export default function LoginPage() {
                                     )}
                                 </button>
                             }
+                            helperText="Your password is case sensitive."
                             error={passwordError}
                             required
                         />
@@ -118,7 +121,7 @@ export default function LoginPage() {
                     disabled={!isFormValid || loading}
                     className="w-full py-4 text-base shadow-brand"
                 >
-                    Sign In
+                    {loading ? "Signing in..." : "Sign In"}
                 </Button>
 
                 <div className="text-center space-y-2">

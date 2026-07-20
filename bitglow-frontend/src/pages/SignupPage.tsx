@@ -36,8 +36,33 @@ export default function SignupPage() {
         password: false,
         confirmPassword: false,
     });
+    const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+    const [checkingUsername, setCheckingUsername] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+
     const { login } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!form.username.trim() || !/^[a-zA-Z0-9_.]+$/.test(form.username)) {
+            setUsernameAvailable(null);
+            return;
+        }
+        
+        setCheckingUsername(true);
+        const timer = setTimeout(async () => {
+            try {
+                const res = await api.user.checkUsername(form.username);
+                setUsernameAvailable(res.available);
+            } catch {
+                setUsernameAvailable(null);
+            } finally {
+                setCheckingUsername(false);
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [form.username]);
 
     const usernameError = useMemo(() => {
         if (!touched.username) return "";
@@ -45,8 +70,11 @@ export default function SignupPage() {
         if (!/^[a-zA-Z0-9_.]+$/.test(form.username)) {
             return "Use letters, numbers, underscores, or periods only.";
         }
+        if (usernameAvailable === false) {
+            return "Username is already taken.";
+        }
         return "";
-    }, [form.username, touched.username]);
+    }, [form.username, touched.username, usernameAvailable]);
 
     const displayNameError = useMemo(() => {
         if (!touched.displayName) return "";
@@ -88,6 +116,7 @@ export default function SignupPage() {
         !emailError &&
         !passwordError &&
         !confirmPasswordError &&
+        usernameAvailable !== false &&
         form.username.trim() &&
         form.displayName.trim() &&
         form.email.trim() &&
@@ -110,14 +139,13 @@ export default function SignupPage() {
         setLoading(true);
 
         try {
-            const { token, user } = await api.auth.signup({
+            await api.auth.signup({
                 username: form.username,
                 displayName: form.displayName,
                 email: form.email,
                 password: form.password,
             });
-            login(token, user);
-            navigate("/home");
+            setIsSuccess(true);
         } catch (err: any) {
             setError(err.message || "Signup failed.");
         } finally {
@@ -126,12 +154,40 @@ export default function SignupPage() {
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        if (name === "username" || name === "email") {
+            setForm({ ...form, [name]: value.trim() });
+        } else {
+            setForm({ ...form, [name]: value });
+        }
     };
 
     const markTouched = (field: keyof SignupTouched) => {
         setTouched((prev) => ({ ...prev, [field]: true }));
     };
+
+    if (isSuccess) {
+        return (
+            <AuthLayout title="Check your email">
+                <div className="space-y-6 text-center animate-in fade-in">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand/20">
+                        <svg className="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-bold text-white">Check your email to verify your account.</h3>
+                        <p className="text-zinc-400">
+                            We've sent a verification link to {form.email}.
+                        </p>
+                    </div>
+                    <Button onClick={() => navigate("/login")} className="w-full">
+                        Return to Login
+                    </Button>
+                </div>
+            </AuthLayout>
+        );
+    }
 
     return (
         <AuthLayout
@@ -149,21 +205,30 @@ export default function SignupPage() {
                         <Input
                             label="Username"
                             name="username"
-                            placeholder="johndoe"
+                            placeholder="Choose a username"
                             value={form.username}
                             onChange={handleChange}
                             onBlur={() => markTouched("username")}
                             error={usernameError}
+                            helperText={
+                                usernameAvailable === true
+                                    ? "Username is available!"
+                                    : checkingUsername
+                                    ? "Checking availability..."
+                                    : "Letters, numbers, underscores, periods"
+                            }
+                            autoFocus
                             required
                         />
                         <Input
                             label="Display Name"
                             name="displayName"
-                            placeholder="John Doe"
+                            placeholder="Your display name"
                             value={form.displayName}
                             onChange={handleChange}
                             onBlur={() => markTouched("displayName")}
                             error={displayNameError}
+                            helperText="This is how you appear to others."
                             required
                         />
                     </div>
@@ -172,11 +237,12 @@ export default function SignupPage() {
                         label="Email Address"
                         type="email"
                         name="email"
-                        placeholder="name@example.com"
+                        placeholder="Enter your email"
                         value={form.email}
                         onChange={handleChange}
                         onBlur={() => markTouched("email")}
                         error={emailError}
+                        helperText="We'll send verification here."
                         required
                     />
 
@@ -185,15 +251,28 @@ export default function SignupPage() {
                             label="Password"
                             type={showPassword ? "text" : "password"}
                             name="password"
-                            placeholder="••••••••"
+                            placeholder="Create a password"
                             value={form.password}
                             onChange={handleChange}
                             onBlur={() => markTouched("password")}
                             error={passwordError}
+                            rightIcon={
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="transition-colors hover:text-white"
+                                >
+                                    {showPassword ? (
+                                        <EyeOff className="h-4 w-4" />
+                                    ) : (
+                                        <Eye className="h-4 w-4" />
+                                    )}
+                                </button>
+                            }
                             helperText={
                                 form.password
                                     ? `Strength: ${passwordStrength}`
-                                    : "Use at least 6 characters."
+                                    : "Use at least 8 characters."
                             }
                             required
                         />
@@ -201,7 +280,7 @@ export default function SignupPage() {
                             label="Confirm Password"
                             type={showPassword ? "text" : "password"}
                             name="confirmPassword"
-                            placeholder="••••••••"
+                            placeholder="Confirm your password"
                             value={form.confirmPassword}
                             onChange={handleChange}
                             onBlur={() => markTouched("confirmPassword")}
@@ -218,6 +297,7 @@ export default function SignupPage() {
                                     )}
                                 </button>
                             }
+                            helperText="Make sure it matches."
                             error={confirmPasswordError}
                             required
                         />
@@ -231,7 +311,7 @@ export default function SignupPage() {
                         disabled={!isFormValid || loading}
                         className="w-full py-4 text-base shadow-brand"
                     >
-                        Create Account
+                        {loading ? "Creating account..." : "Create Account"}
                     </Button>
                 </div>
 
