@@ -89,7 +89,7 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
     const verifyLink = `${frontendUrl}/verify-email?token=${token}&type=signup`;
 
     try {
-        await resend.emails.send({
+        const { error } = await resend.emails.send({
             from: FROM_EMAIL,
             to: email,
             subject: 'Verify your BitGlow account',
@@ -107,7 +107,11 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
                 </div>
             `
         });
+        if (error) {
+            throw error;
+        }
     } catch (error) {
         console.error('[Email Service] Failed to send signup verification email:', error);
+        throw new Error('Failed to send verification email.');
     }
 }

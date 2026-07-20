@@ -598,6 +598,7 @@ async function getCanonicalLiveRoomByRequestedId(client: Queryable, roomId: stri
 }
 
 export const db = {
+    getClient: async () => pool.connect(),
     query: (text: string, params?: any[]) => pool.query(text, params),
 
     async healthCheck() {
@@ -856,13 +857,13 @@ export const db = {
         }
     },
 
-    async createUser(user: any) {
+    async createUser(user: any, client: any = pool) {
         const query = `
             INSERT INTO users (id, username, display_name, email, password_hash, avatar_url, website, location, bio, followers_count, follows_count, role, is_private)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *;
         `;
-        const res = await pool.query(query, [
+        const res = await client.query(query, [
             user.id,
             user.username,
             user.displayName,
@@ -2311,8 +2312,8 @@ export const db = {
 
     // ── Email verification tokens (signup flow) ──────────────────────
 
-    async createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date) {
-        await pool.query(
+    async createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date, client: any = pool) {
+        await client.query(
             `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
              VALUES ($1, $2, $3)`,
             [userId, tokenHash, expiresAt]

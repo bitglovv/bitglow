@@ -203,32 +203,30 @@ export async function authRoutes(fastify: FastifyInstance) {
             followsCount: 0,
         };
 
-        const dbUser = await db.createUser(newUserObj);
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+            const dbUser = await db.createUser(newUserObj, client);
 
-        // Map fields
-        const user = {
-            id: dbUser.id,
-            username: dbUser.username,
-            displayName: dbUser.display_name || dbUser.displayName,
-            email: dbUser.email,
-            avatarUrl: dbUser.avatar_url || dbUser.avatarUrl,
-            bio: dbUser.bio,
-            followersCount: dbUser.followers_count ?? dbUser.followersCount ?? 0,
-            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0,
-            isPrivate: dbUser.is_private ?? false,
-            onlineStatusVisible: dbUser.online_status_visible ?? true,
-        };
+            const rawToken = randomBytes(32).toString("hex");
+            const tokenHash = hashToken(rawToken);
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        const rawToken = randomBytes(32).toString("hex");
-        const tokenHash = hashToken(rawToken);
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+            await db.createEmailVerificationToken(dbUser.id, tokenHash, expiresAt, client);
+            await sendSignupVerificationEmail(dbUser.email, rawToken);
 
-        await db.createEmailVerificationToken(user.id, tokenHash, expiresAt);
-        await sendSignupVerificationEmail(user.email, rawToken);
-
-        await logSecurityEvent("signup", req, { identifier: normalizedEmail }, user.id);
-        
-        return { ok: true, message: "Please check your email to verify your account." };
+            await client.query('COMMIT');
+            
+            await logSecurityEvent("signup", req, { identifier: normalizedEmail }, dbUser.id);
+            
+            return { ok: true, message: "Please check your email to verify your account." };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            req.log.error(error, "Failed to complete signup process");
+            return reply.code(500).send({ message: "Failed to send verification email. Please try again." });
+        } finally {
+            client.release();
+        }
     });
 
     fastify.post("/login", {
