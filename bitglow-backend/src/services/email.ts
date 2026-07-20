@@ -78,3 +78,36 @@ export async function sendEmailChangeVerification(email: string, token: string) 
         console.error('[Email Service] Failed to send email verification:', error);
     }
 }
+
+export async function sendSignupVerificationEmail(email: string, token: string) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock sending signup verification to ${email}. Token: ${token}`);
+        return;
+    }
+
+    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
+    const verifyLink = `${frontendUrl}/verify-email?token=${token}&type=signup`;
+
+    try {
+        await resend.emails.send({
+            from: FROM_EMAIL,
+            to: email,
+            subject: 'Verify your BitGlow account',
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>Welcome to BitGlow!</h2>
+                    <p>Thanks for creating an account. Please verify your email address to get started.</p>
+                    <p>Click the button below to verify. This link expires in 24 hours.</p>
+                    <div style="margin: 30px 0;">
+                        <a href="${verifyLink}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                            Verify Email
+                        </a>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">If you didn't create this account, you can safely ignore this email.</p>
+                </div>
+            `
+        });
+    } catch (error) {
+        console.error('[Email Service] Failed to send signup verification email:', error);
+    }
+}

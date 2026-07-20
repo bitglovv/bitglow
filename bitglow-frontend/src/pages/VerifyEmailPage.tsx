@@ -9,6 +9,7 @@ export default function VerifyEmailPage() {
     
     const [searchParams] = useSearchParams();
     const token = searchParams.get("token");
+    const type = searchParams.get("type");
     const navigate = useNavigate();
 
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -27,16 +28,29 @@ export default function VerifyEmailPage() {
 
         const verifyToken = async () => {
             try {
-                await api.settings.verifyEmail(token);
-                setStatus('success');
+                if (type === 'signup') {
+                    await api.auth.verifySignupEmail(token);
+                    navigate("/login?verified=true", { replace: true });
+                } else {
+                    await api.settings.verifyEmail(token);
+                    setStatus('success');
+                }
             } catch (err: any) {
+                if (err.message?.includes("Email already verified")) {
+                    if (type === 'signup') {
+                        navigate("/login?verified=true", { replace: true });
+                    } else {
+                        setStatus('success');
+                    }
+                    return;
+                }
                 setStatus('error');
                 setError(err.message || "Failed to verify email. The link may have expired.");
             }
         };
 
         verifyToken();
-    }, [token]);
+    }, [token, type, navigate]);
 
     return (
         <AuthLayout title="Email Verification">
@@ -80,8 +94,8 @@ export default function VerifyEmailPage() {
                             <h3 className="text-xl font-bold text-white">Verification Failed</h3>
                             <p className="text-red-400 text-sm">{error}</p>
                         </div>
-                        <Button onClick={() => navigate("/settings")} className="w-full">
-                            Return to Settings
+                        <Button onClick={() => type === 'signup' ? navigate("/login") : navigate("/settings")} className="w-full">
+                            {type === 'signup' ? "Return to Login" : "Return to Settings"}
                         </Button>
                     </div>
                 )}

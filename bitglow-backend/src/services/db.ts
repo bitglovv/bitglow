@@ -810,7 +810,7 @@ export const db = {
     async findUserByLoginIdentifier(identifier: string) {
         const normalizedIdentifier = identifier.trim().toLowerCase();
         const res = await pool.query(
-            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
+            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, email_verified, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
             [normalizedIdentifier]
         );
         return res.rows[0];
@@ -2307,6 +2307,48 @@ export const db = {
             `UPDATE email_change_tokens SET used_at = now() WHERE id = $1`,
             [id]
         );
+    },
+
+    // ── Email verification tokens (signup flow) ──────────────────────
+
+    async createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date) {
+        await pool.query(
+            `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+             VALUES ($1, $2, $3)`,
+            [userId, tokenHash, expiresAt]
+        );
+    },
+
+    async getEmailVerificationToken(tokenHash: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, expires_at, used_at
+             FROM email_verification_tokens
+             WHERE token_hash = $1`,
+            [tokenHash]
+        );
+        return res.rows[0] || null;
+    },
+
+    async markEmailVerificationTokenUsed(id: string) {
+        await pool.query(
+            `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1`,
+            [id]
+        );
+    },
+
+    async setEmailVerified(userId: string) {
+        await pool.query(
+            `UPDATE users SET email_verified = true WHERE id = $1`,
+            [userId]
+        );
+    },
+
+    async isEmailVerified(userId: string): Promise<boolean> {
+        const res = await pool.query(
+            `SELECT email_verified FROM users WHERE id = $1`,
+            [userId]
+        );
+        return res.rows[0]?.email_verified ?? false;
     }
 };
 

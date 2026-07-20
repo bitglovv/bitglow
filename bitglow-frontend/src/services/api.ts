@@ -277,7 +277,7 @@ export const api = {
 
             throw new Error(primaryError);
         },
-        signup: async (data: any): Promise<{ token: string; user: User }> => {
+        signup: async (data: any): Promise<{ message: string }> => {
             const res = await fetch(`${API_URL}/auth/signup`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -286,7 +286,27 @@ export const api = {
             if (!res.ok) {
                 throw new Error(await readErrorMessage(res, "Signup failed"));
             }
-            return readAuthResponse(res);
+            return res.json();
+        },
+        resendVerification: async (email: string): Promise<{ message: string }> => {
+            const res = await fetch(`${API_URL}/auth/resend-verification`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to resend verification email"));
+            }
+            return res.json();
+        },
+        verifySignupEmail: async (token: string): Promise<{ message: string }> => {
+            const res = await fetch(`${API_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, {
+                method: "GET"
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to verify email"));
+            }
+            return res.json();
         },
         forgotPassword: async (email: string): Promise<{ message: string }> => {
             const res = await fetch(`${API_URL}/auth/forgot-password`, {

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import AuthLayout from "../layouts/AuthLayout";
 import { Eye, EyeOff } from "lucide-react";
@@ -40,7 +39,6 @@ export default function SignupPage() {
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
 
-    const { login } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {

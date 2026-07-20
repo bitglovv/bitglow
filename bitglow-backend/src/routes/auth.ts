@@ -15,8 +15,8 @@ import {
     validateUsername,
 } from "../services/security";
 import { env } from "../config/env";
-import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema } from "./schemas";
-import { sendPasswordResetEmail } from "../services/email";
+import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema } from "./schemas";
+import { sendPasswordResetEmail, sendSignupVerificationEmail } from "../services/email";
 
 export async function authRoutes(fastify: FastifyInstance) {
 
@@ -99,6 +99,71 @@ export async function authRoutes(fastify: FastifyInstance) {
         return { ok: true, message: "Password updated successfully. You have been logged out of all devices." };
     });
 
+    fastify.post("/resend-verification", {
+        config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
+        schema: resendVerificationSchema,
+    }, async (req, reply) => {
+        const { email } = req.body as any;
+        const normalizedEmail = normalizeIdentifier(String(email || ""));
+
+        if (!normalizedEmail) {
+            return reply.code(400).send({ message: "Email is required" });
+        }
+
+        const dbUser = await db.findUserByEmail(normalizedEmail);
+        
+        if (!dbUser) {
+            // Security best practice: Always return 200 to prevent email enumeration
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 100)); // random delay
+            return { ok: true, message: "If an account exists, a verification email has been sent." };
+        }
+
+        const isVerified = await db.isEmailVerified(dbUser.id);
+        if (isVerified) {
+            return reply.code(400).send({ message: "Email already verified." });
+        }
+
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        await db.createEmailVerificationToken(dbUser.id, tokenHash, expiresAt);
+        await sendSignupVerificationEmail(dbUser.email, rawToken);
+
+        await logSecurityEvent("signup_verification_resent", req, {}, dbUser.id);
+        
+        return { ok: true, message: "If an account exists, a verification email has been sent." };
+    });
+
+    fastify.get("/verify-email", {
+        config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+        schema: verifyEmailSchema,
+    }, async (req, reply) => {
+        const { token } = req.query as any;
+
+        const tokenHash = hashToken(token);
+        const verifyToken = await db.getEmailVerificationToken(tokenHash);
+
+        if (!verifyToken) {
+            return reply.code(400).send({ message: "Invalid or expired token" });
+        }
+
+        if (verifyToken.used_at) {
+            return reply.code(400).send({ message: "Token has already been used" });
+        }
+
+        if (new Date(verifyToken.expires_at).getTime() < Date.now()) {
+            return reply.code(400).send({ message: "Token has expired" });
+        }
+
+        await db.setEmailVerified(verifyToken.user_id);
+        await db.markEmailVerificationTokenUsed(verifyToken.id);
+        
+        await logSecurityEvent("signup_email_verified", req, {}, verifyToken.user_id);
+
+        return { ok: true, message: "Email verified successfully." };
+    });
+
     fastify.post("/signup", {
         config: {
             rateLimit: { max: 20, timeWindow: "1 hour" },
@@ -154,13 +219,16 @@ export async function authRoutes(fastify: FastifyInstance) {
             onlineStatusVisible: dbUser.online_status_visible ?? true,
         };
 
-        const sid = randomUUID();
-        const token = issueAccessToken({ id: user.id, username: user.username, sid });
-        const refreshToken = issueRefreshToken();
-        await createSession(user.id, sid, token, refreshToken, req);
-        await db.pruneUserSessions(user.id, 5);
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        await db.createEmailVerificationToken(user.id, tokenHash, expiresAt);
+        await sendSignupVerificationEmail(user.email, rawToken);
+
         await logSecurityEvent("signup", req, { identifier: normalizedEmail }, user.id);
-        return { token, refreshToken, user };
+        
+        return { ok: true, message: "Please check your email to verify your account." };
     });
 
     fastify.post("/login", {
@@ -218,6 +286,11 @@ export async function authRoutes(fastify: FastifyInstance) {
         if (!isValidPassword) {
             await logSecurityEvent("login_failure", req, { identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
             return reply.code(401).send({ message: "Invalid username/email or password" });
+        }
+
+        if (dbUser.email_verified === false) {
+            await logSecurityEvent("login_failure", req, { reason: "email_not_verified", identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
+            return reply.code(403).send({ message: "Please verify your email before signing in.", code: "EMAIL_NOT_VERIFIED" });
         }
 
         const user = {
