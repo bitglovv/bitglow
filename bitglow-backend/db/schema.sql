@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
   is_banned BOOLEAN DEFAULT false,
   is_private BOOLEAN DEFAULT false,
   online_status_visible BOOLEAN DEFAULT true,
+  email_verified BOOLEAN DEFAULT false,
+  verification_token TEXT,
+  verification_expires_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now(),
   deleted_at TIMESTAMP

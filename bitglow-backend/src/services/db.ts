@@ -859,8 +859,8 @@ export const db = {
 
     async createUser(user: any, client: any = pool) {
         const query = `
-            INSERT INTO users (id, username, display_name, email, password_hash, avatar_url, website, location, bio, followers_count, follows_count, role, is_private)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            INSERT INTO users (id, username, display_name, email, password_hash, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, email_verified, verification_token, verification_expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15)
             RETURNING *;
         `;
         const res = await client.query(query, [
@@ -876,7 +876,9 @@ export const db = {
             user.followersCount || 0,
             user.followsCount || 0,
             user.role || 'user',
-            user.isPrivate || false
+            user.isPrivate || false,
+            user.verificationToken || null,
+            user.verificationExpiresAt || null
         ]);
         return res.rows[0];
     },
@@ -2310,37 +2312,36 @@ export const db = {
         );
     },
 
-    // ── Email verification tokens (signup flow) ──────────────────────
+    // ── Email verification (signup flow) ──────────────────────
 
-    async createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date, client: any = pool) {
-        await client.query(
-            `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
-             VALUES ($1, $2, $3)`,
-            [userId, tokenHash, expiresAt]
-        );
-    },
-
-    async getEmailVerificationToken(tokenHash: string) {
+    async getUserByVerificationToken(tokenHash: string) {
         const res = await pool.query(
-            `SELECT id, user_id, expires_at, used_at
-             FROM email_verification_tokens
-             WHERE token_hash = $1`,
+            `SELECT id, email_verified, verification_expires_at 
+             FROM users 
+             WHERE verification_token = $1`,
             [tokenHash]
         );
         return res.rows[0] || null;
     },
 
-    async markEmailVerificationTokenUsed(id: string) {
+    async verifyUserEmail(userId: string) {
         await pool.query(
-            `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1`,
-            [id]
+            `UPDATE users SET 
+                email_verified = true, 
+                verification_token = NULL, 
+                verification_expires_at = NULL 
+             WHERE id = $1`,
+            [userId]
         );
     },
 
-    async setEmailVerified(userId: string) {
-        await pool.query(
-            `UPDATE users SET email_verified = true WHERE id = $1`,
-            [userId]
+    async updateUserVerificationToken(userId: string, tokenHash: string, expiresAt: Date, client: any = pool) {
+        await client.query(
+            `UPDATE users SET 
+                verification_token = $2, 
+                verification_expires_at = $3 
+             WHERE id = $1`,
+            [userId, tokenHash, expiresAt]
         );
     },
 

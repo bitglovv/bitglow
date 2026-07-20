@@ -44,6 +44,9 @@ export const env = {
     HOST: host,
     DATABASE_URL: requireEnv("DATABASE_URL"),
     JWT_SECRET: requireEnv("JWT_SECRET"),
+    RESEND_API_KEY: requireEnv("RESEND_API_KEY"),
+    FROM_EMAIL: requireEnv("FROM_EMAIL"),
+    APP_URL: requireEnv("APP_URL"),
     JWT_ISSUER: process.env.JWT_ISSUER || "bitglow-backend",
     JWT_AUDIENCE: process.env.JWT_AUDIENCE || "bitglow-api",
     ACCESS_TOKEN_TTL_SECONDS: parsePositiveInteger("ACCESS_TOKEN_TTL_SECONDS", process.env.ACCESS_TOKEN_TTL_SECONDS, 7 * 24 * 60 * 60),
@@ -55,7 +58,6 @@ export const env = {
     DB_CONNECTION_TIMEOUT_MS: parsePositiveInteger("DB_CONNECTION_TIMEOUT_MS", process.env.DB_CONNECTION_TIMEOUT_MS, 10_000),
     LIVE_MESSAGE_TTL_SECONDS: parsePositiveInteger("LIVE_MESSAGE_TTL_SECONDS", process.env.LIVE_MESSAGE_TTL_SECONDS, 300),
     WS_MAX_PAYLOAD_BYTES: parsePositiveInteger("WS_MAX_PAYLOAD_BYTES", process.env.WS_MAX_PAYLOAD_BYTES, 16_384),
-    RESEND_API_KEY: process.env.RESEND_API_KEY || "", // Optional during dev if missing
 };
 
 if (env.NODE_ENV === "production" && env.JWT_SECRET.length < 32) {

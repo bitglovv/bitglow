@@ -10,7 +10,6 @@ if (env.RESEND_API_KEY) {
 // In production, we'll want to use a real domain.
 // For now, testing with Resend's onboarding domain is fine if the user is testing to their own email,
 // but they'll need a verified domain to send to arbitrary emails.
-const FROM_EMAIL = 'BitGlow <onboarding@resend.dev>';
 
 export async function sendPasswordResetEmail(email: string, token: string) {
     if (!resend) {
@@ -18,13 +17,11 @@ export async function sendPasswordResetEmail(email: string, token: string) {
         return;
     }
 
-    // Find the first HTTPS origin for production, fallback to local
-    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
-    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+    const resetLink = `${env.APP_URL}/reset-password?token=${token}`;
 
     try {
         await resend.emails.send({
-            from: FROM_EMAIL,
+            from: env.FROM_EMAIL,
             to: email,
             subject: 'Reset Your BitGlow Password',
             html: `
@@ -52,12 +49,11 @@ export async function sendEmailChangeVerification(email: string, token: string) 
         return;
     }
 
-    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
-    const verifyLink = `${frontendUrl}/verify-email?token=${token}`;
+    const verifyLink = `${env.APP_URL}/verify-email?token=${token}`;
 
     try {
         await resend.emails.send({
-            from: FROM_EMAIL,
+            from: env.FROM_EMAIL,
             to: email,
             subject: 'Verify your new BitGlow email address',
             html: `
@@ -85,12 +81,11 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
         return;
     }
 
-    const frontendUrl = env.CORS_ORIGINS.find(url => url.startsWith('https://')) || env.CORS_ORIGINS[0] || 'http://localhost:5173';
-    const verifyLink = `${frontendUrl}/verify-email?token=${token}&type=signup`;
+    const verifyLink = `${env.APP_URL}/verify-email?token=${token}&type=signup`;
 
     try {
         const { error } = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: env.FROM_EMAIL,
             to: email,
             subject: 'Verify your BitGlow account',
             html: `
@@ -108,10 +103,15 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
             `
         });
         if (error) {
+            console.error('[Email Service] Resend API Error:', {
+                status: error.name,
+                message: error.message,
+                body: error
+            });
             throw error;
         }
     } catch (error) {
         console.error('[Email Service] Failed to send signup verification email:', error);
-        throw new Error('Failed to send verification email.');
+        throw error;
     }
 }

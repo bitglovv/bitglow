@@ -127,12 +127,24 @@ export async function authRoutes(fastify: FastifyInstance) {
         const tokenHash = hashToken(rawToken);
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        await db.createEmailVerificationToken(dbUser.id, tokenHash, expiresAt);
-        await sendSignupVerificationEmail(dbUser.email, rawToken);
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+            
+            await db.updateUserVerificationToken(dbUser.id, tokenHash, expiresAt, client);
+            await sendSignupVerificationEmail(dbUser.email, rawToken);
 
-        await logSecurityEvent("signup_verification_resent", req, {}, dbUser.id);
-        
-        return { ok: true, message: "If an account exists, a verification email has been sent." };
+            await client.query('COMMIT');
+            await logSecurityEvent("signup_verification_resent", req, {}, dbUser.id);
+            
+            return { ok: true, message: "If an account exists, a verification email has been sent." };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            req.log.error(error, "Failed to resend verification email");
+            return reply.code(500).send({ message: "Failed to send verification email. Please try again." });
+        } finally {
+            client.release();
+        }
     });
 
     fastify.get("/verify-email", {
@@ -142,24 +154,23 @@ export async function authRoutes(fastify: FastifyInstance) {
         const { token } = req.query as any;
 
         const tokenHash = hashToken(token);
-        const verifyToken = await db.getEmailVerificationToken(tokenHash);
+        const verifyToken = await db.getUserByVerificationToken(tokenHash);
 
         if (!verifyToken) {
             return reply.code(400).send({ message: "Invalid or expired token" });
         }
 
-        if (verifyToken.used_at) {
+        if (verifyToken.email_verified) {
             return reply.code(400).send({ message: "Token has already been used" });
         }
 
-        if (new Date(verifyToken.expires_at).getTime() < Date.now()) {
+        if (new Date(verifyToken.verification_expires_at).getTime() < Date.now()) {
             return reply.code(400).send({ message: "Token has expired" });
         }
 
-        await db.setEmailVerified(verifyToken.user_id);
-        await db.markEmailVerificationTokenUsed(verifyToken.id);
+        await db.verifyUserEmail(verifyToken.id);
         
-        await logSecurityEvent("signup_email_verified", req, {}, verifyToken.user_id);
+        await logSecurityEvent("signup_email_verified", req, {}, verifyToken.id);
 
         return { ok: true, message: "Email verified successfully." };
     });
@@ -191,6 +202,10 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         const passwordHash = await db.hashPassword(password);
         
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
         const newUserObj = {
             id: randomUUID(),
             username: normalizedUsername,
@@ -201,6 +216,8 @@ export async function authRoutes(fastify: FastifyInstance) {
             bio: "New to BitGlow",
             followersCount: 0,
             followsCount: 0,
+            verificationToken: tokenHash,
+            verificationExpiresAt: expiresAt
         };
 
         const client = await db.getClient();
@@ -208,11 +225,6 @@ export async function authRoutes(fastify: FastifyInstance) {
             await client.query('BEGIN');
             const dbUser = await db.createUser(newUserObj, client);
 
-            const rawToken = randomBytes(32).toString("hex");
-            const tokenHash = hashToken(rawToken);
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-            await db.createEmailVerificationToken(dbUser.id, tokenHash, expiresAt, client);
             await sendSignupVerificationEmail(dbUser.email, rawToken);
 
             await client.query('COMMIT');
