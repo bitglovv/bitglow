@@ -11,13 +11,18 @@ if (env.RESEND_API_KEY) {
 // Temporary: Use Brevo SMTP specifically for signup verification until BitGlow gets a custom domain.
 // After verifying a custom domain on Resend, we will switch this back to use the Resend API.
 const smtpTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_PORT === 465, // true for 465, false for other ports
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASS,
     },
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,   // 10 seconds
+    socketTimeout: 10000,     // 10 seconds
+    logger: true,
+    debug: true,
 });
 
 export async function sendPasswordResetEmail(email: string, token: string) {
@@ -30,7 +35,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 
     try {
         await resend.emails.send({
-            from: env.FROM_EMAIL || process.env.FROM_EMAIL as string,
+            from: env.FROM_EMAIL,
             to: email,
             subject: 'Reset Your BitGlow Password',
             html: `
@@ -62,7 +67,7 @@ export async function sendEmailChangeVerification(email: string, token: string) 
 
     try {
         await resend.emails.send({
-            from: env.FROM_EMAIL || process.env.FROM_EMAIL as string,
+            from: env.FROM_EMAIL,
             to: email,
             subject: 'Verify your new BitGlow email address',
             html: `
@@ -84,31 +89,54 @@ export async function sendEmailChangeVerification(email: string, token: string) 
     }
 }
 
-// NOTE: Temporary function using Nodemailer + Brevo SMTP for signup verification
 export async function sendSignupVerificationEmail(email: string, token: string) {
     const verifyLink = `${env.APP_URL}/verify-email?token=${token}&type=signup`;
 
-    try {
-        await smtpTransporter.sendMail({
-            from: process.env.FROM_EMAIL || env.FROM_EMAIL,
-            to: email,
-            subject: 'Verify your BitGlow account',
-            html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2>Welcome to BitGlow!</h2>
-                    <p>Thanks for creating an account. Please verify your email address to get started.</p>
-                    <p>Click the button below to verify. This link expires in 24 hours.</p>
-                    <div style="margin: 30px 0;">
-                        <a href="${verifyLink}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                            Verify Email
-                        </a>
-                    </div>
-                    <p style="color: #666; font-size: 14px;">If you didn't create this account, you can safely ignore this email.</p>
+    const mailOptions = {
+        from: env.FROM_EMAIL,
+        to: email,
+        subject: 'Verify your BitGlow account',
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Welcome to BitGlow!</h2>
+                <p>Thanks for creating an account. Please verify your email address to get started.</p>
+                <p>Click the button below to verify. This link expires in 24 hours.</p>
+                <div style="margin: 30px 0;">
+                    <a href="${verifyLink}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        Verify Email
+                    </a>
                 </div>
-            `
-        });
-    } catch (error) {
-        console.error('[Email Service] Failed to send signup verification email via SMTP:', error);
-        throw error;
+                <p style="color: #666; font-size: 14px;">If you didn't create this account, you can safely ignore this email.</p>
+            </div>
+        `
+    };
+
+    const timeoutMs = 12000;
+    let attempt = 0;
+    const maxAttempts = 2;
+
+    while (attempt < maxAttempts) {
+        attempt++;
+        try {
+            await Promise.race([
+                smtpTransporter.verify(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP Verification Timeout')), timeoutMs))
+            ]);
+            
+            await Promise.race([
+                smtpTransporter.sendMail(mailOptions),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP Send Timeout')), timeoutMs))
+            ]);
+            
+            // Success
+            return;
+        } catch (error: any) {
+            console.error(`[Email Service] Attempt ${attempt} failed for signup verification email via SMTP. Reason:`, error.message || error);
+            
+            if (attempt >= maxAttempts) {
+                console.error('[Email Service] Max retries reached. Failing gracefully.');
+                throw error;
+            }
+        }
     }
 }
