@@ -8,9 +8,18 @@ if (env.RESEND_API_KEY) {
     resend = new Resend(env.RESEND_API_KEY);
 }
 
+const mailjetApiKey = env.MAILJET_API_KEY ?? process.env.MAILJET_API_KEY;
+const mailjetSecretKey = env.MAILJET_SECRET_KEY ?? process.env.MAILJET_SECRET_KEY;
+
+if (!mailjetApiKey || !mailjetSecretKey) {
+    throw new Error(
+        "MAILJET_API_KEY and MAILJET_SECRET_KEY are required."
+    );
+}
+
 const mailjet = Mailjet.apiConnect(
-    (env as any).MAILJET_API_KEY || (process.env.MAILJET_API_KEY as string),
-    (env as any).MAILJET_SECRET_KEY || (process.env.MAILJET_SECRET_KEY as string)
+    mailjetApiKey,
+    mailjetSecretKey
 );
 
 export async function sendPasswordResetEmail(email: string, token: string) {
@@ -102,29 +111,55 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
     const fromName = nameMatch ? nameMatch[1].trim() : 'BitGlow';
 
     try {
-        const request = await mailjet.post('send', { version: 'v3.1' }).request({
-            Messages: [
-                {
-                    From: {
-                        Email: fromEmail,
-                        Name: fromName
-                    },
-                    To: [
-                        {
-                            Email: email
-                        }
-                    ],
-                    Subject: 'Verify your BitGlow account',
-                    HTMLPart: htmlContent
-                }
-            ]
-        });
+        const response = await mailjet
+            .post("send", { version: "v3.1" })
+            .request({
+                Messages: [
+                    {
+                        From: {
+                            Email: fromEmail,
+                            Name: fromName
+                        },
+                        To: [
+                            {
+                                Email: email
+                            }
+                        ],
+                        Subject: "Verify your BitGlow account",
+                        TextPart: `
+Welcome to BitGlow!
+
+Verify your account:
+
+${verifyLink}
+
+This link expires in 24 hours.
+
+If you didn't create this account, you can safely ignore this email.
+`,
+                        HTMLPart: htmlContent
+                    }
+                ]
+            });
+
+        const result = (response.body as any)?.Messages?.[0];
+
+        if (!result) {
+            throw new Error("Unexpected Mailjet response.");
+        }
+
+        if (result.Status !== "success") {
+            throw new Error(
+                result.Errors?.[0]?.ErrorMessage ??
+                "Mailjet failed to send email."
+            );
+        }
 
         if (env.NODE_ENV === 'development') {
-            console.log('[Email Service] Mailjet response:', JSON.stringify(request.body, null, 2));
+            console.log('[Email Service] Mailjet response:', JSON.stringify(response.body, null, 2));
         }
     } catch (error) {
-        console.error('[Email Service] Failed to send signup verification email via Mailjet:', error);
+        console.error("[Mailjet Error]", error);
         throw error;
     }
 }

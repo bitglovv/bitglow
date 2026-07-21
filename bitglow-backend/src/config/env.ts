@@ -58,10 +58,8 @@ export const env = {
     DB_CONNECTION_TIMEOUT_MS: parsePositiveInteger("DB_CONNECTION_TIMEOUT_MS", process.env.DB_CONNECTION_TIMEOUT_MS, 10_000),
     LIVE_MESSAGE_TTL_SECONDS: parsePositiveInteger("LIVE_MESSAGE_TTL_SECONDS", process.env.LIVE_MESSAGE_TTL_SECONDS, 300),
     WS_MAX_PAYLOAD_BYTES: parsePositiveInteger("WS_MAX_PAYLOAD_BYTES", process.env.WS_MAX_PAYLOAD_BYTES, 16_384),
-    SMTP_HOST: process.env.SMTP_HOST || "",
-    SMTP_PORT: parsePositiveInteger("SMTP_PORT", process.env.SMTP_PORT, 587),
-    SMTP_USER: process.env.SMTP_USER || "",
-    SMTP_PASS: process.env.SMTP_PASS || "",
+    MAILJET_API_KEY: process.env.MAILJET_API_KEY || "",
+    MAILJET_SECRET_KEY: process.env.MAILJET_SECRET_KEY || "",
 };
 
 if (env.NODE_ENV === "production" && env.JWT_SECRET.length < 32) {
