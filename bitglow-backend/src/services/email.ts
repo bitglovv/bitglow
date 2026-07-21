@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import { env } from '../config/env';
 
 let resend: Resend | null = null;
@@ -7,9 +8,17 @@ if (env.RESEND_API_KEY) {
     resend = new Resend(env.RESEND_API_KEY);
 }
 
-// In production, we'll want to use a real domain.
-// For now, testing with Resend's onboarding domain is fine if the user is testing to their own email,
-// but they'll need a verified domain to send to arbitrary emails.
+// Temporary: Use Brevo SMTP specifically for signup verification until BitGlow gets a custom domain.
+// After verifying a custom domain on Resend, we will switch this back to use the Resend API.
+const smtpTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
 
 export async function sendPasswordResetEmail(email: string, token: string) {
     if (!resend) {
@@ -21,7 +30,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 
     try {
         await resend.emails.send({
-            from: env.FROM_EMAIL,
+            from: env.FROM_EMAIL || process.env.FROM_EMAIL as string,
             to: email,
             subject: 'Reset Your BitGlow Password',
             html: `
@@ -53,7 +62,7 @@ export async function sendEmailChangeVerification(email: string, token: string) 
 
     try {
         await resend.emails.send({
-            from: env.FROM_EMAIL,
+            from: env.FROM_EMAIL || process.env.FROM_EMAIL as string,
             to: email,
             subject: 'Verify your new BitGlow email address',
             html: `
@@ -75,17 +84,13 @@ export async function sendEmailChangeVerification(email: string, token: string) 
     }
 }
 
+// NOTE: Temporary function using Nodemailer + Brevo SMTP for signup verification
 export async function sendSignupVerificationEmail(email: string, token: string) {
-    if (!resend) {
-        console.warn(`[Email Service] Mock sending signup verification to ${email}. Token: ${token}`);
-        return;
-    }
-
     const verifyLink = `${env.APP_URL}/verify-email?token=${token}&type=signup`;
 
     try {
-        const { error } = await resend.emails.send({
-            from: env.FROM_EMAIL,
+        await smtpTransporter.sendMail({
+            from: process.env.FROM_EMAIL || env.FROM_EMAIL,
             to: email,
             subject: 'Verify your BitGlow account',
             html: `
@@ -102,16 +107,8 @@ export async function sendSignupVerificationEmail(email: string, token: string) 
                 </div>
             `
         });
-        if (error) {
-            console.error('[Email Service] Resend API Error:', {
-                status: error.name,
-                message: error.message,
-                body: error
-            });
-            throw error;
-        }
     } catch (error) {
-        console.error('[Email Service] Failed to send signup verification email:', error);
+        console.error('[Email Service] Failed to send signup verification email via SMTP:', error);
         throw error;
     }
 }
