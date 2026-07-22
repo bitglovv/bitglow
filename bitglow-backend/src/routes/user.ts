@@ -2,8 +2,36 @@ import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { hashToken, parseBearerToken, validateUsername, sanitizeText, validateUrl, verifyAccessToken } from "../services/security";
 import { deleteAccountSchema, followSchema, idParamSchema, paginationSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
+import { uploadAvatar } from "../services/storage";
 
 export async function userRoutes(fastify: FastifyInstance) {
+    /**
+     * POST /api/upload/avatar
+     * Uploads an avatar image and returns the public URL
+     */
+    fastify.post("/upload/avatar", { preHandler: fastify.requireAuth }, async (req, reply) => {
+        const data = await req.file();
+        if (!data) {
+            return reply.code(400).send({ message: "No file uploaded" });
+        }
+
+        const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+        if (!allowedMimeTypes.includes(data.mimetype)) {
+            return reply.code(400).send({ message: "Invalid image format. Allowed: JPEG, PNG, WebP" });
+        }
+
+        const buffer = await data.toBuffer();
+        if (buffer.length > 5 * 1024 * 1024) {
+            return reply.code(400).send({ message: "File exceeds 5MB limit" });
+        }
+
+        try {
+            const url = await uploadAvatar(req.auth!.id, buffer, data.mimetype);
+            return { url };
+        } catch (error) {
+            return reply.code(500).send({ message: "Failed to upload avatar to storage" });
+        }
+    });
     /**
      * GET /api/me
      * Returns the authenticated user from DB

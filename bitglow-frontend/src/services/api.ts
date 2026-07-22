@@ -155,9 +155,9 @@ export type Notification =
     | { type: "mention"; user: User; postId?: string; createdAt: string }
     | { type: "dm"; user: User; content: string; createdAt: string };
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     const token = localStorage.getItem("token");
-    const hasBody = options.body !== undefined;
+    const hasBody = options.body !== undefined && !(options.body instanceof FormData);
     const headers = {
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -183,7 +183,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     return res;
 }
 
-async function readErrorMessage(res: Response, fallback: string) {
+export async function readErrorMessage(res: Response, fallback: string) {
     const text = await res.text();
     if (!text) return fallback;
 
@@ -359,11 +359,19 @@ export const api = {
             return res.json();
         },
         update: async (data: Partial<User>): Promise<User> => {
+            if (data.website) {
+                let url = data.website.trim();
+                if (url && !/^https?:\/\//i.test(url)) {
+                    url = `https://${url}`;
+                }
+                data.website = url;
+            }
+
             const res = await fetchWithAuth("/api/me", {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to update profile"));
             return res.json();
         },
         deleteAccount: async (identifier: string, password: string): Promise<boolean> => {

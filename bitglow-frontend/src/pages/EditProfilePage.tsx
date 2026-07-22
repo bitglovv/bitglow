@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
-import { User, MapPin, Globe, Check, Save, AtSign, ArrowLeft, Camera, CheckCircle2, XCircle } from "lucide-react";
+import { User, MapPin, Globe, Check, Save, AtSign, ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import clsx from "clsx";
 import { navigateBack } from "../utils/navigateBack";
+import { AvatarUploader } from "../components/profile/AvatarUploader";
 
 export default function EditProfilePage() {
     useEffect(() => { document.title = "BitGlow"; }, []);
@@ -24,6 +25,7 @@ export default function EditProfilePage() {
         avatarUrl: user?.avatarUrl || "",
     });
     const [loading, setLoading] = useState(false);
+    const [isAvatarUploading, setIsAvatarUploading] = useState(false);
     const [message, setMessage] = useState<"success" | "error" | "">("");
     const [submitError, setSubmitError] = useState<string>("");
     const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "unavailable" | "invalid">("idle");
@@ -56,45 +58,14 @@ export default function EditProfilePage() {
         }
     };
 
-    const handleAvatar = (e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const handleUploadSuccess = (url: string) => {
+        setForm((f) => ({ ...f, avatarUrl: url }));
+        setSubmitError("");
+    };
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement("canvas");
-                let { width, height } = img;
-                const MAX_SIZE = 500;
-
-                if (width > height) {
-                    if (width > MAX_SIZE) {
-                        height = Math.round((height *= MAX_SIZE / width));
-                        width = MAX_SIZE;
-                    }
-                } else {
-                    if (height > MAX_SIZE) {
-                        width = Math.round((width *= MAX_SIZE / height));
-                        height = MAX_SIZE;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0, width, height);
-                    const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
-                    setForm((f) => ({ ...f, avatarUrl: compressedDataUrl }));
-                } else {
-                    // Fallback to raw string if canvas fails
-                    setForm((f) => ({ ...f, avatarUrl: event.target?.result as string }));
-                }
-            };
-            img.src = event.target?.result as string;
-        };
-        reader.readAsDataURL(file);
+    const handleUploadError = (err: string) => {
+        setSubmitError(err);
+        setMessage("error");
     };
 
     const handleSubmit = async (e: FormEvent) => {
@@ -183,24 +154,15 @@ export default function EditProfilePage() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-10">
-
                     <div className="space-y-8 bg-transparent">
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="relative">
-                                <div className="w-28 h-28 rounded-full overflow-hidden bg-white/5 flex items-center justify-center">
-                                    {form.avatarUrl ? (
-                                        <img src={form.avatarUrl} alt="avatar preview" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <User className="w-8 h-8 text-zinc-500" />
-                                    )}
-                                </div>
-                                <label className="absolute inset-0 flex items-center justify-center rounded-full cursor-pointer">
-                                    <Camera className="w-6 h-6 text-white drop-shadow" />
-                                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatar} />
-                                </label>
-                            </div>
-                            <p className="text-xs text-zinc-500">Change your profile picture</p>
-                        </div>
+                        
+                        <AvatarUploader 
+                            currentAvatarUrl={form.avatarUrl}
+                            onUploadStart={() => setIsAvatarUploading(true)}
+                            onUploadEnd={() => setIsAvatarUploading(false)}
+                            onUploadSuccess={handleUploadSuccess}
+                            onUploadError={handleUploadError}
+                        />
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <Input
@@ -281,7 +243,7 @@ export default function EditProfilePage() {
                             type="submit"
                             isLoading={loading}
                             className="flex-1 h-14"
-                            disabled={usernameStatus === "unavailable" || usernameStatus === "invalid" || !form.username.trim()}
+                            disabled={isAvatarUploading || usernameStatus === "unavailable" || usernameStatus === "invalid" || !form.username.trim()}
                         >
                             Save Changes
                         </Button>

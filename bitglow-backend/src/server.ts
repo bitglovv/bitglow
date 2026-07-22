@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { authRoutes } from "./routes/auth";
@@ -45,6 +46,12 @@ const server = Fastify({
     logger: true,
     bodyLimit: 1024 * 1024,
     trustProxy: env.TRUST_PROXY ? 1 : false,
+});
+
+server.register(multipart, {
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
 });
 
 server.register(cors, {

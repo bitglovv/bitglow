@@ -11,8 +11,10 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
+    "@fastify/multipart": "^10.1.0",
     "@fastify/rate-limit": "^11.1.0",
     "@sentry/node": "^10.59.0",
+    "@supabase/supabase-js": "^2.110.8",
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
