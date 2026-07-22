@@ -17,13 +17,13 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
     };
 
     return (
-        <div className="relative h-[100svh] overflow-hidden bg-black font-sans text-white selection:bg-brand/30">
+        <div className="relative min-h-[100svh] bg-black font-sans text-white selection:bg-brand/30 pb-[env(safe-area-inset-bottom)]">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute left-1/2 top-[10%] h-[35rem] w-[35rem] -translate-x-1/2 rounded-full bg-[#102C26]/40 blur-[160px]" />
                 <div className="absolute inset-0" />
             </div>
 
-            <div className="relative z-10 flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+            <div className="relative z-10 flex items-center justify-between px-5 py-4 sm:px-6 lg:px-8">
                 <button
                     type="button"
                     onClick={handleBack}
@@ -35,7 +35,7 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
                 <div className="h-12 w-12" />
             </div>
 
-            <div className="relative z-10 flex h-[calc(100svh-5rem)] items-center justify-center px-4 pb-6 pt-2">
+            <div className="relative z-10 flex min-h-[calc(100svh-5rem)] items-center justify-center px-5 pb-6 pt-2 sm:px-6 lg:px-8">
                 <div className="w-full max-w-md">
                     <div className="text-center">
                         {title ? (
@@ -50,7 +50,7 @@ export default function AuthLayout({ title, subtitle, children }: Props) {
                         ) : null}
                     </div>
 
-                    <div className="mt-6">{children}</div>
+                    <div className="mt-8">{children}</div>
                 </div>
             </div>
         </div>

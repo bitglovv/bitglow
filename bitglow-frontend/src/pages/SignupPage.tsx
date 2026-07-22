@@ -191,15 +191,15 @@ export default function SignupPage() {
         <AuthLayout
             title="Create account"
         >
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="mt-8 flex flex-col">
                 {error ? (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-center text-sm font-medium text-red-300 animate-in fade-in slide-in-from-top-1">
+                    <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-center text-sm font-medium text-red-300 animate-in fade-in slide-in-from-top-1">
                         {error}
                     </div>
                 ) : null}
 
-                <div className="space-y-3.5">
-                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <div className="flex flex-col gap-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <Input
                             label="Username"
                             name="username"
@@ -244,7 +244,7 @@ export default function SignupPage() {
                         required
                     />
 
-                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <Input
                             label="Password"
                             type={showPassword ? "text" : "password"}
@@ -258,12 +258,13 @@ export default function SignupPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="transition-colors hover:text-white"
+                                    className="flex h-full w-full items-center justify-center transition-colors hover:text-white"
+                                    aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
                                     {showPassword ? (
-                                        <EyeOff className="h-4 w-4" />
+                                        <EyeOff className="h-5 w-5" />
                                     ) : (
-                                        <Eye className="h-4 w-4" />
+                                        <Eye className="h-5 w-5" />
                                     )}
                                 </button>
                             }
@@ -286,12 +287,13 @@ export default function SignupPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="transition-colors hover:text-white"
+                                    className="flex h-full w-full items-center justify-center transition-colors hover:text-white"
+                                    aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
                                     {showPassword ? (
-                                        <EyeOff className="h-4 w-4" />
+                                        <EyeOff className="h-5 w-5" />
                                     ) : (
-                                        <Eye className="h-4 w-4" />
+                                        <Eye className="h-5 w-5" />
                                     )}
                                 </button>
                             }
@@ -302,18 +304,18 @@ export default function SignupPage() {
                     </div>
                 </div>
 
-                <div className="pt-1">
+                <div className="mt-7">
                     <Button
                         type="submit"
                         isLoading={loading}
                         disabled={!isFormValid || loading}
-                        className="w-full py-4 text-base shadow-brand"
+                        className="h-14 w-full text-base font-bold shadow-brand"
                     >
                         {loading ? "Creating account..." : "Create Account"}
                     </Button>
                 </div>
 
-                <div className="text-center">
+                <div className="mt-6 text-center">
                     <p className="text-sm font-medium text-zinc-500">
                         Already have an account?{" "}
                         <Link to="/login" className="font-bold text-zinc-100 transition-colors hover:text-brand">
