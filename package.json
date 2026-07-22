@@ -2,6 +2,7 @@
   "dependencies": {
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.16.2",
-    "pg": "^8.17.2"
+    "pg": "^8.17.2",
+    "resend": "^6.18.0"
   }
 }

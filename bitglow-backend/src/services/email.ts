@@ -1,5 +1,4 @@
 import { Resend } from 'resend';
-import Mailjet from 'node-mailjet';
 import { env } from '../config/env';
 
 let resend: Resend | null = null;
@@ -7,20 +6,6 @@ let resend: Resend | null = null;
 if (env.RESEND_API_KEY) {
     resend = new Resend(env.RESEND_API_KEY);
 }
-
-const mailjetApiKey = env.MAILJET_API_KEY ?? process.env.MAILJET_API_KEY;
-const mailjetSecretKey = env.MAILJET_SECRET_KEY ?? process.env.MAILJET_SECRET_KEY;
-
-if (!mailjetApiKey || !mailjetSecretKey) {
-    throw new Error(
-        "MAILJET_API_KEY and MAILJET_SECRET_KEY are required."
-    );
-}
-
-const mailjet = Mailjet.apiConnect(
-    mailjetApiKey,
-    mailjetSecretKey
-);
 
 export async function sendPasswordResetEmail(email: string, token: string) {
     if (!resend) {
@@ -86,80 +71,75 @@ export async function sendEmailChangeVerification(email: string, token: string) 
     }
 }
 
-export async function sendSignupVerificationEmail(email: string, token: string) {
-    const verifyLink = `${env.APP_URL}/verify-email?token=${token}&type=signup`;
+export async function sendSignupVerificationEmail(
+    email: string,
+    token: string
+) {
+    if (!resend) {
+        console.warn(
+            `[Email Service] Mock signup verification for ${email}. Token: ${token}`
+        );
+        return;
+    }
 
-    const htmlContent = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Welcome to BitGlow!</h2>
-            <p>Thanks for creating an account. Please verify your email address to get started.</p>
-            <p>Click the button below to verify. This link expires in 24 hours.</p>
-            <div style="margin: 30px 0;">
-                <a href="${verifyLink}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                    Verify Email
-                </a>
-            </div>
-            <p style="color: #666; font-size: 14px;">If you didn't create this account, you can safely ignore this email.</p>
-        </div>
-    `;
-
-    // Parse env.FROM_EMAIL (e.g., "BitGlow <bitglowv@gmail.com>") for Mailjet
-    const fromEmailRaw = env.FROM_EMAIL || (process.env.FROM_EMAIL as string);
-    const emailMatch = fromEmailRaw.match(/<([^>]+)>/);
-    const fromEmail = emailMatch ? emailMatch[1] : fromEmailRaw;
-    const nameMatch = fromEmailRaw.match(/^([^<]+)/);
-    const fromName = nameMatch ? nameMatch[1].trim() : 'BitGlow';
+    const verifyLink =
+        `${env.APP_URL}/verify-email?token=${token}&type=signup`;
 
     try {
-        const response = await mailjet
-            .post("send", { version: "v3.1" })
-            .request({
-                Messages: [
-                    {
-                        From: {
-                            Email: fromEmail,
-                            Name: fromName
-                        },
-                        To: [
-                            {
-                                Email: email
-                            }
-                        ],
-                        Subject: "Verify your BitGlow account",
-                        TextPart: `
-Welcome to BitGlow!
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: "Verify your BitGlow account",
 
-Verify your account:
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
+    <h2>Welcome to BitGlow 👋</h2>
 
-${verifyLink}
+    <p>Thanks for creating your BitGlow account.</p>
 
-This link expires in 24 hours.
+    <p>Please verify your email address before signing in.</p>
 
-If you didn't create this account, you can safely ignore this email.
+    <div style="margin:32px 0">
+        <a
+            href="${verifyLink}"
+            style="
+                background:#10b981;
+                color:white;
+                text-decoration:none;
+                padding:14px 28px;
+                border-radius:8px;
+                display:inline-block;
+                font-weight:bold;
+            ">
+            Verify Email
+        </a>
+    </div>
+
+    <p>This verification link expires in <b>24 hours</b>.</p>
+
+    <hr>
+
+    <small style="color:#666">
+        If you didn't create this account,
+        you can safely ignore this email.
+    </small>
+
+</div>
 `,
-                        HTMLPart: htmlContent
-                    }
-                ]
-            });
+        });
 
-        const result = (response.body as any)?.Messages?.[0];
+        console.log(
+            "[Email Service] Signup verification email sent:",
+            email
+        );
 
-        if (!result) {
-            throw new Error("Unexpected Mailjet response.");
-        }
+    } catch (err) {
 
-        if (result.Status !== "success") {
-            throw new Error(
-                result.Errors?.[0]?.ErrorMessage ??
-                "Mailjet failed to send email."
-            );
-        }
+        console.error(
+            "[Email Service] Signup verification failed:",
+            err
+        );
 
-        if (env.NODE_ENV === 'development') {
-            console.log('[Email Service] Mailjet response:', JSON.stringify(response.body, null, 2));
-        }
-    } catch (error) {
-        console.error("[Mailjet Error]", error);
-        throw error;
+        throw err;
     }
 }
