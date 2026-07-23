@@ -183,15 +183,30 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     return res;
 }
 
+export const ERROR_MAPPINGS: Record<string, string> = {
+    INVALID_CREDENTIALS: "Invalid username/email or password.",
+    EMAIL_NOT_VERIFIED: "Please verify your email before signing in.",
+    ACCOUNT_SCHEDULED_FOR_DELETION: "Account is scheduled for deletion. Ownership verification is required to restore.",
+    ACCOUNT_PURGED: "This account has been permanently deleted.",
+    TOO_MANY_ATTEMPTS: "Too many attempts. Please try again in a few minutes.",
+    INVALID_OTP: "Invalid or expired verification code.",
+    EXPIRED_OTP: "Verification code has expired. Please request a new one.",
+    INVALID_INPUT: "Please check your input and try again.",
+    SERVER_ERROR: "An unexpected server error occurred. Please try again later.",
+};
+
 export async function readErrorMessage(res: Response, fallback: string) {
     const text = await res.text();
     if (!text) return fallback;
 
     try {
         const json = JSON.parse(text);
-        return json.error || json.message || fallback;
+        if (json.code && ERROR_MAPPINGS[json.code]) {
+            return ERROR_MAPPINGS[json.code];
+        }
+        return json.message || json.error || fallback;
     } catch {
-        return text || fallback;
+        return fallback;
     }
 }
 
@@ -209,6 +224,25 @@ async function performLoginRequest(payload: Record<string, string>) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
     });
+}
+
+async function checkRestorationResponse(res: Response) {
+    try {
+        const cloned = res.clone();
+        const json = await cloned.json();
+        if (json && (json.code === "ACCOUNT_SCHEDULED_FOR_DELETION" || json.requiresRestoration)) {
+            return {
+                requiresRestoration: true,
+                scheduledDeletionAt: json.scheduledDeletionAt,
+                username: json.username,
+                email: json.email,
+                message: json.message,
+            };
+        }
+    } catch {
+        // ignore
+    }
+    return null;
 }
 
 async function readAuthResponse(res: Response): Promise<{ token: string; user: User }> {
@@ -236,7 +270,7 @@ async function resolveEmailFromUsername(username: string): Promise<string | null
 
 export const api = {
     auth: {
-        login: async (identifier: string, password: string): Promise<{ token: string; user: User }> => {
+        login: async (identifier: string, password: string): Promise<any> => {
             const normalizedIdentifier = identifier.trim();
 
             let res = await performLoginRequest({
@@ -245,6 +279,9 @@ export const api = {
                 username: normalizedIdentifier,
                 password,
             });
+
+            const restoration = await checkRestorationResponse(res);
+            if (restoration) return restoration;
 
             if (res.ok) {
                 return readAuthResponse(res);
@@ -257,6 +294,9 @@ export const api = {
                 password,
             });
 
+            const restoration2 = await checkRestorationResponse(res);
+            if (restoration2) return restoration2;
+
             if (res.ok) {
                 return readAuthResponse(res);
             }
@@ -268,6 +308,9 @@ export const api = {
                         email: resolvedEmail,
                         password,
                     });
+
+                    const restoration3 = await checkRestorationResponse(res);
+                    if (restoration3) return restoration3;
 
                     if (res.ok) {
                         return readAuthResponse(res);
@@ -389,11 +432,27 @@ export const api = {
             }
             return res.json();
         },
-        restoreAccount: async (identifier: string, password: string): Promise<{ token: string; user: User }> => {
-            const res = await fetch(`${API_URL}/auth/restore-account`, {
+        sendRestorationOtp: async (identifier: string, password: string): Promise<{ ok: boolean; message: string }> => {
+            const res = await fetch(`${API_URL}/auth/send-restoration-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ identifier, password }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to send verification code"));
+            }
+            return res.json();
+        },
+        restoreAccount: async (
+            identifier: string,
+            password: string,
+            otpCode: string,
+            twoFactorCode?: string
+        ): Promise<{ token: string; user: User }> => {
+            const res = await fetch(`${API_URL}/auth/restore-account`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ identifier, password, otpCode, twoFactorCode }),
             });
             if (!res.ok) {
                 throw new Error(await readErrorMessage(res, "Failed to restore account"));

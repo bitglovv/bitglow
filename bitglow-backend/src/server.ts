@@ -149,6 +149,34 @@ server.get("/health", async (_request, reply) => {
   }
 });
 
+// Global Error Handler: Log internal details on server, expose structured user-friendly errors to client
+server.setErrorHandler((error: any, _request, reply) => {
+  server.log.error(error);
+
+  const statusCode = error.statusCode && error.statusCode >= 400 && error.statusCode < 600
+    ? error.statusCode
+    : 500;
+
+  if (statusCode === 429) {
+    return reply.code(429).send({
+      code: "TOO_MANY_ATTEMPTS",
+      message: "Too many requests. Please try again later.",
+    });
+  }
+
+  if (statusCode >= 500) {
+    return reply.code(500).send({
+      code: "SERVER_ERROR",
+      message: "An unexpected error occurred. Please try again later.",
+    });
+  }
+
+  return reply.code(statusCode).send({
+    code: error.code || "INVALID_INPUT",
+    message: error.message || "Please check your request and try again.",
+  });
+});
+
 import { startBackgroundAccountCleanup } from "./services/cleanup";
 
 async function start() {

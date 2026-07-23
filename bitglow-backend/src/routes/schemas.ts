@@ -112,6 +112,20 @@ export const restoreAccountSchema = {
     body: {
         type: "object",
         additionalProperties: false,
+        required: ["identifier", "password", "otpCode"],
+        properties: {
+            identifier: { type: "string", minLength: 3, maxLength: 255 },
+            password: { type: "string", minLength: 1, maxLength: 128 },
+            otpCode: { type: "string", minLength: 6, maxLength: 6 },
+            twoFactorCode: { type: "string", maxLength: 20 },
+        },
+    },
+} as const;
+
+export const sendRestorationOtpSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
         required: ["identifier", "password"],
         properties: {
             identifier: { type: "string", minLength: 3, maxLength: 255 },

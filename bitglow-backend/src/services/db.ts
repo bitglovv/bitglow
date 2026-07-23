@@ -341,6 +341,16 @@ const initSecurityTables = async () => {
                 PRIMARY KEY (user_id, muted_id)
             );
             CREATE INDEX IF NOT EXISTS idx_muted_users_user ON muted_users(user_id);
+
+            CREATE TABLE IF NOT EXISTS account_restoration_otps (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                otp_code_hash TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_restoration_otps_user ON account_restoration_otps(user_id);
         `);
     } catch (err) {
         console.error("Failed to ensure security tables", err);
@@ -947,6 +957,49 @@ export const db = {
         }
 
         return purgedCount;
+    },
+
+    async createRestorationOtp(userId: string, otpCode: string) {
+        const otpHash = await bcrypt.hash(otpCode, 10);
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        // Invalidate any existing unused OTPs for this user
+        await pool.query(
+            `UPDATE account_restoration_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+            [userId]
+        );
+
+        const res = await pool.query(
+            `INSERT INTO account_restoration_otps (user_id, otp_code_hash, expires_at)
+             VALUES ($1, $2, $3)
+             RETURNING id, expires_at`,
+            [userId, otpHash, expiresAt.toISOString()]
+        );
+        return res.rows[0];
+    },
+
+    async verifyRestorationOtp(userId: string, otpCode: string): Promise<boolean> {
+        const res = await pool.query(
+            `SELECT id, otp_code_hash, expires_at FROM account_restoration_otps
+             WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [userId]
+        );
+
+        if (res.rows.length === 0) return false;
+
+        const row = res.rows[0];
+        const isValid = await bcrypt.compare(otpCode, row.otp_code_hash);
+
+        if (isValid) {
+            await pool.query(
+                `UPDATE account_restoration_otps SET used_at = NOW() WHERE id = $1`,
+                [row.id]
+            );
+            return true;
+        }
+
+        return false;
     },
 
     async deleteUserAccount(userId: string, audit?: { ipAddress?: string; userAgent?: string }) {

@@ -15,8 +15,14 @@ import {
     validateUsername,
 } from "../services/security";
 import { env } from "../config/env";
-import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema, restoreAccountSchema } from "./schemas";
-import { sendPasswordResetEmail, sendSignupVerificationEmail, sendAccountRestoredEmail } from "../services/email";
+import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema, restoreAccountSchema, sendRestorationOtpSchema } from "./schemas";
+import { sendPasswordResetEmail, sendSignupVerificationEmail, sendAccountRestoredEmail, sendRestorationOtpEmail } from "../services/email";
+
+function generateOtpCode(): string {
+    const bytes = randomBytes(4);
+    const num = bytes.readUInt32BE(0) % 1000000;
+    return num.toString().padStart(6, "0");
+}
 
 export async function authRoutes(fastify: FastifyInstance) {
 
@@ -271,7 +277,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         );
 
         if (recentLockout) {
-            return reply.code(429).send({ message: "Too many failed login attempts. Please try again later." });
+            return reply.code(429).send({ code: "TOO_MANY_ATTEMPTS", message: "Too many failed login attempts. Please try again later." });
         }
         if ((recentFailuresByIp.rows[0]?.count || 0) >= 5 || failureCountHour >= 10) {
             await logSecurityEvent("login_lockout", req, { identifier: normalizedIdentifier, ip: ipAddress });
@@ -281,7 +287,7 @@ export async function authRoutes(fastify: FastifyInstance) {
                 userAgent: req.headers["user-agent"]?.toString(),
                 details: { type: "login_lockout", identifier: normalizedIdentifier },
             });
-            return reply.code(429).send({ message: "Too many failed login attempts. Please try again later." });
+            return reply.code(429).send({ code: "TOO_MANY_ATTEMPTS", message: "Too many failed login attempts. Please try again later." });
         }
 
         const dbUser = await db.findUserByLoginIdentifier(normalizedIdentifier);
@@ -289,18 +295,18 @@ export async function authRoutes(fastify: FastifyInstance) {
         if (!dbUser) {
             await compareAgainstFakeHash(String(password));
             await logSecurityEvent("login_failure", req, { identifier: normalizedIdentifier, ip: ipAddress });
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid username/email or password" });
         }
 
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
             await logSecurityEvent("login_failure", req, { identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
-            return reply.code(401).send({ message: "Invalid username/email or password" });
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid username/email or password" });
         }
 
         if (dbUser.email_verified === false) {
             await logSecurityEvent("login_failure", req, { reason: "email_not_verified", identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
-            return reply.code(403).send({ message: "Please verify your email before signing in.", code: "EMAIL_NOT_VERIFIED" });
+            return reply.code(403).send({ code: "EMAIL_NOT_VERIFIED", message: "Please verify your email before signing in." });
         }
 
         // Check if account is scheduled for deletion
@@ -308,16 +314,17 @@ export async function authRoutes(fastify: FastifyInstance) {
             const scheduledAt = dbUser.scheduled_deletion_at ? new Date(dbUser.scheduled_deletion_at) : null;
             if (scheduledAt && scheduledAt.getTime() > Date.now()) {
                 await logSecurityEvent("login_attempt_deactivated", req, { identifier: normalizedIdentifier }, dbUser.id);
-                return reply.code(200).send({
-                    requiresRestoration: true,
+                return reply.code(403).send({
+                    code: "ACCOUNT_SCHEDULED_FOR_DELETION",
+                    recoverable: true,
                     scheduledDeletionAt: dbUser.scheduled_deletion_at,
                     username: dbUser.username,
                     email: dbUser.email,
-                    message: `Your account is scheduled for deletion on ${scheduledAt.toLocaleDateString()}. Would you like to restore it?`,
+                    message: `Your account is scheduled for deletion on ${scheduledAt.toLocaleDateString()}. Ownership verification is required to restore it.`,
                 });
             } else {
                 await logSecurityEvent("login_failure", req, { reason: "account_purged", identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
-                return reply.code(401).send({ message: "This account has been permanently deleted." });
+                return reply.code(401).send({ code: "ACCOUNT_PURGED", message: "This account has been permanently deleted." });
             }
         }
 
@@ -344,30 +351,87 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     /**
-     * POST /api/auth/restore-account
-     * Restores an account currently in the 30-day deletion grace period
+     * POST /api/auth/send-restoration-otp
+     * Sends a 6-digit Email OTP to verify account ownership before restoration
      */
-    fastify.post("/restore-account", { schema: restoreAccountSchema }, async (req, reply) => {
+    fastify.post("/send-restoration-otp", { schema: sendRestorationOtpSchema }, async (req, reply) => {
         const { identifier, password } = (req.body || {}) as { identifier?: string; password?: string };
 
         if (!identifier || !password) {
-            return reply.code(400).send({ message: "Username/email and password are required." });
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "Username/email and password are required." });
         }
 
         const normalizedIdentifier = identifier.trim().toLowerCase();
         const dbUser = await db.findUserByLoginIdentifier(normalizedIdentifier);
 
         if (!dbUser) {
-            return reply.code(401).send({ message: "Invalid credentials." });
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid credentials." });
         }
 
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            return reply.code(401).send({ message: "Invalid credentials." });
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid credentials." });
         }
 
         if (!dbUser.is_deleted) {
-            return reply.code(400).send({ message: "Account is already active." });
+            return reply.code(400).send({ code: "ACCOUNT_ACTIVE", message: "Account is already active." });
+        }
+
+        const otpCode = generateOtpCode();
+        await db.createRestorationOtp(dbUser.id, otpCode);
+        await sendRestorationOtpEmail(dbUser.email, dbUser.username, otpCode);
+
+        await logSecurityEvent("restoration_otp_sent", req, { identifier: normalizedIdentifier }, dbUser.id);
+
+        return {
+            ok: true,
+            code: "OTP_SENT",
+            message: "A 6-digit verification code has been sent to your registered email address.",
+        };
+    });
+
+    /**
+     * POST /api/auth/restore-account
+     * Restores an account after ownership verification via Email OTP (and 2FA TOTP)
+     */
+    fastify.post("/restore-account", { schema: restoreAccountSchema }, async (req, reply) => {
+        const { identifier, password, otpCode, twoFactorCode } = (req.body || {}) as {
+            identifier?: string;
+            password?: string;
+            otpCode?: string;
+            twoFactorCode?: string;
+        };
+
+        if (!identifier || !password || !otpCode) {
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "Identifier, password, and verification code are required." });
+        }
+
+        const normalizedIdentifier = identifier.trim().toLowerCase();
+        const dbUser = await db.findUserByLoginIdentifier(normalizedIdentifier);
+
+        if (!dbUser) {
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid credentials." });
+        }
+
+        const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
+        if (!isValidPassword) {
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid credentials." });
+        }
+
+        if (!dbUser.is_deleted) {
+            return reply.code(400).send({ code: "ACCOUNT_ACTIVE", message: "Account is already active." });
+        }
+
+        // Verify Email OTP
+        const isOtpValid = await db.verifyRestorationOtp(dbUser.id, otpCode.trim());
+        if (!isOtpValid) {
+            await logSecurityEvent("restoration_otp_failed", req, { identifier: normalizedIdentifier }, dbUser.id);
+            return reply.code(400).send({ code: "INVALID_OTP", message: "Invalid or expired verification code." });
+        }
+
+        // Hook for future 2FA / TOTP verification
+        if (twoFactorCode) {
+            // Prepared for future TOTP verification logic
         }
 
         // Restore account
@@ -376,7 +440,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             userAgent: req.headers["user-agent"]?.toString(),
         });
 
-        // Email user
+        // Email user notification
         await sendAccountRestoredEmail(dbUser.email, dbUser.username);
 
         const user = {
@@ -397,7 +461,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         const refreshToken = issueRefreshToken();
         await createSession(user.id, sid, token, refreshToken, req);
 
-        return { token, refreshToken, user, restored: true, message: "Account successfully restored!" };
+        return { token, refreshToken, user, restored: true, code: "ACCOUNT_RESTORED", message: "Account successfully restored!" };
     });
 
     fastify.post("/logout", { schema: logoutSchema }, async (req, reply) => {

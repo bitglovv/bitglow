@@ -203,3 +203,37 @@ export async function sendAccountRestoredEmail(email: string, username: string) 
         console.error("[Email Service] Account restoration email failed:", err);
     }
 }
+
+export async function sendRestorationOtpEmail(email: string, username: string, otpCode: string) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock restoration OTP email to ${email} (@${username}). Code: ${otpCode}`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: "Your BitGlow Account Restoration Verification Code",
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; color: #333;">
+                    <h2>Account Restoration Ownership Verification 🛡️</h2>
+                    <p>Hello @${username},</p>
+                    <p>You requested to restore your BitGlow account which is currently scheduled for deletion.</p>
+                    <p>Use the following 6-digit verification code to confirm ownership and reactivate your account:</p>
+                    <div style="background: #f4f4f5; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                        <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #18181b;">
+                            ${otpCode}
+                        </span>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">This code will expire in <b>15 minutes</b>. Do not share this code with anyone.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                    <small style="color: #888;">If you did not request to restore your account, please ignore this email.</small>
+                </div>
+            `,
+        });
+        console.log(`[Email Service] Restoration OTP email sent to ${email}`);
+    } catch (err) {
+        console.error("[Email Service] Failed to send restoration OTP email:", err);
+    }
+}
