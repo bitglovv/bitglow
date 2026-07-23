@@ -9,7 +9,7 @@ if (env.RESEND_API_KEY) {
 
 export async function sendPasswordResetEmail(email: string, token: string) {
     if (!resend) {
-        console.warn(`[Email Service] Mock sending password reset to ${email}. Token: ${token}`);
+        console.warn(`[Email Service] Mock sending password reset to ${email}. Reset token redacted.`);
         return;
     }
 
@@ -41,7 +41,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 
 export async function sendEmailChangeVerification(email: string, token: string) {
     if (!resend) {
-        console.warn(`[Email Service] Mock sending email verification to ${email}. Token: ${token}`);
+        console.warn(`[Email Service] Mock sending email verification to ${email}. Verification token redacted.`);
         return;
     }
 
@@ -77,7 +77,7 @@ export async function sendSignupVerificationEmail(
 ) {
     if (!resend) {
         console.warn(
-            `[Email Service] Mock signup verification for ${email}. Token: ${token}`
+            `[Email Service] Mock signup verification for ${email}. Verification token redacted.`
         );
         return;
     }
@@ -206,7 +206,7 @@ export async function sendAccountRestoredEmail(email: string, username: string) 
 
 export async function sendRestorationOtpEmail(email: string, username: string, otpCode: string) {
     if (!resend) {
-        console.warn(`[Email Service] Mock restoration OTP email to ${email} (@${username}). Code: ${otpCode}`);
+        console.warn(`[Email Service] Mock restoration OTP email to ${email} (@${username}). OTP redacted.`);
         return;
     }
 
@@ -256,7 +256,7 @@ export async function sendActionVerificationOtpEmail(
     const title = actionTitles[actionType] || "Security Verification";
 
     if (!resend) {
-        console.warn(`[Email Service] Mock verification OTP email to ${email} (@${username}) for ${actionType}. Code: ${otpCode}`);
+        console.warn(`[Email Service] Mock verification OTP email to ${email} (@${username}) for ${actionType}. OTP redacted.`);
         return;
     }
 

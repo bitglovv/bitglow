@@ -504,23 +504,6 @@ const initLiveTables = async () => {
     }
 };
 
-const initLegacyMessagesTable = async () => {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                username TEXT NOT NULL,
-                text TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT now()
-            );
-            CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
-        `);
-    } catch (err) {
-        console.error("Failed to ensure legacy messages table", err);
-    }
-};
-
 // Sequential startup — each step awaits the previous to avoid race conditions
 export async function initializeDatabase() {
     await initCoreTables();
@@ -812,31 +795,6 @@ export const db = {
             [eventType, identifier, since]
         );
         return res.rows[0] || null;
-    },
-
-    async saveMessage(userId: string, username: string, text: string) {
-        const query = `
-      INSERT INTO messages (user_id, username, text)
-      VALUES ($1, $2, $3)
-      RETURNING *;
-    `;
-        const res = await pool.query(query, [userId, username, text]);
-        return res.rows[0];
-    },
-
-    async getLastMessages(limit = 50) {
-        const query = `
-      SELECT user_id as "userId", username, text, created_at as ts
-      FROM messages
-      ORDER BY created_at DESC
-      LIMIT $1;
-    `;
-        const res = await pool.query(query, [limit]);
-        // reverse to get chronological order for client
-        return res.rows.reverse().map((row: SecurityLogRow) => ({
-            ...row,
-            ts: row.ts ? new Date(row.ts).getTime() : 0
-        }));
     },
 
     activeUserClause(alias = "users") {

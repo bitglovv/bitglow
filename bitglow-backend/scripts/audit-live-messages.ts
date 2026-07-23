@@ -3,8 +3,12 @@ import { Pool } from "pg";
 
 dotenv.config();
 
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required to run the live-message audit.");
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:26092008@localhost:5432/bitglow",
+  connectionString: process.env.DATABASE_URL,
 });
 
 const rawLimit = Number(process.argv[2] || 500);
