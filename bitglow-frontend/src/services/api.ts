@@ -387,13 +387,12 @@ export const api = {
         restoreAccount: async (
             identifier: string,
             password: string,
-            otpCode: string,
-            twoFactorCode?: string
+            otpCode: string
         ): Promise<{ token: string; user: User }> => {
             const res = await fetch(`${API_URL}/auth/restore-account`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ identifier, password, otpCode, twoFactorCode }),
+                body: JSON.stringify({ identifier, password, otpCode }),
             });
             if (!res.ok) {
                 throw new Error(await readErrorMessage(res, "Failed to restore account"));
@@ -444,11 +443,21 @@ export const api = {
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to update profile"));
             return res.json();
         },
+        requestDeletionOtp: async (password: string): Promise<{ ok: boolean; message: string }> => {
+            const res = await fetchWithAuth("/api/me/request-deletion-otp", {
+                method: "POST",
+                body: JSON.stringify({ password }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to request verification code"));
+            }
+            return res.json();
+        },
         scheduleAccountDeletion: async (payload: {
             password: string;
+            otpCode: string;
             confirmText: string;
             reason?: string;
-            twoFactorCode?: string;
         }): Promise<{ ok: boolean; scheduledDeletionAt: string; message: string }> => {
             const res = await fetchWithAuth("/api/me", {
                 method: "DELETE",
@@ -460,7 +469,7 @@ export const api = {
             return res.json();
         },
         sendRestorationOtp: (identifier: string, password: string) => api.auth.sendRestorationOtp(identifier, password),
-        restoreAccount: (identifier: string, password: string, otpCode: string, twoFactorCode?: string) => api.auth.restoreAccount(identifier, password, otpCode, twoFactorCode),
+        restoreAccount: (identifier: string, password: string, otpCode: string) => api.auth.restoreAccount(identifier, password, otpCode),
         follow: async (userId: string, username?: string): Promise<FollowStatus | null> => {
             const res = await fetchWithAuth(`/users/${userId}/follow`, {
                 method: "POST",

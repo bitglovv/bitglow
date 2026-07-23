@@ -6,6 +6,7 @@ import AuthLayout from "../layouts/AuthLayout";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+import { OtpInput } from "../components/ui/OtpInput";
 
 type LoginTouched = {
     identifier: boolean;
@@ -52,7 +53,6 @@ export default function LoginPage() {
     } | null>(null);
     const [restorationStep, setRestorationStep] = useState<1 | 2>(1);
     const [otpCode, setOtpCode] = useState("");
-    const [twoFactorCode, setTwoFactorCode] = useState("");
     const [sendingOtp, setSendingOtp] = useState(false);
     const [otpSentMessage, setOtpSentMessage] = useState("");
     const [restoring, setRestoring] = useState(false);
@@ -80,7 +80,6 @@ export default function LoginPage() {
                 setRestorationStep(1);
                 setRestorationError("");
                 setOtpCode("");
-                setTwoFactorCode("");
                 setOtpSentMessage("");
                 return;
             }
@@ -119,7 +118,7 @@ export default function LoginPage() {
         setRestoring(true);
         setRestorationError("");
         try {
-            const { token, user } = await api.auth.restoreAccount(identifier, password, otpCode.trim(), twoFactorCode.trim() || undefined);
+            const { token, user } = await api.auth.restoreAccount(identifier, password, otpCode.trim());
             login(token, user);
             navigate("/home");
         } catch (err: any) {
@@ -246,136 +245,89 @@ export default function LoginPage() {
 
             {/* Account Restoration Modal */}
             {restorationInfo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
-                    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-6 text-white shadow-2xl text-center space-y-4">
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-amber-500/15 border border-amber-500/20 text-amber-400">
-                            ⚡
-                        </div>
-
-                        <div>
-                            <h3 className="text-lg font-bold">Account Scheduled for Deletion</h3>
-                            <p className="mt-1.5 text-xs text-zinc-400 leading-relaxed">
-                                Welcome back, @{restorationInfo.username}! Your account is scheduled for permanent deletion on{" "}
-                                <strong className="text-amber-400">
-                                    {new Date(restorationInfo.scheduledDeletionAt).toLocaleDateString("en-US", {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                    })}
-                                </strong>.
-                            </p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+                    <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 text-white shadow-xl space-y-4 text-left">
+                        
+                        <div className="flex items-center justify-between pb-1 border-b border-zinc-900">
+                            <div>
+                                <h3 className="text-base font-bold text-white tracking-tight">Restore Account</h3>
+                                <p className="text-xs text-zinc-500">@{restorationInfo.username}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setRestorationInfo(null)}
+                                className="text-xs text-zinc-500 hover:text-white transition px-2 py-1"
+                            >
+                                Cancel
+                            </button>
                         </div>
 
                         {restorationStep === 1 && (
-                            <div className="space-y-4 text-left">
-                                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200">
-                                    <strong>Ownership Verification Required:</strong> To restore your account, we will send a 6-digit verification code to your registered email (<strong>{restorationInfo.email}</strong>).
-                                </div>
+                            <div className="space-y-4">
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                    Account scheduled for deletion on{" "}
+                                    <strong className="text-emerald-400">
+                                        {new Date(restorationInfo.scheduledDeletionAt).toLocaleDateString("en-US", {
+                                            year: "numeric",
+                                            month: "short",
+                                            day: "numeric",
+                                        })}
+                                    </strong>. A verification code will be sent to <strong className="text-zinc-200">{restorationInfo.email}</strong>.
+                                </p>
 
                                 {restorationError && (
-                                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300 font-semibold">
+                                    <p className="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-900/50 p-2.5 rounded-lg">
                                         {restorationError}
-                                    </div>
+                                    </p>
                                 )}
 
-                                <div className="flex flex-col gap-2.5 pt-1">
-                                    <Button
-                                        type="button"
-                                        variant="primary"
-                                        isLoading={sendingOtp}
-                                        disabled={sendingOtp}
-                                        onClick={handleSendRestorationOtp}
-                                        className="w-full py-3 text-sm font-bold"
-                                    >
-                                        Send Verification Code to Email
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => setRestorationInfo(null)}
-                                        className="w-full py-2.5 text-xs"
-                                    >
-                                        Cancel
-                                    </Button>
-                                </div>
+                                <Button
+                                    type="button"
+                                    isLoading={sendingOtp}
+                                    disabled={sendingOtp}
+                                    onClick={handleSendRestorationOtp}
+                                    className="w-full py-2.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black border-none"
+                                >
+                                    Send Verification Code
+                                </Button>
                             </div>
                         )}
 
                         {restorationStep === 2 && (
-                            <form onSubmit={handleRestoreAccount} className="space-y-4 text-left">
+                            <form onSubmit={handleRestoreAccount} className="space-y-3.5">
                                 {otpSentMessage && (
-                                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-300 font-semibold text-center">
+                                    <p className="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-900/50 p-2 rounded-lg text-center font-medium">
                                         {otpSentMessage}
-                                    </div>
+                                    </p>
                                 )}
 
-                                <div className="space-y-1.5">
-                                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
-                                        6-Digit Verification Code
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={otpCode}
-                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                        placeholder="123456"
-                                        maxLength={6}
-                                        required
-                                        autoFocus
-                                        className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-lg font-mono tracking-[0.4em] text-white placeholder-zinc-600 outline-none transition focus:border-amber-500/50"
-                                    />
-                                </div>
+                                <OtpInput
+                                    value={otpCode}
+                                    onChange={setOtpCode}
+                                    onResend={handleSendRestorationOtp}
+                                    isResending={sendingOtp}
+                                    disabled={restoring}
+                                    error={restorationError}
+                                    emailHint={restorationInfo.email}
+                                />
 
-                                <div className="space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                            2FA Code (Optional)
-                                        </label>
-                                        <span className="text-[10px] text-zinc-600">If enabled</span>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        value={twoFactorCode}
-                                        onChange={(e) => setTwoFactorCode(e.target.value)}
-                                        placeholder="6-digit TOTP code"
-                                        maxLength={6}
-                                        className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-xs text-white placeholder-zinc-600 outline-none transition focus:border-amber-500/50"
-                                    />
-                                </div>
-
-                                {restorationError && (
-                                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300 font-semibold">
-                                        {restorationError}
-                                    </div>
-                                )}
-
-                                <div className="flex flex-col gap-2.5 pt-1">
+                                <div className="flex flex-col gap-2 pt-1">
                                     <Button
                                         type="submit"
-                                        variant="primary"
                                         isLoading={restoring}
                                         disabled={restoring || otpCode.trim().length !== 6}
-                                        className="w-full py-3 text-sm font-bold"
+                                        className="w-full py-2.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black border-none"
                                     >
                                         Verify & Restore Account
                                     </Button>
 
-                                    <div className="flex items-center justify-between text-xs text-zinc-400 px-1 pt-1">
-                                        <button
-                                            type="button"
-                                            onClick={handleSendRestorationOtp}
-                                            disabled={sendingOtp}
-                                            className="text-amber-400 hover:underline disabled:opacity-50"
-                                        >
-                                            {sendingOtp ? "Resending..." : "Resend Code"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setRestorationInfo(null)}
-                                            className="text-zinc-500 hover:text-white"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRestorationInfo(null)}
+                                        className="text-xs text-zinc-500 hover:text-zinc-300 py-1 text-center"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                             </form>
                         )}

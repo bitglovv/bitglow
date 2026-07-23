@@ -94,16 +94,27 @@ export const userUpdateSchema = {
     },
 } as const;
 
-export const deleteAccountSchema = {
+export const requestAccountDeletionOtpSchema = {
     body: {
         type: "object",
         additionalProperties: false,
         required: ["password"],
         properties: {
             password: { type: "string", minLength: 1, maxLength: 128 },
+        },
+    },
+} as const;
+
+export const deleteAccountSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["password", "otpCode", "confirmText"],
+        properties: {
+            password: { type: "string", minLength: 1, maxLength: 128 },
+            otpCode: { type: "string", minLength: 6, maxLength: 6 },
             confirmText: { type: "string", maxLength: 50 },
             reason: { type: "string", maxLength: 1000 },
-            twoFactorCode: { type: "string", maxLength: 20 },
         },
     },
 } as const;

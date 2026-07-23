@@ -1,10 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../services/db";
 import { hashToken, parseBearerToken, validateUsername, sanitizeText, validateUrl, verifyAccessToken } from "../services/security";
-import { deleteAccountSchema, followSchema, idParamSchema, paginationSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
+import { deleteAccountSchema, followSchema, idParamSchema, paginationSchema, usernameCheckSchema, userUpdateSchema, requestAccountDeletionOtpSchema } from "./schemas";
 import { uploadAvatar } from "../services/storage";
-
 import { sendAccountDeletionEmail } from "../services/email";
+import { VerificationService } from "../services/verification/VerificationService";
+import { disconnectUserSockets } from "../ws";
 
 export async function userRoutes(fastify: FastifyInstance) {
 
@@ -189,54 +190,117 @@ export async function userRoutes(fastify: FastifyInstance) {
     });
 
     /**
+     * POST /api/me/request-deletion-otp
+     * Re-authenticates password and requests a 6-digit Email OTP for account deletion verification.
+     */
+    fastify.post("/me/request-deletion-otp", { preHandler: fastify.requireAuth, schema: requestAccountDeletionOtpSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { password } = (req.body || {}) as { password?: string };
+
+        if (!password) {
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "Current password is required to request deletion code." });
+        }
+
+        const dbUser = await db.getUserWithPasswordHash(userId);
+        if (!dbUser) {
+            return reply.code(404).send({ code: "USER_NOT_FOUND", message: "User account not found." });
+        }
+
+        const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
+        if (!isValidPassword) {
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid current password." });
+        }
+
+        try {
+            const result = await VerificationService.requestVerification(
+                userId,
+                "delete_account",
+                "email",
+                {
+                    ipAddress: req.ip,
+                    userAgent: req.headers["user-agent"]?.toString(),
+                }
+            );
+
+            return {
+                ok: true,
+                code: "OTP_SENT",
+                message: result.message || "A 6-digit verification code has been sent to your registered email address.",
+                expiresAt: result.expiresAt,
+            };
+        } catch (err: any) {
+            return reply.code(400).send({
+                code: "VERIFICATION_REQUEST_FAILED",
+                message: err.message || "Failed to request verification code.",
+            });
+        }
+    });
+
+    /**
      * DELETE /api/me
-     * Schedules account deletion for 30 days, deactivates account immediately, revokes all sessions, and emails user.
+     * Multi-factor account deletion: Password + Email OTP + "DELETE" text confirmation.
+     * Schedules account deletion for 30 days, deactivates account, revokes all sessions, closes WebSockets, and emails user.
      */
     fastify.delete("/me", { preHandler: fastify.requireAuth, schema: deleteAccountSchema }, async (req, reply) => {
         const userId = req.auth!.id;
-        const { password, confirmText, reason, twoFactorCode } = (req.body || {}) as {
+        const { password, otpCode, confirmText, reason } = (req.body || {}) as {
             password?: string;
+            otpCode?: string;
             confirmText?: string;
             reason?: string;
-            twoFactorCode?: string;
         };
 
         if (!password) {
-            return reply.code(400).send({ message: "Current password is required to re-authenticate." });
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "Current password is required to re-authenticate." });
         }
 
-        if (confirmText && confirmText.trim().toUpperCase() !== "DELETE") {
-            return reply.code(400).send({ message: "You must type 'DELETE' to confirm account deletion." });
+        if (!otpCode || otpCode.trim().length !== 6) {
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "A 6-digit verification code is required." });
         }
 
-        // Rate limiting check: Max 3 deletion requests per hour per user/IP
-        const recentRequests = await db.countSecurityEvents("account_deletion_requested", userId, new Date(Date.now() - 3600000));
-        if (recentRequests >= 3) {
-            return reply.code(429).send({ message: "Too many deletion requests. Please try again later." });
+        if (!confirmText || confirmText.trim().toUpperCase() !== "DELETE") {
+            return reply.code(400).send({ code: "INVALID_INPUT", message: "You must type 'DELETE' to confirm account deletion." });
         }
 
         // Fetch user from DB using authenticated JWT userId (NEVER trust frontend payload user/email/id)
         const dbUser = await db.getUserWithPasswordHash(userId);
         if (!dbUser) {
-            return reply.code(404).send({ message: "User account not found." });
+            return reply.code(404).send({ code: "USER_NOT_FOUND", message: "User account not found." });
         }
 
-        // Re-authenticate password
+        // 1. Re-authenticate password
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            return reply.code(401).send({ message: "Invalid current password." });
+            return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid current password." });
         }
 
-        // Interface hook for future 2FA verification if enabled
-        if (twoFactorCode) {
-            // Prepared for future 2FA verification logic
-        }
-
-        // Schedule account deletion (30-day grace period) & deactivate account immediately
-        const result = await db.scheduleUserAccountDeletion(userId, reason, {
+        // 2. Verify Email OTP using reusable VerificationService
+        const verifResult = await VerificationService.verifyCode(userId, "delete_account", otpCode, {
             ipAddress: req.ip,
             userAgent: req.headers["user-agent"]?.toString(),
         });
+
+        if (!verifResult.success) {
+            return reply.code(400).send({
+                code: verifResult.reason || "INVALID_OTP",
+                message: verifResult.message,
+                attemptsLeft: verifResult.attemptsLeft,
+            });
+        }
+
+        // 3. Schedule account deletion (30-day grace period) & deactivate account immediately
+        const audit = {
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"]?.toString(),
+        };
+
+        const result = await db.scheduleUserAccountDeletion(userId, reason, audit);
+
+        // 4. Revoke all active sessions & refresh tokens for user
+        await db.revokeSessionsForUser(userId);
+
+        // 5. Disconnect active WebSocket connections for user
+        disconnectUserSockets(userId);
 
         const scheduledDateStr = new Date(result.scheduled_deletion_at).toLocaleDateString("en-US", {
             year: "numeric",
@@ -244,7 +308,7 @@ export async function userRoutes(fastify: FastifyInstance) {
             day: "numeric",
         });
 
-        // Dispatch confirmation email with restoration instructions
+        // 6. Dispatch confirmation email with restoration instructions
         await sendAccountDeletionEmail(dbUser.email, dbUser.username, scheduledDateStr);
 
         return {

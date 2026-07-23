@@ -120,3 +120,14 @@ export function startWS(httpServer: any) {
   console.log("🚀 WebSocket server ready");
 }
 
+export function disconnectUserSockets(userId: string) {
+  for (const client of clients) {
+    if (client.userId === userId) {
+      try {
+        client.socket.close(1008, "Account deactivated");
+      } catch (err) {
+        // ignore error during disconnect
+      }
+    }
+  }
+}

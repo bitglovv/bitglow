@@ -177,3 +177,18 @@ CREATE TABLE IF NOT EXISTS live_messages (
 
 CREATE INDEX IF NOT EXISTS idx_dm_msg_created ON dm_messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_live_msg_created ON live_messages(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS action_verifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  verification_type VARCHAR(64) NOT NULL,
+  method VARCHAR(32) NOT NULL DEFAULT 'email',
+  otp_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 5,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_action_verif_user_type ON action_verifications(user_id, verification_type);

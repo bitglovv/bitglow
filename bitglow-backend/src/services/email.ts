@@ -237,3 +237,53 @@ export async function sendRestorationOtpEmail(email: string, username: string, o
         console.error("[Email Service] Failed to send restoration OTP email:", err);
     }
 }
+
+export async function sendActionVerificationOtpEmail(
+    email: string,
+    username: string,
+    otpCode: string,
+    actionType: string
+) {
+    const actionTitles: Record<string, string> = {
+        delete_account: "Account Deletion Verification",
+        restore_account: "Account Restoration Verification",
+        change_email: "Email Change Verification",
+        change_password: "Password Change Verification",
+        disable_2fa: "Two-Factor Authentication Disability Verification",
+        export_data: "Account Data Export Verification",
+    };
+
+    const title = actionTitles[actionType] || "Security Verification";
+
+    if (!resend) {
+        console.warn(`[Email Service] Mock verification OTP email to ${email} (@${username}) for ${actionType}. Code: ${otpCode}`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: `Your BitGlow Verification Code: ${title}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; color: #333;">
+                    <h2>${title} 🛡️</h2>
+                    <p>Hello @${username},</p>
+                    <p>A verification code was requested for a high-risk security action on your BitGlow account: <strong>${actionType}</strong>.</p>
+                    <p>Use the following 6-digit verification code to complete this action:</p>
+                    <div style="background: #f4f4f5; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                        <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #18181b;">
+                            ${otpCode}
+                        </span>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">This code will expire in <b>10 minutes</b>. Do not share this code with anyone.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                    <small style="color: #888;">If you did not initiate this request, please change your password and secure your account immediately.</small>
+                </div>
+            `,
+        });
+        console.log(`[Email Service] Action verification OTP email sent to ${email} for action ${actionType}`);
+    } catch (err) {
+        console.error(`[Email Service] Failed to send action verification OTP email to ${email}:`, err);
+    }
+}

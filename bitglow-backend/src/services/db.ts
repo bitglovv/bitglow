@@ -351,6 +351,20 @@ const initSecurityTables = async () => {
                 created_at TIMESTAMPTZ DEFAULT now()
             );
             CREATE INDEX IF NOT EXISTS idx_restoration_otps_user ON account_restoration_otps(user_id);
+
+            CREATE TABLE IF NOT EXISTS action_verifications (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                verification_type VARCHAR(64) NOT NULL,
+                method VARCHAR(32) NOT NULL DEFAULT 'email',
+                otp_hash TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                attempts INT NOT NULL DEFAULT 0,
+                max_attempts INT NOT NULL DEFAULT 5,
+                used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_action_verif_user_type ON action_verifications(user_id, verification_type);
         `);
     } catch (err) {
         console.error("Failed to ensure security tables", err);
