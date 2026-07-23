@@ -127,9 +127,34 @@ const initCoreTables = async () => {
                 is_banned BOOLEAN DEFAULT false,
                 is_private BOOLEAN DEFAULT false,
                 online_status_visible BOOLEAN DEFAULT true,
+                email_verified BOOLEAN DEFAULT false,
+                verification_token TEXT,
+                verification_expires_at TIMESTAMPTZ,
+                is_deleted BOOLEAN DEFAULT false,
+                deleted_at TIMESTAMPTZ,
+                scheduled_deletion_at TIMESTAMPTZ,
+                deletion_reason TEXT,
                 created_at TIMESTAMP DEFAULT now(),
                 updated_at TIMESTAMP DEFAULT now()
             );
+
+            -- Idempotent column migrations for existing databases
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status_visible BOOLEAN DEFAULT true;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_expires_at TIMESTAMPTZ;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMPTZ;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+            CREATE INDEX IF NOT EXISTS idx_users_is_deleted ON users(is_deleted);
+            CREATE INDEX IF NOT EXISTS idx_users_scheduled_deletion ON users(scheduled_deletion_at) WHERE is_deleted = TRUE;
 
             CREATE TABLE IF NOT EXISTS user_sessions (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -165,34 +190,7 @@ const initCoreTables = async () => {
 // Ensure posts + related tables exist for blogging
 const initPostsTable = async () => {
     try {
-        // 1. Safely add optional columns to users (table already exists from initCoreTables)
-        await pool.query(`
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_private') THEN
-                    ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT false;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='online_status_visible') THEN
-                    ALTER TABLE users ADD COLUMN online_status_visible BOOLEAN DEFAULT true;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_deleted') THEN
-                    ALTER TABLE users ADD COLUMN is_deleted BOOLEAN DEFAULT false;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='deleted_at') THEN
-                    ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='scheduled_deletion_at') THEN
-                    ALTER TABLE users ADD COLUMN scheduled_deletion_at TIMESTAMPTZ;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_reason') THEN
-                    ALTER TABLE users ADD COLUMN deletion_reason TEXT;
-                END IF;
-            END $$;
-            CREATE INDEX IF NOT EXISTS idx_users_is_deleted ON users(is_deleted);
-            CREATE INDEX IF NOT EXISTS idx_users_scheduled_deletion ON users(scheduled_deletion_at) WHERE is_deleted = TRUE;
-        `);
-
-        // 2. Create posts + related tables FIRST
+        // Create posts + related tables
         await pool.query(`
             CREATE TABLE IF NOT EXISTS posts (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -817,8 +815,12 @@ export const db = {
         }));
     },
 
+    activeUserClause(alias = "users") {
+        return `COALESCE(${alias}.is_deleted, FALSE) = FALSE`;
+    },
+
     async findUserByEmail(email: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE email = $1 AND (is_deleted = false OR is_deleted IS NULL)', [email]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE email = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [email]);
         return res.rows[0];
     },
 
@@ -832,7 +834,7 @@ export const db = {
     },
 
     async findUserByUsername(username: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE username = $1 AND (is_deleted = false OR is_deleted IS NULL)', [username]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE username = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [username]);
         return res.rows[0];
     },
 
@@ -1009,19 +1011,19 @@ export const db = {
     },
 
     async getUserById(id: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [id]);
         return res.rows[0];
     },
 
     async getUserWithPasswordHash(id: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [id]);
         return res.rows[0];
     },
 
     async getAllUsers(limit = 50, offset = 0) {
         const cappedLimit = Math.min(Math.max(limit, 1), 100);
         const safeOffset = Math.max(offset, 0);
-        const res = await pool.query('SELECT id, username, display_name as "displayName", avatar_url as "avatarUrl", website, location, bio, followers_count as "followersCount", follows_count as "followsCount", role, is_private as "isPrivate", created_at, updated_at FROM users ORDER BY username ASC LIMIT $1 OFFSET $2', [cappedLimit, safeOffset]);
+        const res = await pool.query('SELECT id, username, display_name as "displayName", avatar_url as "avatarUrl", website, location, bio, followers_count as "followersCount", follows_count as "followsCount", role, is_private as "isPrivate", created_at, updated_at FROM users WHERE COALESCE(is_deleted, FALSE) = FALSE ORDER BY username ASC LIMIT $1 OFFSET $2', [cappedLimit, safeOffset]);
         return res.rows;
     },
 
