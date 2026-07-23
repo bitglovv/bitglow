@@ -9,6 +9,8 @@ import PrivacyPage from "../pages/PrivacyPage";
 import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
 import AboutPage from "../pages/AboutPage";
+import ReportProblemPage from "../pages/ReportProblemPage";
+import HelpCenterPage from "../pages/HelpCenterPage";
 import HomePage from "../pages/HomePage";
 import LiveChatPage from "../pages/LiveChatPage";
 import MessagesPage from "../pages/MessagesPage";
@@ -45,11 +47,15 @@ export default function Router() {
             <Route path="/reset-password" element={token && user ? <Navigate to="/home" replace /> : <ResetPasswordPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
 
-            {/* Public legal pages — also accessible from within the app */}
+            {/* Public legal & support center pages — accessible from anywhere */}
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/about-app" element={<AboutPage />} />
+            <Route path="/about" element={<Navigate to="/about-app" replace />} />
+            <Route path="/report" element={<ReportProblemPage />} />
+            <Route path="/help" element={<HelpCenterPage />} />
+            <Route path="/help-center" element={<Navigate to="/help" replace />} />
 
             {/* Protected App Routes */}
             <Route element={<ProtectedRoute />}>

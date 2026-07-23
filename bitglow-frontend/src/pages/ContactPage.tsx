@@ -1,207 +1,239 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Flag, CheckCircle2, AlertCircle, MessageCircle, Mail } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Mail, Shield, Lock, Briefcase, MessageCircle, Clock } from "lucide-react";
+import { SupportLayout } from "../components/support/SupportLayout";
+import { SupportHero } from "../components/support/SupportHero";
+import { SupportCard } from "../components/support/SupportCard";
+import {
+    SupportFormField,
+    SupportInput,
+    SupportTextarea,
+    SupportSelect,
+} from "../components/support/SupportFormControls";
+import { SupportErrorState, SupportSuccessTicketScreen } from "../components/support/SupportStates";
+import { supportService } from "../services/supportService";
+import { Ticket, TicketCategory, TicketPriority } from "../types/support";
 import { Button } from "../components/ui/Button";
-import { api } from "../services/api";
-import { navigateBack } from "../utils/navigateBack";
+import { SUPPORT_CONFIG } from "../config/supportConfig";
 
 export default function ContactPage() {
-    useEffect(() => { document.title = "Contact & Support · BitGlow"; }, []);
-    const navigate = useNavigate();
+    useEffect(() => {
+        document.title = `Contact Support · ${SUPPORT_CONFIG.appName}`;
+    }, []);
 
-    const [type, setType] = useState("general");
-    const [reason, setReason] = useState("");
-    const [reportedUserId, setReportedUserId] = useState("");
-    const [postId, setPostId] = useState("");
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [category, setCategory] = useState<TicketCategory>("general");
+    const [priority, setPriority] = useState<TicketPriority>("normal");
+    const [subject, setSubject] = useState("");
+    const [message, setMessage] = useState("");
+
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
     const [error, setError] = useState("");
+    const [submittedTicket, setSubmittedTicket] = useState<Ticket | null>(null);
+
+    const categories: Array<{
+        value: TicketCategory;
+        label: string;
+        desc: string;
+        icon: React.ReactNode;
+        sla: string;
+    }> = [
+        {
+            value: "general",
+            label: "General Support",
+            desc: "Account questions, app features, general inquiries",
+            icon: <MessageCircle className="h-5 w-5 text-blue-400" />,
+            sla: SUPPORT_CONFIG.sla.generalResponseTime,
+        },
+        {
+            value: "privacy",
+            label: "Privacy & Data",
+            desc: "Data access requests, privacy policy inquiries",
+            icon: <Shield className="h-5 w-5 text-emerald-400" />,
+            sla: SUPPORT_CONFIG.sla.privacyResponseTime,
+        },
+        {
+            value: "security",
+            label: "Security Alert",
+            desc: "Vulnerability disclosures, account compromise",
+            icon: <Lock className="h-5 w-5 text-rose-400" />,
+            sla: SUPPORT_CONFIG.sla.securityResponseTime,
+        },
+        {
+            value: "business",
+            label: "Business & Press",
+            desc: "Partnership opportunities, media inquiries",
+            icon: <Briefcase className="h-5 w-5 text-purple-400" />,
+            sla: SUPPORT_CONFIG.sla.businessResponseTime,
+        },
+    ];
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError("");
-        setSuccess(false);
+
+        if (!name.trim()) {
+            setError("Please enter your full name.");
+            return;
+        }
+
+        if (!email.trim() || !email.includes("@")) {
+            setError("Please enter a valid email address.");
+            return;
+        }
+
+        if (!subject.trim()) {
+            setError("Please enter a subject line.");
+            return;
+        }
+
+        if (!message.trim() || message.trim().length < 10) {
+            setError("Please enter your message (minimum 10 characters).");
+            return;
+        }
+
+        setLoading(true);
+
         try {
-            await api.settings.reportProblem(type, reason, reportedUserId, postId);
-            setSuccess(true);
-            setReason("");
-            setReportedUserId("");
-            setPostId("");
+            const ticket = await supportService.submitSupportContact({
+                name,
+                email,
+                category,
+                priority,
+                subject,
+                message,
+            });
+
+            setSubmittedTicket(ticket);
         } catch (err: any) {
-            setError(err.message || "Failed to submit report. Please try again.");
+            setError(err.message || "Failed to send message. Please try again.");
         } finally {
             setLoading(false);
         }
     };
 
-    const typeOptions = [
-        { value: "general", label: "General Support", emoji: "💬" },
-        { value: "account", label: "Report an Account", emoji: "🚨" },
-        { value: "post", label: "Report a Post", emoji: "📝" },
-        { value: "bug", label: "Report a Bug", emoji: "🐛" },
-    ];
+    const handleReset = () => {
+        setSubmittedTicket(null);
+        setName("");
+        setEmail("");
+        setSubject("");
+        setMessage("");
+        setError("");
+    };
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="sticky top-0 z-20 border-b border-white/[0.06] bg-black/90 backdrop-blur-xl">
-                <div className="mx-auto flex max-w-2xl items-center gap-4 px-4 py-4 sm:px-6">
-                    <button
-                        type="button"
-                        onClick={() => navigateBack(navigate, "/settings")}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white transition hover:bg-white/[0.10] active:scale-95"
-                        aria-label="Back"
+        <SupportLayout title="Contact Support">
+            <SupportHero
+                badge="Support & SLA"
+                badgeColor="purple"
+                title="Direct Support Line"
+                description="Have a question or request for our engineering, privacy, or safety team? Send us a direct message below."
+                icon={<Mail className="h-8 w-8 text-purple-400" />}
+            />
+
+            {/* Response Time SLA Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {categories.map((cat) => (
+                    <div
+                        key={cat.value}
+                        onClick={() => setCategory(cat.value)}
+                        className={`flex flex-col items-start rounded-2xl border p-3.5 transition cursor-pointer ${
+                            category === cat.value
+                                ? "border-purple-500/50 bg-purple-500/10 text-white"
+                                : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.05]"
+                        }`}
                     >
-                        <ArrowLeft className="h-5 w-5" />
-                    </button>
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500/15">
-                            <Flag className="h-4 w-4 text-orange-400" />
+                        <div className="mb-2">{cat.icon}</div>
+                        <h4 className="text-xs font-bold text-white">{cat.label}</h4>
+                        <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
+                            <Clock className="h-3 w-3 shrink-0 text-purple-400" />
+                            <span>{cat.sla}</span>
                         </div>
-                        <h1 className="text-[18px] font-bold tracking-tight">Contact & Support</h1>
                     </div>
-                </div>
+                ))}
             </div>
 
-            <main className="mx-auto max-w-2xl px-4 py-8 pb-20 sm:px-6 space-y-5">
-                {/* Direct contact cards */}
-                <div className="grid grid-cols-2 gap-3">
-                    <a
-                        href="mailto:support@bitglow.app"
-                        className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 transition hover:bg-white/[0.06] active:scale-[0.98]"
-                    >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/15">
-                            <Mail className="h-4.5 w-4.5 text-blue-400" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold text-white">Email Us</p>
-                            <p className="mt-0.5 text-xs text-zinc-500">support@bitglow.app</p>
-                        </div>
-                    </a>
-                    <div className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15">
-                            <MessageCircle className="h-4.5 w-4.5 text-purple-400" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold text-white">Response Time</p>
-                            <p className="mt-0.5 text-xs text-zinc-500">Within 2–5 business days</p>
-                        </div>
-                    </div>
-                </div>
+            {submittedTicket ? (
+                <SupportSuccessTicketScreen ticket={submittedTicket} onReset={handleReset} />
+            ) : (
+                <SupportCard
+                    title="Send Support Inquiry"
+                    subtitle="Our team responds according to category SLAs"
+                >
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <SupportFormField label="Your Full Name" required>
+                                <SupportInput
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g. Alex Mercer"
+                                    required
+                                />
+                            </SupportFormField>
 
-                {/* Report form */}
-                <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] overflow-hidden">
-                    <div className="border-b border-white/[0.06] px-5 py-4">
-                        <h2 className="text-[15px] font-bold text-white">Submit a Report</h2>
-                        <p className="mt-0.5 text-xs text-zinc-500">Fill out the form below and our team will look into it.</p>
-                    </div>
+                            <SupportFormField label="Email Address" required hint="Where we send replies">
+                                <SupportInput
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    required
+                                />
+                            </SupportFormField>
+                        </div>
 
-                    <div className="p-5">
-                        {success ? (
-                            <div className="flex flex-col items-center gap-4 py-8 text-center">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
-                                    <CheckCircle2 className="h-7 w-7 text-emerald-400" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-white">Report Submitted!</p>
-                                    <p className="mt-1 text-sm text-zinc-400">We've received your message and will review it shortly.</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setSuccess(false)}
-                                    className="mt-2 text-sm font-semibold text-zinc-400 underline underline-offset-4 hover:text-white transition"
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <SupportFormField label="Support Category" required>
+                                <SupportSelect
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value as TicketCategory)}
                                 >
-                                    Submit another
-                                </button>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                {/* Type selector */}
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500">
-                                        Category
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {typeOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setType(opt.value)}
-                                                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition ${
-                                                    type === opt.value
-                                                        ? "border-orange-500/50 bg-orange-500/10 text-orange-300"
-                                                        : "border-white/[0.07] bg-white/[0.02] text-zinc-300 hover:bg-white/[0.05]"
-                                                }`}
-                                            >
-                                                <span>{opt.emoji}</span>
-                                                <span className="text-xs">{opt.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                    <option value="general">General Support</option>
+                                    <option value="privacy">Privacy & Data Inquiry</option>
+                                    <option value="security">Security Vulnerability / Alert</option>
+                                    <option value="business">Business & Partnerships</option>
+                                </SupportSelect>
+                            </SupportFormField>
 
-                                {/* Conditional fields */}
-                                {type === "account" && (
-                                    <div className="space-y-1.5">
-                                        <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500">
-                                            Username to Report
-                                        </label>
-                                        <input
-                                            value={reportedUserId}
-                                            onChange={(e) => setReportedUserId(e.target.value)}
-                                            required
-                                            placeholder="@username"
-                                            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-orange-500/50 focus:bg-white/[0.07]"
-                                        />
-                                    </div>
-                                )}
+                            <SupportFormField label="Priority Level">
+                                <SupportSelect
+                                    value={priority}
+                                    onChange={(e) => setPriority(e.target.value as TicketPriority)}
+                                >
+                                    <option value="normal">Normal Priority</option>
+                                    <option value="high">High Priority</option>
+                                    <option value="urgent">Urgent (Emergency)</option>
+                                </SupportSelect>
+                            </SupportFormField>
+                        </div>
 
-                                {type === "post" && (
-                                    <div className="space-y-1.5">
-                                        <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500">
-                                            Post ID
-                                        </label>
-                                        <input
-                                            value={postId}
-                                            onChange={(e) => setPostId(e.target.value)}
-                                            required
-                                            placeholder="Paste the post ID here"
-                                            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-orange-500/50 focus:bg-white/[0.07]"
-                                        />
-                                    </div>
-                                )}
+                        <SupportFormField label="Subject" required>
+                            <SupportInput
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                placeholder="Summary of your request"
+                                required
+                            />
+                        </SupportFormField>
 
-                                {/* Description */}
-                                <div className="space-y-1.5">
-                                    <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500">
-                                        Description
-                                    </label>
-                                    <textarea
-                                        value={reason}
-                                        onChange={(e) => setReason(e.target.value)}
-                                        required
-                                        rows={4}
-                                        placeholder="Please describe the issue in detail..."
-                                        className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-orange-500/50 focus:bg-white/[0.07]"
-                                    />
-                                </div>
+                        <SupportFormField label="Message" required hint="Provide details so we can assist you">
+                            <SupportTextarea
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="Type your detailed message here..."
+                                rows={5}
+                                required
+                            />
+                        </SupportFormField>
 
-                                {error && (
-                                    <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                                        <AlertCircle className="h-4 w-4 shrink-0" />
-                                        {error}
-                                    </div>
-                                )}
+                        {error && <SupportErrorState message={error} />}
 
-                                <Button type="submit" isLoading={loading} disabled={loading} className="w-full">
-                                    Submit Report
-                                </Button>
-                            </form>
-                        )}
-                    </div>
-                </div>
-            </main>
-        </div>
+                        <Button type="submit" isLoading={loading} disabled={loading} className="w-full py-3.5">
+                            Send Support Ticket
+                        </Button>
+                    </form>
+                </SupportCard>
+            )}
+        </SupportLayout>
     );
 }
