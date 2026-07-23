@@ -98,6 +98,20 @@ export const deleteAccountSchema = {
     body: {
         type: "object",
         additionalProperties: false,
+        required: ["password"],
+        properties: {
+            password: { type: "string", minLength: 1, maxLength: 128 },
+            confirmText: { type: "string", maxLength: 50 },
+            reason: { type: "string", maxLength: 1000 },
+            twoFactorCode: { type: "string", maxLength: 20 },
+        },
+    },
+} as const;
+
+export const restoreAccountSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
         required: ["identifier", "password"],
         properties: {
             identifier: { type: "string", minLength: 3, maxLength: 255 },

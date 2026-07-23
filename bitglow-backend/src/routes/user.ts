@@ -4,7 +4,10 @@ import { hashToken, parseBearerToken, validateUsername, sanitizeText, validateUr
 import { deleteAccountSchema, followSchema, idParamSchema, paginationSchema, usernameCheckSchema, userUpdateSchema } from "./schemas";
 import { uploadAvatar } from "../services/storage";
 
+import { sendAccountDeletionEmail } from "../services/email";
+
 export async function userRoutes(fastify: FastifyInstance) {
+
     /**
      * POST /api/upload/avatar
      * Uploads an avatar image and returns the public URL
@@ -187,35 +190,68 @@ export async function userRoutes(fastify: FastifyInstance) {
 
     /**
      * DELETE /api/me
-     * Deletes the authenticated user after confirming identifier + password
+     * Schedules account deletion for 30 days, deactivates account immediately, revokes all sessions, and emails user.
      */
     fastify.delete("/me", { preHandler: fastify.requireAuth, schema: deleteAccountSchema }, async (req, reply) => {
         const userId = req.auth!.id;
+        const { password, confirmText, reason, twoFactorCode } = (req.body || {}) as {
+            password?: string;
+            confirmText?: string;
+            reason?: string;
+            twoFactorCode?: string;
+        };
 
-        const { identifier, password } = (req.body || {}) as { identifier?: string; password?: string };
-
-        if (!identifier || !password) {
-            reply.code(400).send({ message: "Username/email and password are required" });
-            return;
+        if (!password) {
+            return reply.code(400).send({ message: "Current password is required to re-authenticate." });
         }
 
-        const dbUser = await db.findUserByLoginIdentifier(identifier);
-        if (!dbUser || dbUser.id !== userId) {
-            reply.code(401).send({ message: "Invalid username/email or password" });
-            return;
+        if (confirmText && confirmText.trim().toUpperCase() !== "DELETE") {
+            return reply.code(400).send({ message: "You must type 'DELETE' to confirm account deletion." });
         }
 
+        // Rate limiting check: Max 3 deletion requests per hour per user/IP
+        const recentRequests = await db.countSecurityEvents("account_deletion_requested", userId, new Date(Date.now() - 3600000));
+        if (recentRequests >= 3) {
+            return reply.code(429).send({ message: "Too many deletion requests. Please try again later." });
+        }
+
+        // Fetch user from DB using authenticated JWT userId (NEVER trust frontend payload user/email/id)
+        const dbUser = await db.getUserWithPasswordHash(userId);
+        if (!dbUser) {
+            return reply.code(404).send({ message: "User account not found." });
+        }
+
+        // Re-authenticate password
         const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
         if (!isValidPassword) {
-            reply.code(401).send({ message: "Invalid username/email or password" });
-            return;
+            return reply.code(401).send({ message: "Invalid current password." });
         }
 
-        await db.deleteUserAccount(userId, {
+        // Interface hook for future 2FA verification if enabled
+        if (twoFactorCode) {
+            // Prepared for future 2FA verification logic
+        }
+
+        // Schedule account deletion (30-day grace period) & deactivate account immediately
+        const result = await db.scheduleUserAccountDeletion(userId, reason, {
             ipAddress: req.ip,
             userAgent: req.headers["user-agent"]?.toString(),
         });
-        return { ok: true };
+
+        const scheduledDateStr = new Date(result.scheduled_deletion_at).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        });
+
+        // Dispatch confirmation email with restoration instructions
+        await sendAccountDeletionEmail(dbUser.email, dbUser.username, scheduledDateStr);
+
+        return {
+            ok: true,
+            scheduledDeletionAt: result.scheduled_deletion_at,
+            message: `Account scheduled for deletion on ${scheduledDateStr}. You have 30 days to log back in if you wish to restore it.`,
+        };
     });
 
     /**

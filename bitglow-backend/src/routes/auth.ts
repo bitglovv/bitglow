@@ -15,8 +15,8 @@ import {
     validateUsername,
 } from "../services/security";
 import { env } from "../config/env";
-import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema } from "./schemas";
-import { sendPasswordResetEmail, sendSignupVerificationEmail } from "../services/email";
+import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema, restoreAccountSchema } from "./schemas";
+import { sendPasswordResetEmail, sendSignupVerificationEmail, sendAccountRestoredEmail } from "../services/email";
 
 export async function authRoutes(fastify: FastifyInstance) {
 
@@ -303,6 +303,24 @@ export async function authRoutes(fastify: FastifyInstance) {
             return reply.code(403).send({ message: "Please verify your email before signing in.", code: "EMAIL_NOT_VERIFIED" });
         }
 
+        // Check if account is scheduled for deletion
+        if (dbUser.is_deleted) {
+            const scheduledAt = dbUser.scheduled_deletion_at ? new Date(dbUser.scheduled_deletion_at) : null;
+            if (scheduledAt && scheduledAt.getTime() > Date.now()) {
+                await logSecurityEvent("login_attempt_deactivated", req, { identifier: normalizedIdentifier }, dbUser.id);
+                return reply.code(200).send({
+                    requiresRestoration: true,
+                    scheduledDeletionAt: dbUser.scheduled_deletion_at,
+                    username: dbUser.username,
+                    email: dbUser.email,
+                    message: `Your account is scheduled for deletion on ${scheduledAt.toLocaleDateString()}. Would you like to restore it?`,
+                });
+            } else {
+                await logSecurityEvent("login_failure", req, { reason: "account_purged", identifier: normalizedIdentifier, ip: ipAddress }, dbUser.id);
+                return reply.code(401).send({ message: "This account has been permanently deleted." });
+            }
+        }
+
         const user = {
             id: dbUser.id,
             username: dbUser.username,
@@ -323,6 +341,63 @@ export async function authRoutes(fastify: FastifyInstance) {
         await db.pruneUserSessions(user.id, 5);
         await logSecurityEvent("login_success", req, { identifier: normalizedIdentifier }, user.id);
         return { token, refreshToken, user };
+    });
+
+    /**
+     * POST /api/auth/restore-account
+     * Restores an account currently in the 30-day deletion grace period
+     */
+    fastify.post("/restore-account", { schema: restoreAccountSchema }, async (req, reply) => {
+        const { identifier, password } = (req.body || {}) as { identifier?: string; password?: string };
+
+        if (!identifier || !password) {
+            return reply.code(400).send({ message: "Username/email and password are required." });
+        }
+
+        const normalizedIdentifier = identifier.trim().toLowerCase();
+        const dbUser = await db.findUserByLoginIdentifier(normalizedIdentifier);
+
+        if (!dbUser) {
+            return reply.code(401).send({ message: "Invalid credentials." });
+        }
+
+        const isValidPassword = await db.comparePassword(password, dbUser.password_hash);
+        if (!isValidPassword) {
+            return reply.code(401).send({ message: "Invalid credentials." });
+        }
+
+        if (!dbUser.is_deleted) {
+            return reply.code(400).send({ message: "Account is already active." });
+        }
+
+        // Restore account
+        await db.restoreUserAccount(dbUser.id, {
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"]?.toString(),
+        });
+
+        // Email user
+        await sendAccountRestoredEmail(dbUser.email, dbUser.username);
+
+        const user = {
+            id: dbUser.id,
+            username: dbUser.username,
+            displayName: dbUser.display_name || dbUser.displayName,
+            email: dbUser.email,
+            avatarUrl: dbUser.avatar_url || dbUser.avatarUrl,
+            bio: dbUser.bio,
+            followersCount: dbUser.followers_count ?? dbUser.followersCount ?? 0,
+            followsCount: dbUser.follows_count ?? dbUser.followsCount ?? 0,
+            isPrivate: dbUser.is_private,
+            onlineStatusVisible: dbUser.online_status_visible,
+        };
+
+        const sid = randomUUID();
+        const token = issueAccessToken({ id: user.id, username: user.username, sid });
+        const refreshToken = issueRefreshToken();
+        await createSession(user.id, sid, token, refreshToken, req);
+
+        return { token, refreshToken, user, restored: true, message: "Account successfully restored!" };
     });
 
     fastify.post("/logout", { schema: logoutSchema }, async (req, reply) => {

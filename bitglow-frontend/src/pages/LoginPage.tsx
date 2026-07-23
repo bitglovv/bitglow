@@ -45,6 +45,13 @@ export default function LoginPage() {
 
     const isFormValid = !identifierError && !passwordError && identifier.trim() && password;
 
+    const [restorationInfo, setRestorationInfo] = useState<{
+        scheduledDeletionAt: string;
+        username: string;
+        email: string;
+    } | null>(null);
+    const [restoring, setRestoring] = useState(false);
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setTouched({ identifier: true, password: true });
@@ -57,13 +64,37 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            const { token, user } = await api.auth.login(identifier, password);
-            login(token, user);
+            const res = await api.auth.login(identifier, password) as any;
+            if (res.requiresRestoration) {
+                setRestorationInfo({
+                    scheduledDeletionAt: res.scheduledDeletionAt,
+                    username: res.username,
+                    email: res.email,
+                });
+                return;
+            }
+
+            login(res.token, res.user);
             navigate("/home");
         } catch (err: any) {
             setError(err.message || "Invalid credentials.");
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function handleRestoreAccount() {
+        setRestoring(true);
+        setError("");
+        try {
+            const { token, user } = await api.auth.restoreAccount(identifier, password);
+            login(token, user);
+            navigate("/home");
+        } catch (err: any) {
+            setError(err.message || "Failed to restore account.");
+            setRestorationInfo(null);
+        } finally {
+            setRestoring(false);
         }
     }
 
@@ -181,6 +212,56 @@ export default function LoginPage() {
                     </p>
                 </div>
             </form>
+
+            {/* Account Restoration Modal */}
+            {restorationInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-6 text-white shadow-2xl text-center space-y-4">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-amber-500/15 border border-amber-500/20 text-amber-400">
+                            ⚡
+                        </div>
+
+                        <div>
+                            <h3 className="text-lg font-bold">Account Scheduled for Deletion</h3>
+                            <p className="mt-1.5 text-xs text-zinc-400 leading-relaxed">
+                                Welcome back, @{restorationInfo.username}! Your account is currently deactivated and scheduled for permanent deletion on{" "}
+                                <strong className="text-amber-400">
+                                    {new Date(restorationInfo.scheduledDeletionAt).toLocaleDateString("en-US", {
+                                        year: "numeric",
+                                        month: "long",
+                                        day: "numeric",
+                                    })}
+                                </strong>.
+                            </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200 text-left">
+                            <strong>30-Day Grace Period:</strong> You can cancel deletion and immediately restore full access to your profile, posts, and messages.
+                        </div>
+
+                        <div className="flex flex-col gap-2.5 pt-2">
+                            <Button
+                                type="button"
+                                variant="primary"
+                                isLoading={restoring}
+                                disabled={restoring}
+                                onClick={handleRestoreAccount}
+                                className="w-full py-3 text-sm font-bold"
+                            >
+                                Restore My Account
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setRestorationInfo(null)}
+                                className="w-full py-2.5 text-xs"
+                            >
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthLayout>
     );
 }

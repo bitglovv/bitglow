@@ -149,11 +149,14 @@ server.get("/health", async (_request, reply) => {
   }
 });
 
+import { startBackgroundAccountCleanup } from "./services/cleanup";
+
 async function start() {
   await initializeDatabase();
   const address = await server.listen({ port: env.PORT, host: env.HOST });
   server.log.info({ address }, "server listening");
   startWS(server.server);
+  startBackgroundAccountCleanup();
   setInterval(() => {
     db.cleanupExpiredLiveMessages(env.LIVE_MESSAGE_TTL_SECONDS * 1000).catch((error: unknown) => {
       server.log.error({ error }, "failed to clean up expired live messages");

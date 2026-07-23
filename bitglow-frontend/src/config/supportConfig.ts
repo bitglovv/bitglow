@@ -8,11 +8,11 @@ export const SUPPORT_CONFIG = {
     environment: "Production",
 
     contacts: {
-        supportEmail: "support@bitglow.app",
-        privacyEmail: "privacy@bitglow.app",
-        securityEmail: "security@bitglow.app",
-        pressEmail: "press@bitglow.app",
-        legalEmail: "legal@bitglow.app",
+        supportEmail: "support@bitglow.site",
+        privacyEmail: "privacy@bitglow.site",
+        securityEmail: "security@bitglow.site",
+        pressEmail: "press@bitglow.site",
+        legalEmail: "legal@bitglow.site",
     },
 
     sla: {

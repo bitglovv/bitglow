@@ -175,7 +175,21 @@ const initPostsTable = async () => {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='online_status_visible') THEN
                     ALTER TABLE users ADD COLUMN online_status_visible BOOLEAN DEFAULT true;
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_deleted') THEN
+                    ALTER TABLE users ADD COLUMN is_deleted BOOLEAN DEFAULT false;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='deleted_at') THEN
+                    ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='scheduled_deletion_at') THEN
+                    ALTER TABLE users ADD COLUMN scheduled_deletion_at TIMESTAMPTZ;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_reason') THEN
+                    ALTER TABLE users ADD COLUMN deletion_reason TEXT;
+                END IF;
             END $$;
+            CREATE INDEX IF NOT EXISTS idx_users_is_deleted ON users(is_deleted);
+            CREATE INDEX IF NOT EXISTS idx_users_scheduled_deletion ON users(scheduled_deletion_at) WHERE is_deleted = TRUE;
         `);
 
         // 2. Create posts + related tables FIRST
@@ -804,22 +818,133 @@ export const db = {
     },
 
     async findUserByEmail(email: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE email = $1', [email]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE email = $1 AND (is_deleted = false OR is_deleted IS NULL)', [email]);
         return res.rows[0];
     },
 
     async findUserByLoginIdentifier(identifier: string) {
         const normalizedIdentifier = identifier.trim().toLowerCase();
         const res = await pool.query(
-            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, email_verified, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
+            'SELECT id, username, display_name, email, avatar_url, password_hash, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, email_verified, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1 LIMIT 1',
             [normalizedIdentifier]
         );
         return res.rows[0];
     },
 
     async findUserByUsername(username: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, created_at, updated_at FROM users WHERE username = $1', [username]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE username = $1 AND (is_deleted = false OR is_deleted IS NULL)', [username]);
         return res.rows[0];
+    },
+
+    async scheduleUserAccountDeletion(userId: string, reason?: string, audit?: { ipAddress?: string; userAgent?: string }) {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+
+            // Calculate scheduled deletion date (30 days from now)
+            const scheduledDate = new Date();
+            scheduledDate.setDate(scheduledDate.getDate() + 30);
+
+            const res = await client.query(
+                `UPDATE users
+                 SET is_deleted = TRUE,
+                     deleted_at = NOW(),
+                     scheduled_deletion_at = $2,
+                     deletion_reason = $3
+                 WHERE id = $1
+                 RETURNING id, username, email, scheduled_deletion_at`,
+                [userId, scheduledDate.toISOString(), reason || null]
+            );
+
+            // Invalidate every active session and refresh token
+            await client.query("DELETE FROM user_sessions WHERE user_id = $1", [userId]);
+
+            // Log security event with IP, user-agent, reason, and scheduled date
+            await client.query(
+                `INSERT INTO security_logs (event_type, user_id, ip_address, user_agent, details)
+                 VALUES ('account_deletion_requested', $1, $2, $3, $4::jsonb)`,
+                [
+                    userId,
+                    audit?.ipAddress || null,
+                    audit?.userAgent?.slice(0, 512) || null,
+                    JSON.stringify({
+                        reason: reason || "No reason provided",
+                        scheduledDeletionAt: scheduledDate.toISOString(),
+                        timestamp: new Date().toISOString(),
+                    }),
+                ]
+            );
+
+            await client.query("COMMIT");
+            return res.rows[0];
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    },
+
+    async restoreUserAccount(userId: string, audit?: { ipAddress?: string; userAgent?: string }) {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+
+            const res = await client.query(
+                `UPDATE users
+                 SET is_deleted = FALSE,
+                     deleted_at = NULL,
+                     scheduled_deletion_at = NULL,
+                     deletion_reason = NULL
+                 WHERE id = $1
+                 RETURNING id, username, email`,
+                [userId]
+            );
+
+            await client.query(
+                `INSERT INTO security_logs (event_type, user_id, ip_address, user_agent, details)
+                 VALUES ('account_restored', $1, $2, $3, $4::jsonb)`,
+                [
+                    userId,
+                    audit?.ipAddress || null,
+                    audit?.userAgent?.slice(0, 512) || null,
+                    JSON.stringify({
+                        restoredAt: new Date().toISOString(),
+                    }),
+                ]
+            );
+
+            await client.query("COMMIT");
+            return res.rows[0];
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    },
+
+    async purgeExpiredDeletedAccounts() {
+        const res = await pool.query(
+            `SELECT id, username FROM users WHERE is_deleted = TRUE AND scheduled_deletion_at <= NOW()`
+        );
+        const expiredUsers = res.rows;
+        let purgedCount = 0;
+
+        for (const u of expiredUsers) {
+            try {
+                await this.deleteUserAccount(u.id, {
+                    ipAddress: "system_cron",
+                    userAgent: "Background Account Purge Job",
+                });
+                purgedCount++;
+                console.log(`[Purge Job] Successfully purged expired account: @${u.username} (${u.id})`);
+            } catch (err) {
+                console.error(`[Purge Job] Failed to purge user ${u.id}:`, err);
+            }
+        }
+
+        return purgedCount;
     },
 
     async deleteUserAccount(userId: string, audit?: { ipAddress?: string; userAgent?: string }) {
@@ -829,7 +954,7 @@ export const db = {
 
             await client.query(
                 `INSERT INTO security_logs (event_type, user_id, ip_address, user_agent, details)
-                 VALUES ('delete_account', $1, $2, $3, '{}'::jsonb)`,
+                 VALUES ('delete_account_permanent', $1, $2, $3, '{}'::jsonb)`,
                 [userId, audit?.ipAddress || null, audit?.userAgent?.slice(0, 512) || null]
             );
             await client.query("DELETE FROM user_sessions WHERE user_id = $1", [userId]);

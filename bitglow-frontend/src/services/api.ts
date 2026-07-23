@@ -374,15 +374,31 @@ export const api = {
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to update profile"));
             return res.json();
         },
-        deleteAccount: async (identifier: string, password: string): Promise<boolean> => {
+        scheduleAccountDeletion: async (payload: {
+            password: string;
+            confirmText: string;
+            reason?: string;
+            twoFactorCode?: string;
+        }): Promise<{ ok: boolean; scheduledDeletionAt: string; message: string }> => {
             const res = await fetchWithAuth("/api/me", {
                 method: "DELETE",
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to schedule account deletion"));
+            }
+            return res.json();
+        },
+        restoreAccount: async (identifier: string, password: string): Promise<{ token: string; user: User }> => {
+            const res = await fetch(`${API_URL}/auth/restore-account`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ identifier, password }),
             });
             if (!res.ok) {
-                throw new Error(await readErrorMessage(res, "Failed to delete account"));
+                throw new Error(await readErrorMessage(res, "Failed to restore account"));
             }
-            return true;
+            return readAuthResponse(res);
         },
         follow: async (userId: string, username?: string): Promise<FollowStatus | null> => {
             const res = await fetchWithAuth(`/users/${userId}/follow`, {

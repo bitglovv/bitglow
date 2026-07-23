@@ -25,6 +25,7 @@ import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { navigateBack } from "../utils/navigateBack";
 import { AppTheme, useSettingsStore } from "../store/settingsStore";
+import { DeleteAccountWizardModal } from "../components/settings/DeleteAccountWizardModal";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -354,25 +355,19 @@ export default function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="Account Info">
-            <SettingsItem icon={<Trash2 className="h-5 w-5" />} title="Delete Account" subtitle="Permanently remove your account" danger onClick={() => setShowDeleteConfirm((prev) => !prev)} />
-            {showDeleteConfirm && (
-              <div className="border-t border-red-500/15 bg-red-500/[0.04] px-4 py-5">
-                <h3 className="text-sm font-bold text-red-300">Confirm account deletion</h3>
-                <p className="mt-1 text-xs leading-5 text-red-100/60">
-                  This permanently deletes @{user?.username || "your account"}. Enter your email or username and password to continue.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <Input label="Email or Username" value={deleteIdentifier} onChange={(e) => setDeleteIdentifier(e.target.value)} placeholder="name@example.com or bitglow" />
-                  <Input label="Password" type="password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} placeholder="Enter your password" />
-                </div>
-                {deleteError && <div className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">{deleteError}</div>}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                  <Button type="button" variant="danger" isLoading={deleteLoading} disabled={deleteLoading} onClick={handleDeleteAccount}>Delete Account</Button>
-                  <Button type="button" variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
-                </div>
-              </div>
-            )}
+            <SettingsItem
+              icon={<Trash2 className="h-5 w-5" />}
+              title="Delete Account"
+              subtitle="Schedule account deactivation & deletion"
+              danger
+              onClick={() => setShowDeleteConfirm(true)}
+            />
           </SettingsSection>
+
+          <DeleteAccountWizardModal
+            isOpen={showDeleteConfirm}
+            onClose={() => setShowDeleteConfirm(false)}
+          />
 
           <button
             type="button"

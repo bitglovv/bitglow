@@ -143,3 +143,63 @@ export async function sendSignupVerificationEmail(
         throw err;
     }
 }
+
+export async function sendAccountDeletionEmail(
+    email: string,
+    username: string,
+    scheduledDateStr: string
+) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock account deletion email to ${email}. Scheduled purge: ${scheduledDateStr}`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: "Your BitGlow account has been scheduled for deletion",
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; color: #333;">
+                    <h2>Account Deletion Requested ⚠️</h2>
+                    <p>Hello @${username},</p>
+                    <p>Your request to delete your BitGlow account has been received. Your profile and content have been deactivated and hidden immediately.</p>
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                        <strong style="color: #856404;">30-Day Grace Period:</strong>
+                        <p style="margin: 8px 0 0 0; color: #856404;">Your account and data will be permanently purged on <b>${scheduledDateStr}</b>.</p>
+                    </div>
+                    <p>If you change your mind, you can cancel this deletion and restore your account at any time within the 30-day grace period simply by logging into your account.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                    <small style="color: #666;">If you did not request this deletion, please log in immediately to secure and restore your account.</small>
+                </div>
+            `,
+        });
+    } catch (err) {
+        console.error("[Email Service] Account deletion email failed:", err);
+    }
+}
+
+export async function sendAccountRestoredEmail(email: string, username: string) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock account restoration email to ${email}.`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: "Your BitGlow account has been restored 🎉",
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; color: #333;">
+                    <h2>Welcome back to BitGlow 👋</h2>
+                    <p>Hello @${username},</p>
+                    <p>Your account restoration request was successful. Your scheduled account deletion has been canceled, and all your posts, profile details, and features have been fully reactivated.</p>
+                    <p style="margin-top: 24px;">Thank you for staying with BitGlow!</p>
+                </div>
+            `,
+        });
+    } catch (err) {
+        console.error("[Email Service] Account restoration email failed:", err);
+    }
+}
