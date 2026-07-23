@@ -373,6 +373,33 @@ export const api = {
             }
             return res.json();
         },
+        sendRestorationOtp: async (identifier: string, password: string): Promise<{ ok: boolean; message: string }> => {
+            const res = await fetch(`${API_URL}/auth/send-restoration-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ identifier, password }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to send verification code"));
+            }
+            return res.json();
+        },
+        restoreAccount: async (
+            identifier: string,
+            password: string,
+            otpCode: string,
+            twoFactorCode?: string
+        ): Promise<{ token: string; user: User }> => {
+            const res = await fetch(`${API_URL}/auth/restore-account`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ identifier, password, otpCode, twoFactorCode }),
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res, "Failed to restore account"));
+            }
+            return readAuthResponse(res);
+        },
         me: async (): Promise<User> => {
             const res = await fetchWithAuth("/api/me");
             if (!res.ok) {
@@ -432,33 +459,8 @@ export const api = {
             }
             return res.json();
         },
-        sendRestorationOtp: async (identifier: string, password: string): Promise<{ ok: boolean; message: string }> => {
-            const res = await fetch(`${API_URL}/auth/send-restoration-otp`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ identifier, password }),
-            });
-            if (!res.ok) {
-                throw new Error(await readErrorMessage(res, "Failed to send verification code"));
-            }
-            return res.json();
-        },
-        restoreAccount: async (
-            identifier: string,
-            password: string,
-            otpCode: string,
-            twoFactorCode?: string
-        ): Promise<{ token: string; user: User }> => {
-            const res = await fetch(`${API_URL}/auth/restore-account`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ identifier, password, otpCode, twoFactorCode }),
-            });
-            if (!res.ok) {
-                throw new Error(await readErrorMessage(res, "Failed to restore account"));
-            }
-            return readAuthResponse(res);
-        },
+        sendRestorationOtp: (identifier: string, password: string) => api.auth.sendRestorationOtp(identifier, password),
+        restoreAccount: (identifier: string, password: string, otpCode: string, twoFactorCode?: string) => api.auth.restoreAccount(identifier, password, otpCode, twoFactorCode),
         follow: async (userId: string, username?: string): Promise<FollowStatus | null> => {
             const res = await fetchWithAuth(`/users/${userId}/follow`, {
                 method: "POST",
