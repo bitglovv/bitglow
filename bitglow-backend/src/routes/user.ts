@@ -375,7 +375,7 @@ export async function userRoutes(fastify: FastifyInstance) {
             `SELECT f.user_id as id, u.username, u.display_name, u.avatar_url
              FROM friends f
              JOIN users u ON u.id = f.user_id
-             WHERE f.friend_id = $1 AND f.status = 'pending'`,
+             WHERE f.friend_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
             [userId]
         );
         return { requests: rows.rows };
@@ -389,7 +389,7 @@ export async function userRoutes(fastify: FastifyInstance) {
             `SELECT f.friend_id as id, u.username, u.display_name, u.avatar_url
              FROM friends f
              JOIN users u ON u.id = f.friend_id
-             WHERE f.user_id = $1 AND f.status = 'pending'`,
+             WHERE f.user_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
             [userId]
         );
         return { pending: rows.rows };

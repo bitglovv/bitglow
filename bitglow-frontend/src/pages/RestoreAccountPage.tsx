@@ -170,7 +170,6 @@ export default function RestoreAccountPage() {
             </button>
           ) : null}
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500">@{username}</p>
             <h1 className="truncate text-xl font-bold tracking-tight text-white">
               {step === 3 ? "Account Restored" : "Restore Account"}
             </h1>

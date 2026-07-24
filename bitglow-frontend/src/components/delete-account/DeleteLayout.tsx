@@ -37,9 +37,8 @@ export default function DeleteLayout({
             </button>
           ) : null}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-400">Delete Account</p>
             <h1 className="truncate text-2xl font-black tracking-tight">
-              {isComplete ? "Account scheduled" : "Delete Account"}
+              {isComplete ? "Account Scheduled" : "Delete Account"}
             </h1>
           </div>
         </div>

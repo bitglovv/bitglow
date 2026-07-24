@@ -235,8 +235,8 @@ export default function SettingsPage() {
     <div className="flex h-screen flex-col overflow-hidden bg-black text-white selection:bg-brand/30">
       <Header showTop={false} hideBottomNav />
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(24px,env(safe-area-inset-bottom,24px))] custom-scrollbar sm:px-6 sm:pb-8">
-        <div className="mx-auto w-full max-w-5xl">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(16px,env(safe-area-inset-bottom,16px))] custom-scrollbar sm:px-6 sm:pb-6">
+        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-between">
           <div className="sticky top-0 z-20 -mx-4 mb-5 flex items-center gap-3 bg-black/90 px-4 pb-3 pt-[max(12px,env(safe-area-inset-top,12px))] backdrop-blur-xl sm:-mx-6 sm:px-6">
             <button
               type="button"

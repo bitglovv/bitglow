@@ -1354,7 +1354,7 @@ export const db = {
             `SELECT u.id, u.username, u.display_name, u.avatar_url
              FROM friends f
              JOIN users u ON u.id = f.user_id
-             WHERE f.friend_id = $1 AND f.status = 'accepted'
+             WHERE f.friend_id = $1 AND f.status = 'accepted' AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY u.username`,
             [userId]
         );
@@ -1366,7 +1366,7 @@ export const db = {
             `SELECT u.id, u.username, u.display_name, u.avatar_url
              FROM friends f
              JOIN users u ON u.id = f.friend_id
-             WHERE f.user_id = $1 AND f.status = 'accepted'
+             WHERE f.user_id = $1 AND f.status = 'accepted' AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY u.username`,
             [userId]
         );
@@ -1382,7 +1382,9 @@ export const db = {
               AND f2.user_id = f1.friend_id
               AND f2.friend_id = $1
               AND f1.status = 'accepted'
-              AND f2.status = 'accepted'`,
+              AND f2.status = 'accepted'
+             JOIN users u ON u.id = f1.friend_id
+             WHERE COALESCE(u.is_deleted, FALSE) = FALSE`,
             [userId]
         );
         return res.rows[0]?.count || 0;
@@ -1391,8 +1393,9 @@ export const db = {
     async getFollowersCount(userId: string) {
         const res = await pool.query(
             `SELECT COUNT(*)::int as count
-             FROM friends
-             WHERE friend_id = $1 AND status = 'accepted'`,
+             FROM friends f
+             JOIN users u ON u.id = f.user_id
+             WHERE f.friend_id = $1 AND f.status = 'accepted' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
             [userId]
         );
         return res.rows[0]?.count || 0;
@@ -1401,8 +1404,9 @@ export const db = {
     async getFollowingCount(userId: string) {
         const res = await pool.query(
             `SELECT COUNT(*)::int as count
-             FROM friends
-             WHERE user_id = $1 AND status = 'accepted'`,
+             FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.status = 'accepted' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
             [userId]
         );
         return res.rows[0]?.count || 0;
