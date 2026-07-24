@@ -25,7 +25,6 @@ import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { navigateBack } from "../utils/navigateBack";
 import { AppTheme, useSettingsStore } from "../store/settingsStore";
-import { DeleteAccountWizardModal } from "../components/settings/DeleteAccountWizardModal";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -180,12 +179,6 @@ export default function SettingsPage() {
   const [formSuccess, setFormSuccess] = useState("");
   const [formLoading, setFormLoading] = useState(false);
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteIdentifier, setDeleteIdentifier] = useState("");
-  const [deletePassword, setDeletePassword] = useState("");
-  const [deleteError, setDeleteError] = useState("");
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
   const closeForm = () => {
     setActiveModal(null);
     setCurrentPassword("");
@@ -235,24 +228,6 @@ export default function SettingsPage() {
       setFormError(err.message);
     } finally {
       setFormLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!deleteIdentifier.trim() || !deletePassword) {
-      setDeleteError("Enter your email or username and password.");
-      return;
-    }
-    setDeleteLoading(true);
-    setDeleteError("");
-    try {
-      await api.user.deleteAccount(deleteIdentifier, deletePassword);
-      logout();
-      navigate("/");
-    } catch (err: any) {
-      setDeleteError(err.message || "Failed to delete account.");
-    } finally {
-      setDeleteLoading(false);
     }
   };
 
@@ -359,15 +334,9 @@ export default function SettingsPage() {
               icon={<Trash2 className="h-5 w-5" />}
               title="Delete Account"
               subtitle="Schedule account deactivation & deletion"
-              danger
-              onClick={() => setShowDeleteConfirm(true)}
+              to="/settings/delete-account"
             />
           </SettingsSection>
-
-          <DeleteAccountWizardModal
-            isOpen={showDeleteConfirm}
-            onClose={() => setShowDeleteConfirm(false)}
-          />
 
           <button
             type="button"

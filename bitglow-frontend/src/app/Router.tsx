@@ -24,6 +24,7 @@ import SettingsPage from "../pages/SettingsPage";
 import BlockedUsersPage from "../pages/settings/BlockedUsersPage";
 import MutedUsersPage from "../pages/settings/MutedUsersPage";
 import SavedPostsPage from "../pages/settings/SavedPostsPage";
+import DeleteAccountPage from "../pages/settings/DeleteAccountPage";
 import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../layouts/AppLayout";
@@ -70,6 +71,7 @@ export default function Router() {
                     <Route path="/settings/blocked-users" element={<BlockedUsersPage />} />
                     <Route path="/settings/muted-users" element={<MutedUsersPage />} />
                     <Route path="/settings/saved-posts" element={<SavedPostsPage />} />
+                    <Route path="/settings/delete-account" element={<DeleteAccountPage />} />
                     <Route path="/profile" element={<MyProfileRedirect />} />
                     <Route path="/profile/:username" element={<ProfilePage />} />
                     <Route path="/about/:username" element={<AboutAccountPage />} />
