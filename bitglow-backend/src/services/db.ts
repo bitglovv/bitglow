@@ -558,11 +558,14 @@ async function getCanonicalLiveRoomForOwner(client: Queryable, ownerId: string) 
          LEFT JOIN LATERAL (
             SELECT lm.created_at AS last_message_at
             FROM live_messages lm
+            JOIN users lm_u ON lm_u.id = lm.sender_id
             WHERE lm.room_id = r.id
+              AND COALESCE(lm_u.is_deleted, FALSE) = FALSE
             ORDER BY lm.created_at DESC
             LIMIT 1
          ) last_message ON true
          WHERE r.created_by = $1
+           AND COALESCE(u.is_deleted, FALSE) = FALSE
          ORDER BY r.created_at ASC, r.id ASC
          LIMIT 1`,
         [ownerId]
@@ -582,6 +585,7 @@ async function getCanonicalLiveRoomByRequestedId(client: Queryable, roomId: stri
                 canonical.last_message_at,
                 canonical.id = target.id AS is_canonical
          FROM live_rooms target
+         JOIN users tu ON tu.id = target.created_by
          JOIN LATERAL (
             SELECT r.id,
                    r.created_by AS owner_id,
@@ -595,15 +599,19 @@ async function getCanonicalLiveRoomByRequestedId(client: Queryable, roomId: stri
             LEFT JOIN LATERAL (
                 SELECT lm.created_at AS last_message_at
                 FROM live_messages lm
+                JOIN users lm_u ON lm_u.id = lm.sender_id
                 WHERE lm.room_id = r.id
+                  AND COALESCE(lm_u.is_deleted, FALSE) = FALSE
                 ORDER BY lm.created_at DESC
                 LIMIT 1
             ) last_message ON true
             WHERE r.created_by = target.created_by
+              AND COALESCE(u.is_deleted, FALSE) = FALSE
             ORDER BY r.created_at ASC, r.id ASC
             LIMIT 1
          ) canonical ON true
          WHERE target.id = $1
+           AND COALESCE(tu.is_deleted, FALSE) = FALSE
          LIMIT 1`,
         [roomId]
     );
@@ -1074,15 +1082,19 @@ export const db = {
         const res = await pool.query(
             `SELECT 1
              FROM posts p
+             JOIN users u ON u.id = p.author_id
              WHERE p.id = $1
+               AND COALESCE(u.is_deleted, FALSE) = FALSE
                AND (
                    p.visibility = 'public'
                    OR p.author_id = $2
                    OR EXISTS (
                        SELECT 1 FROM friends f
+                       JOIN users fu ON fu.id = f.friend_id
                        WHERE f.user_id = $2
                          AND f.friend_id = p.author_id
                          AND f.status = 'accepted'
+                         AND COALESCE(fu.is_deleted, FALSE) = FALSE
                    )
                )
              LIMIT 1`,
@@ -1104,8 +1116,12 @@ export const db = {
               AND f1.friend_id = $2
               AND f2.user_id = $2
               AND f2.friend_id = $1
+             JOIN users u1 ON u1.id = $1
+             JOIN users u2 ON u2.id = $2
              WHERE f1.status = 'accepted'
                AND f2.status = 'accepted'
+               AND COALESCE(u1.is_deleted, FALSE) = FALSE
+               AND COALESCE(u2.is_deleted, FALSE) = FALSE
              LIMIT 1`,
             [userId, otherId]
         );
@@ -1219,6 +1235,8 @@ export const db = {
                     r.created_by,
                     r.created_at
                 FROM live_rooms r
+                JOIN users u ON u.id = r.created_by
+                WHERE COALESCE(u.is_deleted, FALSE) = FALSE
                 ORDER BY r.created_by, r.created_at ASC, r.id ASC
              )
              SELECT cr.id,
@@ -1234,22 +1252,27 @@ export const db = {
              LEFT JOIN LATERAL (
                 SELECT lm.created_at AS last_message_at
                 FROM live_messages lm
+                JOIN users lm_u ON lm_u.id = lm.sender_id
                 WHERE lm.room_id = cr.id
+                  AND COALESCE(lm_u.is_deleted, FALSE) = FALSE
                 ORDER BY lm.created_at DESC
                 LIMIT 1
              ) last_message ON true
-             WHERE cr.created_by = $1
-                OR EXISTS (
-                    SELECT 1
-                    FROM friends f1
-                    JOIN friends f2
-                      ON f1.user_id = $1
-                     AND f1.friend_id = cr.created_by
-                     AND f2.user_id = cr.created_by
-                     AND f2.friend_id = $1
-                    WHERE f1.status = 'accepted'
-                      AND f2.status = 'accepted'
-                )
+             WHERE COALESCE(u.is_deleted, FALSE) = FALSE
+               AND (
+                 cr.created_by = $1
+                 OR EXISTS (
+                     SELECT 1
+                     FROM friends f1
+                     JOIN friends f2
+                       ON f1.user_id = $1
+                      AND f1.friend_id = cr.created_by
+                      AND f2.user_id = cr.created_by
+                      AND f2.friend_id = $1
+                     WHERE f1.status = 'accepted'
+                       AND f2.status = 'accepted'
+                 )
+               )
              ORDER BY CASE WHEN cr.created_by = $1 THEN 0 ELSE 1 END,
                       last_message.last_message_at DESC NULLS LAST,
                       u.username ASC`,
@@ -1301,7 +1324,7 @@ export const db = {
             `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
              FROM friends f
              JOIN users u ON u.id = f.user_id
-             WHERE f.friend_id = $1 AND f.status = 'pending'
+             WHERE f.friend_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY f.created_at DESC`,
             [userId]
         );
@@ -1343,6 +1366,7 @@ export const db = {
               AND f1.status = 'accepted'
               AND f2.status = 'accepted'
              JOIN users u ON u.id = f1.friend_id
+             WHERE COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY u.username`,
             [userId]
         );
@@ -1451,6 +1475,7 @@ export const db = {
              FROM live_messages lm
              JOIN users u ON u.id = lm.sender_id
              WHERE lm.room_id = $1
+               AND COALESCE(u.is_deleted, FALSE) = FALSE
                AND lm.created_at >= NOW() - INTERVAL '5 minutes'
              ORDER BY lm.created_at ASC`,
             [roomId]
@@ -1553,12 +1578,12 @@ export const db = {
         }
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
-        
+
         // Check if other user is private and we are not friends
         const otherUser = await this.getUserById(otherId);
         const areFriends = await this.areFriends(userId, otherId);
         const status = (otherUser?.is_private && !areFriends && userId !== otherId) ? 'pending' : 'accepted';
-        
+
         return await this.createDMConversationWithStatus(userId, otherId, status);
     },
 
@@ -1616,20 +1641,25 @@ export const db = {
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              LEFT JOIN LATERAL (
-                SELECT text, created_at, sender_id, is_forwarded
-                FROM dm_messages
-                WHERE conversation_id = c.id
-                ORDER BY created_at DESC
+                SELECT dm.text, dm.created_at, dm.sender_id, dm.is_forwarded
+                FROM dm_messages dm
+                JOIN users dmu ON dmu.id = dm.sender_id
+                WHERE dm.conversation_id = c.id
+                  AND COALESCE(dmu.is_deleted, FALSE) = FALSE
+                ORDER BY dm.created_at DESC
                 LIMIT 1
              ) m ON true
              LEFT JOIN LATERAL (
                 SELECT COUNT(*)::int as count
-                FROM dm_messages
-                WHERE conversation_id = c.id
-                  AND sender_id <> $1
-                  AND read_at IS NULL
+                FROM dm_messages dm
+                JOIN users dmu ON dmu.id = dm.sender_id
+                WHERE dm.conversation_id = c.id
+                  AND dm.sender_id <> $1
+                  AND dm.read_at IS NULL
+                  AND COALESCE(dmu.is_deleted, FALSE) = FALSE
              ) unread ON true
              WHERE (c.user_a = $1 OR c.user_b = $1)
+               AND COALESCE(u.is_deleted, FALSE) = FALSE
                AND NOT EXISTS (
                    SELECT 1 FROM friends f
                    WHERE ((f.user_id = $1 AND f.friend_id = u.id)
@@ -1648,10 +1678,12 @@ export const db = {
     },
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
-            `SELECT id, sender_id, text, type, post_id, profile_id, edited_at, is_forwarded, created_at
-             FROM dm_messages
-             WHERE conversation_id = $1
-             ORDER BY created_at ASC
+            `SELECT m.id, m.sender_id, m.text, m.type, m.post_id, m.profile_id, m.edited_at, m.is_forwarded, m.created_at
+             FROM dm_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.conversation_id = $1
+               AND COALESCE(u.is_deleted, FALSE) = FALSE
+             ORDER BY m.created_at ASC
              LIMIT $2`,
             [conversationId, limit]
         );
@@ -1789,21 +1821,31 @@ export const db = {
             FROM posts p
             JOIN users u ON u.id = p.author_id
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_likes pl
+                JOIN users lu ON lu.id = pl.user_id
+                WHERE pl.post_id = p.id AND COALESCE(lu.is_deleted, FALSE) = FALSE
             ) l ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_comments pc
+                JOIN users cu ON cu.id = pc.author_id
+                WHERE pc.post_id = p.id AND COALESCE(cu.is_deleted, FALSE) = FALSE
             ) c ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_saves ps
+                JOIN users su ON su.id = ps.user_id
+                WHERE ps.post_id = p.id AND COALESCE(su.is_deleted, FALSE) = FALSE
             ) s ON true
-            WHERE
-                (
+            WHERE COALESCE(u.is_deleted, FALSE) = FALSE
+              AND (
                     (p.visibility = 'public' AND u.is_private = false)
                     OR p.author_id = $1
                     OR EXISTS (
                         SELECT 1 FROM friends f
-                        WHERE f.user_id = $1 AND f.friend_id = p.author_id AND f.status = 'accepted'
+                        JOIN users fu ON fu.id = f.friend_id
+                        WHERE f.user_id = $1 AND f.friend_id = p.author_id AND f.status = 'accepted' AND COALESCE(fu.is_deleted, FALSE) = FALSE
                     )
                 )
                 AND NOT EXISTS (
@@ -1956,9 +1998,13 @@ export const db = {
              FROM post_comments c
              JOIN users u ON u.id = c.author_id
              LEFT JOIN LATERAL (
-                 SELECT count(*)::int AS count FROM post_comment_likes cl WHERE cl.comment_id = c.id
+                 SELECT count(*)::int AS count
+                 FROM post_comment_likes cl
+                 JOIN users lu ON lu.id = cl.user_id
+                 WHERE cl.comment_id = c.id AND COALESCE(lu.is_deleted, FALSE) = FALSE
              ) l ON true
              WHERE c.post_id = $1
+               AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY c.created_at DESC
              LIMIT $3`,
             [postId, userId, limit]
@@ -2046,8 +2092,11 @@ export const db = {
                         pl.created_at
                  FROM post_likes pl
                  JOIN posts p ON p.id = pl.post_id
+                 JOIN users pu ON pu.id = p.author_id
                  JOIN users u ON u.id = pl.user_id
                  WHERE p.author_id = $1 AND pl.user_id <> $1
+                   AND COALESCE(u.is_deleted, FALSE) = FALSE
+                   AND COALESCE(pu.is_deleted, FALSE) = FALSE
 
                  UNION ALL
 
@@ -2064,8 +2113,11 @@ export const db = {
                         pc.created_at
                  FROM post_comments pc
                  JOIN posts p ON p.id = pc.post_id
+                 JOIN users pu ON pu.id = p.author_id
                  JOIN users u ON u.id = pc.author_id
                  WHERE p.author_id = $1 AND pc.author_id <> $1
+                   AND COALESCE(u.is_deleted, FALSE) = FALSE
+                   AND COALESCE(pu.is_deleted, FALSE) = FALSE
 
                  UNION ALL
 
@@ -2078,11 +2130,16 @@ export const db = {
                         NULL::text AS content,
                         NULL::text AS comment_content,
                         f.status,
-                        EXISTS (SELECT 1 FROM friends f2 WHERE f2.user_id = $1 AND f2.friend_id = f.user_id AND f2.status = 'accepted') AS is_mutual,
+                        EXISTS (
+                            SELECT 1 FROM friends f2
+                            JOIN users u2 ON u2.id = f2.friend_id
+                            WHERE f2.user_id = $1 AND f2.friend_id = f.user_id AND f2.status = 'accepted' AND COALESCE(u2.is_deleted, FALSE) = FALSE
+                        ) AS is_mutual,
                         f.created_at
                  FROM friends f
                  JOIN users u ON u.id = f.user_id
                  WHERE f.friend_id = $1 AND f.user_id <> $1 AND f.status <> 'blocked'
+                   AND COALESCE(u.is_deleted, FALSE) = FALSE
 
                  UNION ALL
 
@@ -2099,8 +2156,11 @@ export const db = {
                         pcl.created_at
                  FROM post_comment_likes pcl
                  JOIN post_comments pc ON pc.id = pcl.comment_id
+                 JOIN users cu ON cu.id = pc.author_id
                  JOIN users u ON u.id = pcl.user_id
                  WHERE pc.author_id = $1 AND pcl.user_id <> $1
+                   AND COALESCE(u.is_deleted, FALSE) = FALSE
+                   AND COALESCE(cu.is_deleted, FALSE) = FALSE
 
                  UNION ALL
 
@@ -2120,6 +2180,7 @@ export const db = {
                  JOIN users u ON u.id = m.sender_id
                  WHERE (c.user_a = $1 OR c.user_b = $1)
                    AND m.sender_id <> $1
+                   AND COALESCE(u.is_deleted, FALSE) = FALSE
              ) notifications
              WHERE NOT EXISTS (
                  SELECT 1 FROM muted_users m
@@ -2163,23 +2224,35 @@ export const db = {
             FROM posts p
             JOIN users u ON u.id = p.author_id
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_likes pl
+                JOIN users lu ON lu.id = pl.user_id
+                WHERE pl.post_id = p.id AND COALESCE(lu.is_deleted, FALSE) = FALSE
             ) l ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_comments pc
+                JOIN users cu ON cu.id = pc.author_id
+                WHERE pc.post_id = p.id AND COALESCE(cu.is_deleted, FALSE) = FALSE
             ) c ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+                SELECT count(*)::int AS count
+                FROM post_saves ps
+                JOIN users su ON su.id = ps.user_id
+                WHERE ps.post_id = p.id AND COALESCE(su.is_deleted, FALSE) = FALSE
             ) s ON true
             WHERE p.id = $1
+              AND COALESCE(u.is_deleted, FALSE) = FALSE
               AND (
                   p.visibility = 'public'
                   OR p.author_id = $2
                   OR EXISTS (
                       SELECT 1 FROM friends f
+                      JOIN users fu ON fu.id = f.friend_id
                       WHERE f.user_id = $2
                         AND f.friend_id = p.author_id
                         AND f.status = 'accepted'
+                        AND COALESCE(fu.is_deleted, FALSE) = FALSE
                   )
               )
             `,
@@ -2241,7 +2314,7 @@ export const db = {
             `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
              FROM friends f
              JOIN users u ON u.id = f.friend_id
-             WHERE f.user_id = $1 AND f.status = 'blocked'
+             WHERE f.user_id = $1 AND f.status = 'blocked' AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY u.username`,
             [userId]
         );
@@ -2310,7 +2383,7 @@ export const db = {
             `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
              FROM muted_users m
              JOIN users u ON u.id = m.muted_id
-             WHERE m.user_id = $1
+             WHERE m.user_id = $1 AND COALESCE(u.is_deleted, FALSE) = FALSE
              ORDER BY u.username`,
             [userId]
         );
@@ -2346,23 +2419,26 @@ export const db = {
             JOIN posts p ON p.id = ps_main.post_id
             JOIN users u ON u.id = p.author_id
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_likes pl WHERE pl.post_id = p.id
+                SELECT count(*)::int AS count FROM post_likes pl JOIN users lu ON lu.id = pl.user_id WHERE pl.post_id = p.id AND COALESCE(lu.is_deleted, FALSE) = FALSE
             ) l ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_comments pc WHERE pc.post_id = p.id
+                SELECT count(*)::int AS count FROM post_comments pc JOIN users cu ON cu.id = pc.author_id WHERE pc.post_id = p.id AND COALESCE(cu.is_deleted, FALSE) = FALSE
             ) c ON true
             LEFT JOIN LATERAL (
-                SELECT count(*)::int AS count FROM post_saves ps WHERE ps.post_id = p.id
+                SELECT count(*)::int AS count FROM post_saves ps JOIN users su ON su.id = ps.user_id WHERE ps.post_id = p.id AND COALESCE(su.is_deleted, FALSE) = FALSE
             ) s ON true
             WHERE ps_main.user_id = $1
+              AND COALESCE(u.is_deleted, FALSE) = FALSE
               AND (
                   p.visibility = 'public'
                   OR p.author_id = $1
                   OR EXISTS (
                       SELECT 1 FROM friends f
+                      JOIN users fu ON fu.id = f.friend_id
                       WHERE f.user_id = $1
                         AND f.friend_id = p.author_id
                         AND f.status = 'accepted'
+                        AND COALESCE(fu.is_deleted, FALSE) = FALSE
                   )
               )
             ORDER BY ps_main.created_at DESC
