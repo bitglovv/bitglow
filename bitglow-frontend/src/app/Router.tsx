@@ -25,6 +25,7 @@ import BlockedUsersPage from "../pages/settings/BlockedUsersPage";
 import MutedUsersPage from "../pages/settings/MutedUsersPage";
 import SavedPostsPage from "../pages/settings/SavedPostsPage";
 import DeleteAccountPage from "../pages/settings/DeleteAccountPage";
+import RestoreAccountPage from "../pages/RestoreAccountPage";
 import MyProfileRedirect from "../pages/MyProfileRedirect";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../layouts/AppLayout";
@@ -47,6 +48,7 @@ export default function Router() {
             <Route path="/forgot-password" element={token && user ? <Navigate to="/home" replace /> : <ForgotPasswordPage />} />
             <Route path="/reset-password" element={token && user ? <Navigate to="/home" replace /> : <ResetPasswordPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/restore-account" element={<RestoreAccountPage />} />
 
             {/* Public legal & support center pages — accessible from anywhere */}
             <Route path="/privacy" element={<PrivacyPage />} />
