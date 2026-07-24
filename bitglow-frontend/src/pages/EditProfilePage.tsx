@@ -210,7 +210,6 @@ export default function EditProfilePage() {
                             value={form.location}
                             onChange={handleChange}
                             leftIcon={<MapPin className="w-4 h-4" />}
-                            placeholder="e.g. Earth / Edge"
                         />
 
                         <Input
@@ -219,7 +218,6 @@ export default function EditProfilePage() {
                             value={form.website}
                             onChange={handleChange}
                             leftIcon={<Globe className="w-4 h-4" />}
-                            placeholder="e.g. bitglow.online"
                         />
 
                         <div className="space-y-2">
@@ -229,7 +227,6 @@ export default function EditProfilePage() {
                                 value={form.bio}
                                 onChange={handleChange}
                                 rows={5}
-                                placeholder="Tell us about yourself"
                                 className="w-full bg-white/[0.03] border-0 rounded-2xl px-4 py-4 text-sm transition-all focus:outline-none focus:ring-1 focus:ring-brand/50 focus:bg-white/[0.05] resize-none"
                             />
                             <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mt-2 px-1 text-right">

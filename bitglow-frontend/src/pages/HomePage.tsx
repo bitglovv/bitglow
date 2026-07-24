@@ -88,7 +88,7 @@ function Composer({ user, onPostCreated }: ComposerProps) {
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Post title (optional)"
+        placeholder="Post title"
         className="w-full bg-transparent px-4 pt-4 pb-2 text-base font-semibold text-white placeholder:text-zinc-600 focus:outline-none"
       />
 
@@ -513,14 +513,14 @@ export default function HomePage() {
           <Input
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
-            placeholder="Title (optional)"
-            className="bg-white/[0.05]"
+            placeholder="Title"
+            className="bg-white/5"
           />
           <textarea
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             placeholder="Post content"
-            className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-brand min-h-[150px] resize-none"
+            className="w-full bg-white/5] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-brand min-h-37.5 resize-none"
           />
           <Button onClick={handleEditSubmit} disabled={!editContent.trim() || isEditing} isLoading={isEditing} className="w-full">
             Save Changes
