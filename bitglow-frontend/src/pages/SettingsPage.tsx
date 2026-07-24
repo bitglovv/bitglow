@@ -325,9 +325,9 @@ export default function SettingsPage() {
               <SettingsItem icon={<Zap className="h-5 w-5" />} title="About BitGlow" subtitle="Version, features & tech stack" to="/about-app" />
               <SettingsItem icon={<FileText className="h-5 w-5" />} title="Terms of Service" subtitle="Rules & usage policies" to="/terms" />
               <SettingsItem icon={<Shield className="h-5 w-5" />} title="Privacy Policy" subtitle="How we handle your data" to="/privacy" />
-              <SettingsItem icon={<Flag className="h-5 w-5" />} title="Report a Problem" subtitle="Submit a bug or issue" to="/contact" />
-              <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Help Center" subtitle="Get support" to="/contact" />
+              <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Help Center" subtitle="Browse help articles" to="/help" />
               <SettingsItem icon={<Mail className="h-5 w-5" />} title="Contact Support" subtitle="Reach us directly" to="/contact" />
+              <SettingsItem icon={<Flag className="h-5 w-5" />} title="Report a Problem" subtitle="Submit a bug or issue" to="/report" />
             </SettingsSection>
 
             <SettingsSection title="Account Info">
