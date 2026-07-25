@@ -184,7 +184,6 @@ export const InboxSidebar = ({
               />
             ) : (
               <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-6 text-center text-zinc-500 animate-chat-fade pb-24 md:pb-6">
-                <div className="mx-auto mb-3 h-12 w-12 rounded-full border border-white/[0.08] bg-white/[0.04] shadow-[0_0_32px_rgba(16,185,129,0.1)]" />
                 <p className="font-semibold text-zinc-400">No message requests</p>
                 <p className="text-sm mt-1">New requests will appear here when people reach out.</p>
               </div>
