@@ -28,6 +28,7 @@ import { BottomSheet } from "../components/ui/BottomSheet";
 import { ReportSheet } from "../components/common/ReportSheet";
 import { timeAgo } from "../utils/time";
 import { Comment } from "../services/api";
+import { UserListItem } from "../components/user/UserListItem";
 
 const POST_REPORT_OPTIONS = [
   "Spam or misleading content",
@@ -493,16 +494,20 @@ export default function HomePage() {
             <p className="text-center text-zinc-600 text-sm mt-8">No friends found.</p>
           ) : (
             filteredFriends.map(f => (
-              <button
+              <UserListItem
                 key={f.id}
-                onClick={() => handleShareToFriend(f.id)}
-                disabled={isSharing}
-                className="w-full flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl transition-colors text-left disabled:opacity-50"
-              >
-                <Avatar alt={f.username} src={f.avatarUrl} size="sm" />
-                <span className="font-semibold text-sm text-white flex-1">{f.username}</span>
-                <Send className="w-4 h-4 text-zinc-400" />
-              </button>
+                user={f}
+                actionSlot={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleShareToFriend(f.id)}
+                    disabled={isSharing}
+                  >
+                    Share
+                  </Button>
+                }
+              />
             ))
           )}
         </div>

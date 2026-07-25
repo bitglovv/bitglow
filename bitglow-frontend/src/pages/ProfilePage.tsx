@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
+import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
 
 function CountButton({
@@ -76,17 +77,15 @@ function ListModal({
         ) : (
           <div className="space-y-1 overflow-y-auto custom-scrollbar pr-1 flex-1">
             {items.map((f) => (
-              <div key={f.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.03] transition-colors">
-                <Link to={`/profile/${f.username}`} onClick={onClose} className="flex items-center gap-3 group shrink-0">
-                  <Avatar src={f.avatarUrl} alt={f.username} size="sm" />
-                  <div className="text-[15px] font-semibold text-white group-hover:underline">{f.username}</div>
-                </Link>
-                {renderAction && (
+              <UserListItem
+                key={f.id}
+                user={f}
+                actionSlot={renderAction ? (
                   <div className="ml-4 shrink-0">
                     {renderAction(f)}
                   </div>
-                )}
-              </div>
+                ) : undefined}
+              />
             ))}
           </div>
         )}
