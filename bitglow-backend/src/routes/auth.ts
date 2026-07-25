@@ -17,6 +17,7 @@ import {
 import { env } from "../config/env";
 import { authLoginSchema, authSignupSchema, logoutSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, verifyEmailSchema, restoreAccountSchema, sendRestorationOtpSchema } from "./schemas";
 import { sendPasswordResetEmail, sendSignupVerificationEmail, sendAccountRestoredEmail, sendRestorationOtpEmail } from "../services/email";
+import { AuthLogin, AuthSignup, ForgotPassword, ResetPassword, ResendVerification, VerifyEmail, RestoreAccount, SendRestorationOtp } from "./types";
 
 function generateOtpCode(): string {
     const bytes = randomBytes(4);
@@ -34,7 +35,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
         schema: forgotPasswordSchema,
     }, async (req, reply) => {
-        const { email } = req.body as any;
+        const { email } = req.body as ForgotPassword;
         const normalizedEmail = normalizeIdentifier(String(email || ""));
 
         if (!normalizedEmail) {
@@ -68,7 +69,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
         schema: resetPasswordSchema,
     }, async (req, reply) => {
-        const { token, newPassword } = req.body as any;
+        const { token, newPassword } = req.body as ResetPassword;
 
         if (!validatePassword(String(newPassword))) {
             return reply.code(400).send({ message: "Password must be at least 8 characters" });
@@ -109,7 +110,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
         schema: resendVerificationSchema,
     }, async (req, reply) => {
-        const { email } = req.body as any;
+        const { email } = req.body as ResendVerification;
         const normalizedEmail = normalizeIdentifier(String(email || ""));
 
         if (!normalizedEmail) {
@@ -157,7 +158,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
         schema: verifyEmailSchema,
     }, async (req, reply) => {
-        const { token } = req.query as any;
+        const { token } = req.query as VerifyEmail;
 
         const tokenHash = hashToken(token);
         const verifyToken = await db.getUserByVerificationToken(tokenHash);
@@ -187,7 +188,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         },
         schema: authSignupSchema,
     }, async (req, reply) => {
-        const { username, displayName, email, password } = req.body as any;
+        const { username, displayName, email, password } = req.body as AuthSignup;
         const normalizedUsername = normalizeIdentifier(String(username || ""));
         const normalizedEmail = normalizeIdentifier(String(email || ""));
 
@@ -253,7 +254,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         },
         schema: authLoginSchema,
     }, async (req, reply) => {
-        const { identifier, password } = req.body as any;
+        const { identifier, password } = req.body as AuthLogin;
         const normalizedIdentifier = normalizeIdentifier(String(identifier || ""));
         const ipAddress = getRequestIp(req);
 
@@ -355,7 +356,7 @@ export async function authRoutes(fastify: FastifyInstance) {
      * Sends a 6-digit Email OTP to verify account ownership before restoration
      */
     fastify.post("/send-restoration-otp", { schema: sendRestorationOtpSchema }, async (req, reply) => {
-        const { identifier, password } = (req.body || {}) as { identifier?: string; password?: string };
+        const { identifier, password } = req.body as SendRestorationOtp;
 
         if (!identifier || !password) {
             return reply.code(400).send({ code: "INVALID_INPUT", message: "Username/email and password are required." });
@@ -395,12 +396,7 @@ export async function authRoutes(fastify: FastifyInstance) {
      * Restores an account after ownership verification via Email OTP (and 2FA TOTP)
      */
     fastify.post("/restore-account", { schema: restoreAccountSchema }, async (req, reply) => {
-        const { identifier, password, otpCode, twoFactorCode } = (req.body || {}) as {
-            identifier?: string;
-            password?: string;
-            otpCode?: string;
-            twoFactorCode?: string;
-        };
+        const { identifier, password, otpCode, twoFactorCode } = req.body as RestoreAccount;
 
         if (!identifier || !password || !otpCode) {
             return reply.code(400).send({ code: "INVALID_INPUT", message: "Identifier, password, and verification code are required." });
@@ -530,5 +526,3 @@ if (user.is_banned) {
         return { token, refreshToken: nextRefreshToken };
     });
 }
-
-

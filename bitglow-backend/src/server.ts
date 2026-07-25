@@ -205,5 +205,3 @@ start().catch((error: unknown) => {
   server.log.fatal({ error }, "failed to start server");
   process.exitCode = 1;
 });
-
-

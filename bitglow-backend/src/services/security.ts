@@ -167,4 +167,3 @@ async function bcryptCompare(password: string, hash: string) {
     const bcrypt = await import("bcrypt");
     return bcrypt.compare(password, hash);
 }
-

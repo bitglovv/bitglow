@@ -2585,6 +2585,3 @@ export const db = {
         return res.rows[0]?.email_verified ?? false;
     }
 };
-
-
-

@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node dist/src/server.js",
     "audit:live-messages": "tsx scripts/audit-live-messages.ts",
     "audit:security": "tsx scripts/audit-security.ts"
