@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { Conversation, Friend } from "../../services/api";
 import { ConversationList } from "./ConversationList";
 import { ConversationSkeleton } from "../ui/Skeleton";
-import { Avatar } from "../ui/Avatar";
+import { UserListItem } from "../user/UserListItem";
+import { Button } from "../ui/Button";
 
 type Props = {
   conversations: Conversation[];
@@ -42,8 +43,7 @@ export const InboxSidebar = ({
         return f.username.toLowerCase().includes(q) || name.includes(q);
       })
     : [];
-  const conversationsByUserId = new Map(conversations.map((conv) => [conv.userId, conv]));
-
+  
   // Load accepted conversations from localStorage
   const acceptedStr = typeof window !== "undefined" ? localStorage.getItem("bitglow:accepted_requests") || "[]" : "[]";
   const acceptedIds = useMemo(() => {
@@ -111,44 +111,21 @@ export const InboxSidebar = ({
               No matching friends
             </div>
           ) : (
-            filteredFriends.map((friend) => {
-              const existingConversation = conversationsByUserId.get(friend.id);
-              const latestMessage = existingConversation?.lastMessage || "Start a conversation";
-              const isUnread = (existingConversation?.unreadCount ?? 0) > 0;
-
-              return (
-                <button
-                  key={friend.id}
-                  onClick={() => onSelectFriend(friend)}
-                  className={clsx(
-                    "relative flex w-full items-center gap-3 rounded-[16px] border border-transparent bg-transparent py-2.5 pl-2.5 pr-7 transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15"
-                  )}
-                >
-                  <div className="relative shrink-0">
-                    <Avatar src={friend.avatarUrl} alt={friend.username} size="md" />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate font-semibold text-white">
-                      {friend.displayName || friend.username}
-                    </p>
-                    <p
-                      className={clsx(
-                        "truncate text-xs leading-5 transition-colors",
-                        isUnread ? "font-bold text-zinc-200" : "font-normal text-zinc-500"
-                      )}
-                    >
-                      {latestMessage}
-                    </p>
-                  </div>
-                  {isUnread && (
-                    <span
-                      aria-label={`${existingConversation?.unreadCount} unread message${existingConversation?.unreadCount === 1 ? "" : "s"}`}
-                      className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_6px_rgba(16,185,129,0.45)]"
-                    />
-                  )}
-                </button>
-              );
-            })
+            filteredFriends.map((friend) => (
+              <UserListItem
+                key={friend.id}
+                user={friend}
+                actionSlot={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onSelectFriend(friend)}
+                  >
+                    Message
+                  </Button>
+                }
+              />
+            ))
           )}
         </div>
       ) : (
