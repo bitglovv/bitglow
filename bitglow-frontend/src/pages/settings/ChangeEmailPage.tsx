@@ -118,16 +118,6 @@ export default function ChangeEmailPage() {
               <p>
                 After verification, your email will be updated, all active sessions will be revoked, and you will need to sign in again.
               </p>
-              <p className="mt-3 text-xs text-zinc-500">
-                If you already received a verification message, use the verify page to complete the flow.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate("/settings/change-email/verify")}
-                className="mt-3 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Go to verification page
-              </button>
             </div>
           </div>
         </div>
