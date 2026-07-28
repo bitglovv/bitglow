@@ -66,7 +66,8 @@ export default function Header({
     const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
     const isHome = isActive("/home");
     const mobileBottomNavRoutes = new Set(["/home", "/search", "/live", "/messages", "/settings"]);
-    const showMobileBottomNav = !hideBottomNav && mobileBottomNavRoutes.has(location.pathname);
+    // Show bottom nav on the primary root routes and any profile path (e.g. /profile/:username)
+    const showMobileBottomNav = !hideBottomNav && (mobileBottomNavRoutes.has(location.pathname) || location.pathname.startsWith("/profile"));
 
     return (
         <>
