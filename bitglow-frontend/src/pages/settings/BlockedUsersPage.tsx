@@ -39,7 +39,7 @@ export default function BlockedUsersPage() {
 
   return (
     <SettingsSubPage
-      title="Blocked & Muted"
+      title="Blocked Users"
       description="Review accounts you have blocked or muted."
       items={items}
     />

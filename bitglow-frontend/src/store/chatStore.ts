@@ -11,6 +11,10 @@ interface ChatState {
   typingUsers: Set<string>;
   onlineUsers: Set<string>;
 
+  // local restriction sets
+  restrictedUsers: Set<string>;
+  mutedUsers: Set<string>;
+
   // Actions
   fetchConversationsAndFriends: () => Promise<void>;
   fetchHistory: (userId: string) => Promise<void>;
@@ -25,6 +29,10 @@ interface ChatState {
   handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => void;
   handleEditedMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string) => void;
   handleDeletedMessage: (event: { messageId: string; senderId: string; receiverId: string; latestMessage: DMMessage | null }, currentUserId: string) => void;
+  blockLocal: (userId: string) => void;
+  unblockLocal: (userId: string) => void;
+  muteLocal: (userId: string) => void;
+  unmuteLocal: (userId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -36,6 +44,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoadingMessages: false,
   typingUsers: new Set(),
   onlineUsers: new Set(),
+  restrictedUsers: new Set(),
+  mutedUsers: new Set(),
 
   fetchConversationsAndFriends: async () => {
     set({ isLoadingConversations: true });
@@ -47,10 +57,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       try {
           restricted = new Set(JSON.parse(restrictedStr));
       } catch (e) {}
+      // also hydrate muted users from localStorage
+      const mutedStr = localStorage.getItem("bitglow:muted_users") || "[]";
+      let muted = new Set<string>();
+      try { muted = new Set(JSON.parse(mutedStr)); } catch (e) {}
 
       const filteredConvs = convs.filter(c => !restricted.has(c.userId));
 
-      set({ conversations: filteredConvs, friends: friendList });
+      set({ conversations: filteredConvs, friends: friendList, restrictedUsers: restricted, mutedUsers: muted });
     } finally {
       set({ isLoadingConversations: false });
     }
@@ -365,4 +379,66 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     }));
   },
+
+  blockLocal: (userId: string) => {
+    set((state) => {
+      const next = new Set(state.restrictedUsers);
+      next.add(userId);
+      try { localStorage.setItem("bitglow:restricted_users", JSON.stringify(Array.from(next))); } catch (e) {}
+
+      return {
+        restrictedUsers: next,
+        conversations: state.conversations.filter((c) => c.userId !== userId),
+        messages: Object.fromEntries(Object.entries(state.messages).filter(([k]) => k !== userId)),
+      } as any;
+    });
+  },
+
+  unblockLocal: (userId: string) => {
+    set((state) => {
+      const next = new Set(state.restrictedUsers);
+      next.delete(userId);
+      try { localStorage.setItem("bitglow:restricted_users", JSON.stringify(Array.from(next))); } catch (e) {}
+      return { restrictedUsers: next } as any;
+    });
+  },
+
+  muteLocal: (userId: string) => {
+    set((state) => {
+      const next = new Set(state.mutedUsers);
+      next.add(userId);
+      try { localStorage.setItem("bitglow:muted_users", JSON.stringify(Array.from(next))); } catch (e) {}
+      return { mutedUsers: next } as any;
+    });
+  },
+
+  unmuteLocal: (userId: string) => {
+    set((state) => {
+      const next = new Set(state.mutedUsers);
+      next.delete(userId);
+      try { localStorage.setItem("bitglow:muted_users", JSON.stringify(Array.from(next))); } catch (e) {}
+      return { mutedUsers: next } as any;
+    });
+  },
 }));
+
+// listen for global block/mute events to keep multiple UI surfaces in sync
+if (typeof window !== 'undefined') {
+  window.addEventListener('bitglow:block-changed', (e: Event) => {
+    const ev = e as CustomEvent;
+    const { userId, blocked } = ev.detail || {};
+    if (!userId) return;
+    const state = useChatStore.getState();
+    if (blocked) state.blockLocal(userId);
+    else state.unblockLocal(userId);
+  });
+
+  window.addEventListener('bitglow:mute-changed', (e: Event) => {
+    const ev = e as CustomEvent;
+    const { userId, muted } = ev.detail || {};
+    if (!userId) return;
+    const state = useChatStore.getState();
+    if (muted) state.muteLocal(userId);
+    else state.unmuteLocal(userId);
+  });
+}

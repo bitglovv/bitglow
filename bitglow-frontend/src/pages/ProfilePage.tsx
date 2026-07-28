@@ -14,6 +14,8 @@ import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
+import ConfirmDialog from "../components/common/ConfirmDialog";
+import { useChatStore } from "../store/chatStore";
 
 function CountButton({
   label,
@@ -270,13 +272,27 @@ export default function ProfilePage() {
 
   const handleBlockUser = async () => {
     if (!profile || isOwner) return;
+    setShowMoreMenu(false);
+    setShowBlockConfirm(true);
+  };
+
+  const chatStore = useChatStore();
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+
+  const handleBlockConfirm = async () => {
+    if (!profile) return;
+    setBlockLoading(true);
     try {
-      // Placeholder for block API
-      console.log("Blocking user:", profile.id);
-      setShowMoreMenu(false);
-      navigate("/home");
+      await api.settings.blockUser(profile.id);
+      chatStore.blockLocal(profile.id);
+      window.dispatchEvent(new CustomEvent('bitglow:block-changed', { detail: { userId: profile.id, blocked: true } }));
+      navigate('/home');
     } catch (err) {
-      console.error("Failed to block", err);
+      console.error('Failed to block', err);
+    } finally {
+      setBlockLoading(false);
+      setShowBlockConfirm(false);
     }
   };
 
@@ -591,6 +607,17 @@ export default function ProfilePage() {
           ) : undefined}
         />
       )}
+
+      <ConfirmDialog
+        open={showBlockConfirm}
+        title="Block user"
+        message={<div>Are you sure you want to block this user? They will no longer be able to message or interact with you.</div>}
+        confirmLabel="Block"
+        cancelLabel="Cancel"
+        onConfirm={handleBlockConfirm}
+        onClose={() => setShowBlockConfirm(false)}
+        loading={blockLoading}
+      />
     </div>
   );
 }
