@@ -206,27 +206,12 @@ export default function SettingsPage() {
             <SettingsSection title="Account & App">
               <SettingsItem icon={<Bookmark className="h-5 w-5" />} title="Saved Posts" to="/settings/saved-posts" />
               <SettingsItem icon={<CircleUserRound className="h-5 w-5" />} title="About This Account" subtitle="Profile information and account details" to={user?.username ? `/about/${user.username}` : "/profile"} />
-              <SettingsItem 
-                icon={<Moon className="h-5 w-5" />} 
-                title="Theme for App" 
-                subtitle={theme === 'dark' ? 'Dark' : 'White'} 
-                onClick={() => setActiveModal(activeModal === "theme" ? null : "theme")} 
+              <SettingsItem
+                icon={<Moon className="h-5 w-5" />}
+                title="Theme for App"
+                subtitle={theme === "dark" ? "Dark" : "White"}
+                onClick={() => setTheme(theme === "dark" ? "white" : "dark")}
               />
-              {activeModal === "theme" && (
-                <div className="border-t border-white/[0.07] bg-white/[0.02] px-4 py-4 animate-in slide-in-from-top-2 fade-in duration-200">
-                  <div className="space-y-2">
-                    {(["dark", "white"] as AppTheme[]).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => { setTheme(t); closeForm(); }}
-                        className={`w-full text-left px-4 py-3 rounded-xl border ${theme === t ? "border-brand bg-brand/10 text-brand" : "border-white/10 hover:bg-white/[0.04]"}`}
-                      >
-                        {t.charAt(0).toUpperCase() + t.slice(1)} Mode
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </SettingsSection>
 
             <SettingsSection title="About & Support">

@@ -13,8 +13,8 @@ export function LandingFooter() {
                         Terms
                     </Link>
                     <span className="text-zinc-700">&bull;</span>
-                    <Link to="/contact" className="transition duration-200 hover:text-zinc-300">
-                        Contact
+                    <Link to="/help" className="transition duration-200 hover:text-zinc-300">
+                        Help Center
                     </Link>
                 </div>
                 <div>&copy; 2026 BitGlow</div>
