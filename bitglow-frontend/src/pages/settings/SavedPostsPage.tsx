@@ -48,7 +48,30 @@ export default function SavedPostsPage() {
         ) : (
           <div className="space-y-4">
             {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard
+                key={post.id}
+                post={post}
+                onSave={async () => {
+                  // Optimistic remove: assume unsave succeeds and remove from view
+                  const prev = posts;
+                  setPosts((p) => p.filter((x) => x.id !== post.id));
+                  try {
+                    const res = await api.posts.save(post.id);
+                    // If API reports still saved, reinsert the post
+                    if (res && res.saved) {
+                      setPosts((p) => {
+                        // avoid duplicate
+                        if (p.some((x) => x.id === post.id)) return p;
+                        return [post, ...p];
+                      });
+                    }
+                  } catch (err) {
+                    console.error("Failed to unsave post", err);
+                    // revert
+                    setPosts(prev);
+                  }
+                }}
+              />
             ))}
           </div>
         )}
