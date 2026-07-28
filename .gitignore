@@ -11,4 +11,6 @@ bitglow-backend/.env.*
 !bitglow-backend/.env.example
 bitglow-backend/dist/
 bitglow-backend/*.log
-
+# Continue local configuration
+.continue/config.json
+.continue/
