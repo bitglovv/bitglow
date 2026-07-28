@@ -71,6 +71,58 @@ export async function sendEmailChangeVerification(email: string, token: string) 
     }
 }
 
+export async function sendEmailChangedNotification(oldEmail: string, newEmail: string, username: string) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock sending email change notification to ${oldEmail}.`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: oldEmail,
+            subject: 'Your BitGlow email address has changed',
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+                    <h2>Your BitGlow email was changed</h2>
+                    <p>Hello @${username},</p>
+                    <p>Your BitGlow account email address has been updated from this address to <strong>${newEmail}</strong>.</p>
+                    <p>If you did not authorize this change, please reset your password immediately and contact BitGlow support.</p>
+                    <p style="color: #666; font-size: 14px; margin-top: 20px;">If you did not initiate this change, please secure your account right away.</p>
+                </div>
+            `,
+        });
+    } catch (error) {
+        console.error('[Email Service] Failed to send email change notification:', error);
+    }
+}
+
+export async function sendPasswordChangedNotification(email: string, username: string) {
+    if (!resend) {
+        console.warn(`[Email Service] Mock sending password change notification to ${email}.`);
+        return;
+    }
+
+    try {
+        await resend.emails.send({
+            from: env.FROM_EMAIL,
+            to: email,
+            subject: 'Your BitGlow password was changed',
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+                    <h2>Your password was changed</h2>
+                    <p>Hello @${username},</p>
+                    <p>Your BitGlow account password has been successfully updated.</p>
+                    <p>If you did not authorize this change, please reset your password immediately and secure your account.</p>
+                    <p style="color: #666; font-size: 14px; margin-top: 20px;">If you did not initiate this change, please contact BitGlow support right away.</p>
+                </div>
+            `,
+        });
+    } catch (error) {
+        console.error('[Email Service] Failed to send password change notification:', error);
+    }
+}
+
 export async function sendSignupVerificationEmail(
     email: string,
     token: string

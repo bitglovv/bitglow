@@ -2,8 +2,12 @@ import { FastifyInstance } from "fastify";
 import { randomBytes } from "crypto";
 import { db } from "../services/db";
 import { getRequestIp, hashToken, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
-import { sendEmailChangeVerification } from "../services/email";
+import { sendEmailChangedNotification, sendPasswordChangedNotification } from "../services/email";
+import { VerificationService } from "../services/verification/VerificationService";
+import { disconnectUserSockets } from "../ws";
 import {
+    emailConfirmSchema,
+    emailResendSchema,
     emailUpdateSchema,
     idParamSchema,
     onlineStatusUpdateSchema,
@@ -54,11 +58,75 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
         await db.createEmailChangeToken(userId, normalizedEmail, tokenHash, expiresAt);
-        await sendEmailChangeVerification(normalizedEmail, rawToken);
+        await VerificationService.requestVerification(userId, "change_email", "email", { ipAddress }, normalizedEmail);
 
         await logSecurityEvent("change_email_requested", req, { newEmail: normalizedEmail }, userId);
 
-        return { ok: true, message: "A verification email has been sent to the new address." };
+        return { ok: true, message: "A verification code has been sent to the new address." };
+    });
+
+    fastify.post("/email/verify", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+        schema: emailConfirmSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { otpCode } = req.body as any;
+        const ipAddress = getRequestIp(req);
+
+        if (!otpCode || typeof otpCode !== "string") {
+            return reply.code(400).send({ message: "Verification code is required" });
+        }
+
+        const pending = await db.getPendingEmailChangeTokenByUser(userId);
+        if (!pending) {
+            return reply.code(400).send({ message: "No pending email change request found. Please request a new verification code." });
+        }
+
+        if (new Date(pending.expires_at).getTime() < Date.now()) {
+            return reply.code(400).send({ message: "The pending email change request has expired. Please request a new code." });
+        }
+
+        const verificationResult = await VerificationService.verifyCode(userId, "change_email", otpCode, { ipAddress });
+        if (!verificationResult.success) {
+            await logSecurityEvent("change_email_verify_failure", req, { reason: verificationResult.reason, attemptsLeft: verificationResult.attemptsLeft }, userId);
+            return reply.code(400).send({ message: verificationResult.message });
+        }
+
+        const dbUser = await db.getUserById(userId);
+        const oldEmail = dbUser?.email || null;
+        await db.updateUserEmail(userId, pending.new_email);
+        await db.markEmailChangeTokenUsed(pending.id);
+        await sendEmailChangedNotification(oldEmail ?? pending.new_email, pending.new_email, dbUser?.username || "");
+        await db.revokeSessionsForUser(userId);
+        await disconnectUserSockets(userId);
+
+        await logSecurityEvent("change_email_success", req, { oldEmail, newEmail: pending.new_email }, userId);
+
+        return { ok: true, message: "Email updated successfully. Please sign in again." };
+    });
+
+    fastify.post("/email/resend", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
+        schema: emailResendSchema,
+    }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const ipAddress = getRequestIp(req);
+        const pending = await db.getPendingEmailChangeTokenByUser(userId);
+
+        if (!pending) {
+            return reply.code(400).send({ message: "No active email change request found." });
+        }
+
+        if (new Date(pending.expires_at).getTime() < Date.now()) {
+            return reply.code(400).send({ message: "Your pending email change request has expired. Please start again." });
+        }
+
+        await VerificationService.requestVerification(userId, "change_email", "email", { ipAddress }, pending.new_email);
+        await logSecurityEvent("change_email_resend", req, { newEmail: pending.new_email }, userId);
+
+        return { ok: true, message: "A new verification code has been sent to your new email address." };
     });
 
     fastify.get("/verify-email", {
@@ -133,10 +201,13 @@ export async function settingsRoutes(fastify: FastifyInstance) {
 
         const newHash = await db.hashPassword(newPassword);
         await db.updateUserPassword(userId, newHash);
-        await db.revokeSessionsForUser(userId, req.auth!.sessionId); // Revoke other sessions
+        const updatedUser = await db.getUserById(userId);
+        await sendPasswordChangedNotification(updatedUser?.email || "", updatedUser?.username || "");
+        await db.revokeSessionsForUser(userId);
+        await disconnectUserSockets(userId);
         await logSecurityEvent("change_password_success", req, {}, userId);
 
-        return { ok: true };
+        return { ok: true, message: "Password updated successfully. Please sign in again." };
     });
 
     /**

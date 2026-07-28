@@ -24,6 +24,9 @@ import SettingsPage from "../pages/SettingsPage";
 import BlockedUsersPage from "../pages/settings/BlockedUsersPage";
 import MutedUsersPage from "../pages/settings/MutedUsersPage";
 import SavedPostsPage from "../pages/settings/SavedPostsPage";
+import ChangeEmailPage from "../pages/settings/ChangeEmailPage";
+import ChangeEmailVerifyPage from "../pages/settings/ChangeEmailVerifyPage";
+import ChangePasswordPage from "../pages/settings/ChangePasswordPage";
 import DeleteAccountPage from "../pages/settings/DeleteAccountPage";
 import RestoreAccountPage from "../pages/RestoreAccountPage";
 import MyProfileRedirect from "../pages/MyProfileRedirect";
@@ -70,6 +73,9 @@ export default function Router() {
                     <Route path="/notifications" element={<NotificationsPage />} />
                     <Route path="/posts/:postId" element={<PostPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/settings/change-email" element={<ChangeEmailPage />} />
+                    <Route path="/settings/change-email/verify" element={<ChangeEmailVerifyPage />} />
+                    <Route path="/settings/change-password" element={<ChangePasswordPage />} />
                     <Route path="/settings/blocked-users" element={<BlockedUsersPage />} />
                     <Route path="/settings/muted-users" element={<MutedUsersPage />} />
                     <Route path="/settings/saved-posts" element={<SavedPostsPage />} />

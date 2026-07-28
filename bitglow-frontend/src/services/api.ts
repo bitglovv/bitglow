@@ -736,6 +736,22 @@ export const api = {
             if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to verify email"));
             return res.json();
         },
+        confirmEmailChange: async (otpCode: string) => {
+            const res = await fetchWithAuth("/settings/email/verify", {
+                method: "POST",
+                body: JSON.stringify({ otpCode }),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to confirm email change"));
+            return res.json();
+        },
+        resendChangeEmailOtp: async () => {
+            const res = await fetchWithAuth("/settings/email/resend", {
+                method: "POST",
+                body: JSON.stringify({}),
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to resend email verification code"));
+            return res.json();
+        },
         changePassword: async (currentPassword: string, newPassword: string) => {
             const res = await fetchWithAuth("/settings/password", {
                 method: "PUT",

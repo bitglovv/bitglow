@@ -28,7 +28,8 @@ export class VerificationService {
         userId: string,
         verificationType: HighRiskActionType,
         method: VerificationMethod = 'email',
-        auditContext?: { ipAddress?: string; userAgent?: string }
+        auditContext?: { ipAddress?: string; userAgent?: string },
+        targetEmail?: string
     ): Promise<{ ok: boolean; message: string; expiresAt?: string }> {
         // Fetch authenticated user details
         const user = await db.getUserById(userId);
@@ -102,7 +103,8 @@ export class VerificationService {
             throw new Error(`Unsupported verification method: ${method}`);
         }
 
-        await provider.sendChallenge(userId, user.email, user.username, otpCode, verificationType);
+        const recipientEmail = targetEmail || user.email;
+        await provider.sendChallenge(userId, recipientEmail, user.username, otpCode, verificationType);
 
         // Log security event
         await db.insertSecurityLog({

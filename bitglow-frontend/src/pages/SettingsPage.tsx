@@ -19,9 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import Header from "../components/common/Header";
-import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
-import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { navigateBack } from "../utils/navigateBack";
 import { AppTheme, useSettingsStore } from "../store/settingsStore";
@@ -167,69 +165,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Modals state
-  const [activeModal, setActiveModal] = useState<"email" | "password" | "theme" | null>(null);
-
-  // Form states
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
-
-  const closeForm = () => {
-    setActiveModal(null);
-    setCurrentPassword("");
-    setNewEmail("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setFormError("");
-    setFormSuccess("");
-  };
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError("");
-    setFormSuccess("");
-    setFormLoading(true);
-    try {
-      const res = await api.settings.changeEmail(currentPassword, newEmail);
-      setFormSuccess(res.message || "A verification email has been sent.");
-      // Don't close form immediately so they can read the success message
-      setCurrentPassword("");
-    } catch (err: any) {
-      setFormError(err.message);
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError("");
-
-    if (newPassword !== confirmPassword) {
-      setFormError("New passwords do not match.");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setFormError("Password must be at least 8 characters.");
-      return;
-    }
-
-    setFormLoading(true);
-    try {
-      await api.settings.changePassword(currentPassword, newPassword);
-      closeForm();
-    } catch (err: any) {
-      setFormError(err.message);
-    } finally {
-      setFormLoading(false);
-    }
-  };
+  // Form state is handled on dedicated pages.
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-black text-white selection:bg-brand/30">
@@ -256,36 +192,8 @@ export default function SettingsPage() {
             </SettingsSection>
 
             <SettingsSection title="Account Security">
-              <SettingsItem icon={<Mail className="h-5 w-5" />} title="Change Email" subtitle={user?.email || "Primary email"} onClick={() => setActiveModal(activeModal === "email" ? null : "email")} />
-              {activeModal === "email" && (
-                <div className="border-t border-white/[0.07] bg-white/[0.02] px-4 py-4">
-                  <form onSubmit={handleEmailSubmit} className="space-y-3">
-                    <Input label="New Email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
-                    <Input label="Current Password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-                    {formError && <p className="text-red-400 text-sm">{formError}</p>}
-                    {formSuccess && <p className="text-brand text-sm font-medium">{formSuccess}</p>}
-                    <div className="flex gap-2">
-                      <Button type="submit" isLoading={formLoading} disabled={formLoading || !!formSuccess}>Send Verification</Button>
-                      <Button type="button" variant="secondary" onClick={closeForm}>Cancel</Button>
-                    </div>
-                  </form>
-                </div>
-              )}
-              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Change Password" subtitle="Update password" onClick={() => setActiveModal(activeModal === "password" ? null : "password")} />
-              {activeModal === "password" && (
-                <div className="border-t border-white/[0.07] bg-white/[0.02] px-4 py-4">
-                  <form onSubmit={handlePasswordSubmit} className="space-y-3">
-                    <Input label="Current Password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-                    <Input label="New Password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-                    <Input label="Confirm New Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-                    {formError && <p className="text-red-400 text-sm">{formError}</p>}
-                    <div className="flex gap-2">
-                      <Button type="submit" isLoading={formLoading} disabled={formLoading}>Update Password</Button>
-                      <Button type="button" variant="secondary" onClick={closeForm}>Cancel</Button>
-                    </div>
-                  </form>
-                </div>
-              )}
+              <SettingsItem icon={<Mail className="h-5 w-5" />} title="Change Email" subtitle={user?.email || "Primary email"} to="/settings/change-email" />
+              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Change Password" subtitle="Update password" to="/settings/change-password" />
             </SettingsSection>
 
             <SettingsSection title="Privacy">

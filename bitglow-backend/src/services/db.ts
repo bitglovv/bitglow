@@ -2537,6 +2537,19 @@ export const db = {
         return res.rows[0] || null;
     },
 
+    async getPendingEmailChangeTokenByUser(userId: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, new_email, expires_at, used_at
+             FROM email_change_tokens
+             WHERE user_id = $1
+               AND used_at IS NULL
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [userId]
+        );
+        return res.rows[0] || null;
+    },
+
     async markEmailChangeTokenUsed(id: string) {
         await pool.query(
             `UPDATE email_change_tokens SET used_at = now() WHERE id = $1`,

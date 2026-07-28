@@ -347,6 +347,25 @@ export const emailUpdateSchema = {
     },
 } as const;
 
+export const emailConfirmSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["otpCode"],
+        properties: {
+            otpCode: { type: "string", minLength: 6, maxLength: 6 },
+        },
+    },
+} as const;
+
+export const emailResendSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+    },
+} as const;
+
 export const passwordUpdateSchema = {
     body: {
         type: "object",
