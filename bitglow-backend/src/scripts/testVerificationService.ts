@@ -44,7 +44,7 @@ async function runVerificationServiceTests() {
             throw new Error("Failed: OTP is stored in plaintext!");
         }
         const matchTrue = await OtpService.compareOtp(sampleCode, sampleHash);
-        const matchFalse = await OtpService.compareOtp("123456", sampleHash);
+        const matchFalse = await OtpService.compareOtp("XXXXXX", sampleHash);
         if (!matchTrue || matchFalse) {
             throw new Error("Failed: OTP hash comparison failed.");
         }
@@ -139,7 +139,7 @@ async function runVerificationServiceTests() {
         }
 
         // Test matching code directly on service
-        const correctCode = "123456"; // We will set known hash for test
+        const correctCode = "XXXXXX"; // We will set known hash for test
         const knownHash = await OtpService.hashOtp(correctCode);
         await db.query(
             `UPDATE action_verifications SET otp_hash = $1, attempts = 0 WHERE id = $2`,

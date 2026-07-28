@@ -146,7 +146,7 @@ export default function LoginPage() {
                 <Input
                     label="Email or Username"
                     type="text"
-                    placeholder="name@domain.com or username"
+                    placeholder="Username,Enter your email address"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     onBlur={() => setTouched((t) => ({ ...t, identifier: true }))}

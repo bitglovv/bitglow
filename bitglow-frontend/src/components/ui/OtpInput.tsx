@@ -64,7 +64,7 @@ export const OtpInput: React.FC<OtpInputProps> = ({
                     type="text"
                     value={value}
                     onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="123456"
+                    placeholder="XXXXXX"
                     maxLength={6}
                     autoComplete="one-time-code"
                     inputMode="numeric"
