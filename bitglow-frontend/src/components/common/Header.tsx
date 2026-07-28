@@ -65,6 +65,8 @@ export default function Header({
 
     const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
     const isHome = isActive("/home");
+    const mobileBottomNavRoutes = new Set(["/home", "/search", "/live", "/messages", "/settings"]);
+    const showMobileBottomNav = !hideBottomNav && mobileBottomNavRoutes.has(location.pathname);
 
     return (
         <>
@@ -157,7 +159,7 @@ export default function Header({
                     </div>
                 </header>
             )}
-            {!hideBottomNav && (
+            {showMobileBottomNav && (
                 <div className="md:hidden fixed bottom-0 left-0 right-0 z-[100] bg-black pb-[env(safe-area-inset-bottom)]">
                     <div className="mx-auto max-w-7xl px-4 py-1.5 flex items-center justify-around">
                         <Link to="/home" className={clsx("p-2 transition-all", isActive('/home') ? "text-white" : "text-zinc-500")}>
