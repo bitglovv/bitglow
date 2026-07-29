@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
+import MoreMenu from "../common/MoreMenu";
 
 type Props = {
   conversation: Conversation;
@@ -9,9 +10,13 @@ type Props = {
   onBack: () => void;
   /** When false, back is hidden (e.g. split inbox + chat on wide screens). */
   showBackButton?: boolean;
+  onViewProfile?: () => void;
+  onMuteUser?: () => void;
+  onBlockUser?: () => void;
+  onReportUser?: () => void;
 };
 
-export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true }: Props) => {
+export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true, onViewProfile, onMuteUser, onBlockUser, onReportUser }: Props) => {
   return (
     <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -34,7 +39,7 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
           )}
         </Link>
 
-        <Link to={`/profile/${conversation.username}`} className="flex min-w-0 flex-col hover:opacity-80 transition-opacity">
+        <Link to={`/profile/${conversation.username}`} className="flex min-w-0 flex-1 flex-col hover:opacity-80 transition-opacity">
           <span className="truncate text-[15px] font-bold text-white">
             {conversation.displayName || conversation.username}
           </span>
@@ -42,6 +47,15 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
             @{conversation.username}
           </span>
         </Link>
+
+        <MoreMenu
+          items={[
+            { label: "View Profile", onClick: onViewProfile || (() => {}) },
+            { label: "Mute User", onClick: onMuteUser || (() => {}) },
+            { label: "Block User", onClick: onBlockUser || (() => {}), danger: true },
+            { label: "Report User", onClick: onReportUser || (() => {}) },
+          ]}
+        />
       </div>
     </div>
   );

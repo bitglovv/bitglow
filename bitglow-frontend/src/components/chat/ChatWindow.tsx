@@ -28,6 +28,10 @@ interface ChatWindowProps {
   isRequest?: boolean;
   onAcceptRequest?: () => void;
   onRejectRequest?: () => void;
+  onViewProfile?: () => void;
+  onMuteUser?: () => void;
+  onBlockUser?: () => void;
+  onReportUser?: () => void;
 }
 
 export const ChatWindow = ({
@@ -48,6 +52,10 @@ export const ChatWindow = ({
   isRequest = false,
   onAcceptRequest,
   onRejectRequest,
+  onViewProfile,
+  onMuteUser,
+  onBlockUser,
+  onReportUser,
 }: ChatWindowProps) => {
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -130,6 +138,10 @@ export const ChatWindow = ({
         isOnline={isOnline}
         onBack={onBack}
         showBackButton={showHeaderBack}
+        onViewProfile={onViewProfile}
+        onMuteUser={onMuteUser}
+        onBlockUser={onBlockUser}
+        onReportUser={onReportUser}
       />
 
       <div

@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import MessageBubble from "./MessageBubble";
+import ParticipantMenu from "./ParticipantMenu";
 
 type ChatMessage = {
   id: number | string;
@@ -127,6 +128,12 @@ export default function LiveMessageList({ messages, selfId, participants = [], i
               </div>
             ) : (
               <div className={isFirst ? "mt-1.5" : "mt-0.5"}>
+                {isLiveChat && m.userId && m.userId !== selfId && isFirst && (
+                  <div className="mb-1 ml-10 flex items-center gap-2 text-xs font-semibold text-zinc-500">
+                    <span>@{activeUn}</span>
+                    <ParticipantMenu user={{ id: m.userId, username: activeUn, avatarUrl: activeAv }} />
+                  </div>
+                )}
                 <MessageBubble
                   text={m.text}
                   username={isLiveChat ? activeUn : "User"}

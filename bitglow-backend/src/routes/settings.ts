@@ -4,7 +4,7 @@ import { db } from "../services/db";
 import { getRequestIp, hashToken, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
 import { sendEmailChangedNotification, sendPasswordChangedNotification } from "../services/email";
 import { VerificationService } from "../services/verification/VerificationService";
-import { disconnectUserSockets } from "../ws";
+import { broadcastUserRelationshipUpdate, disconnectUserSockets } from "../ws";
 import {
     emailConfirmSchema,
     emailResendSchema,
@@ -266,7 +266,8 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const blockedUser = await db.getUserById(blockedId);
         if (!blockedUser) return reply.code(404).send({ message: "User not found" });
         await db.blockUser(userId, blockedId);
-        return { ok: true };
+        broadcastUserRelationshipUpdate(userId, blockedId, "block");
+        return { ok: true, user: blockedUser };
     });
 
     /**
@@ -277,6 +278,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const { id: unblockedId } = req.params as { id: string };
 
         await db.unblockUser(userId, unblockedId);
+        broadcastUserRelationshipUpdate(userId, unblockedId, "unblock");
         return { ok: true };
     });
 
@@ -304,7 +306,8 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const userToMute = await db.getUserById(mutedId);
         if (!userToMute) return reply.code(404).send({ message: "User not found" });
         await db.muteUser(userId, mutedId);
-        return { ok: true };
+        broadcastUserRelationshipUpdate(userId, mutedId, "mute");
+        return { ok: true, user: userToMute };
     });
 
     /**
@@ -315,6 +318,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         const { id: unmutedId } = req.params as { id: string };
 
         await db.unmuteUser(userId, unmutedId);
+        broadcastUserRelationshipUpdate(userId, unmutedId, "unmute");
         return { ok: true };
     });
 

@@ -15,7 +15,8 @@ import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skelet
 import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
 import ConfirmDialog from "../components/common/ConfirmDialog";
-import { useChatStore } from "../store/chatStore";
+import { ReportSheet } from "../components/common/ReportSheet";
+import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
 
 function CountButton({
   label,
@@ -116,6 +117,8 @@ export default function ProfilePage() {
   const [showFollowing, setShowFollowing] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showReportSheet, setShowReportSheet] = useState(false);
+  const [muteLoading, setMuteLoading] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -276,7 +279,6 @@ export default function ProfilePage() {
     setShowBlockConfirm(true);
   };
 
-  const chatStore = useChatStore();
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
 
@@ -284,15 +286,44 @@ export default function ProfilePage() {
     if (!profile) return;
     setBlockLoading(true);
     try {
-      await api.settings.blockUser(profile.id);
-      chatStore.blockLocal(profile.id);
-      window.dispatchEvent(new CustomEvent('bitglow:block-changed', { detail: { userId: profile.id, blocked: true } }));
+      await blockUserEverywhere(profile);
       navigate('/home');
     } catch (err) {
-      console.error('Failed to block', err);
+      window.alert(err instanceof Error ? err.message : "Failed to block user");
     } finally {
       setBlockLoading(false);
       setShowBlockConfirm(false);
+    }
+  };
+
+  const handleMuteUser = async () => {
+    if (!profile || isOwner || muteLoading) return;
+    setShowMoreMenu(false);
+    setMuteLoading(true);
+    try {
+      await muteUserEverywhere(profile);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to mute user");
+    } finally {
+      setMuteLoading(false);
+    }
+  };
+
+  const handleCopyProfileLink = async () => {
+    if (!profile) return;
+    const url = `${window.location.origin}/profile/${profile.username}`;
+    await navigator.clipboard.writeText(url);
+    setShareLabel("Copied");
+    setTimeout(() => setShareLabel("Share Profile"), 2000);
+  };
+
+  const handleReportSubmit = async (reason: string) => {
+    if (!profile) return;
+    try {
+      await reportUser(profile.id, reason);
+      setShowReportSheet(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to submit report");
     }
   };
 
@@ -420,18 +451,40 @@ export default function ProfilePage() {
                       </button>
                     )}
                     <button 
-                      onClick={() => { /* Block logic placeholder */ setShowMoreMenu(false); }}
+                      onClick={handleShare}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      Share Profile
+                    </button>
+                    <button 
+                      onClick={() => { void handleCopyProfileLink(); setShowMoreMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Copy Profile Link
+                    </button>
+                    <button 
+                      onClick={() => { setShowReportSheet(true); setShowMoreMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                    >
+                      <UserX className="w-4 h-4" />
+                      Report User
+                    </button>
+                    <button 
+                      onClick={() => void handleMuteUser()}
+                      disabled={muteLoading}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all disabled:opacity-50"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                      Mute User
+                    </button>
+                    <button 
+                      onClick={handleBlockUser}
                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
                     >
                       <UserX className="w-4 h-4" />
                       Block User
-                    </button>
-                    <button 
-                      onClick={() => { handleShare(); setShowMoreMenu(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-                    >
-                      <Link2 className="w-4 h-4" />
-                      Share Profile
                     </button>
                   </div>
                 )}
@@ -617,6 +670,14 @@ export default function ProfilePage() {
         onConfirm={handleBlockConfirm}
         onClose={() => setShowBlockConfirm(false)}
         loading={blockLoading}
+      />
+      <ReportSheet
+        isOpen={showReportSheet}
+        title="Report User"
+        prompt={`Why are you reporting @${profile.username}?`}
+        options={["Harassment or bullying", "Spam or scams", "Hate speech", "Impersonation", "Inappropriate content"]}
+        onClose={() => setShowReportSheet(false)}
+        onSubmit={handleReportSubmit}
       />
     </div>
   );

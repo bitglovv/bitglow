@@ -19,6 +19,7 @@ export interface FriendRow {
     username: string;
     display_name?: string;
     avatar_url?: string;
+    is_verified?: boolean;
 }
 
 export interface PostRow {
@@ -930,7 +931,7 @@ export const db = {
                     userAgent: "Background Account Purge Job",
                 });
                 purgedCount++;
-                console.log(`[Purge Job] Successfully purged expired account: @${u.username} (${u.id})`);
+                console.info(`[Purge Job] Successfully purged expired account: @${u.username} (${u.id})`);
             } catch (err) {
                 console.error(`[Purge Job] Failed to purge user ${u.id}:`, err);
             }
@@ -1044,7 +1045,7 @@ export const db = {
     },
 
     async getUserById(id: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_verified, is_banned, is_private, online_status_visible, created_at, updated_at FROM users WHERE id = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [id]);
+        const res = await pool.query('SELECT id, username, display_name as "displayName", email, avatar_url as "avatarUrl", website, location, bio, followers_count as "followersCount", follows_count as "followsCount", role, is_verified as "isVerified", is_banned as "isBanned", is_private as "isPrivate", online_status_visible as "onlineStatusVisible", created_at, updated_at FROM users WHERE id = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [id]);
         return res.rows[0];
     },
 
@@ -1200,6 +1201,8 @@ export const db = {
             return true;
         }
 
+        if (await this.isBlockedEitherDirection(viewerId, room.ownerId)) return false;
+
         return this.isMutual(viewerId, room.ownerId);
     },
 
@@ -1215,6 +1218,8 @@ export const db = {
                 isMine: true,
             };
         }
+
+        if (await this.isBlockedEitherDirection(viewerId, room.ownerId)) return null;
 
         const allowed = await this.isMutual(viewerId, room.ownerId);
         if (!allowed) {
@@ -1272,6 +1277,16 @@ export const db = {
                      WHERE f1.status = 'accepted'
                        AND f2.status = 'accepted'
                  )
+               )
+               AND NOT EXISTS (
+                   SELECT 1 FROM friends bf
+                   WHERE ((bf.user_id = $1 AND bf.friend_id = cr.created_by)
+                       OR (bf.user_id = cr.created_by AND bf.friend_id = $1))
+                     AND bf.status = 'blocked'
+               )
+               AND NOT EXISTS (
+                   SELECT 1 FROM muted_users mu
+                   WHERE mu.user_id = $1 AND mu.muted_id = cr.created_by
                )
              ORDER BY CASE WHEN cr.created_by = $1 THEN 0 ELSE 1 END,
                       last_message.last_message_at DESC NULLS LAST,
@@ -1453,6 +1468,10 @@ export const db = {
         const deliveries: Array<{ room: any; message: any }> = [];
 
         for (const ownerId of ownerIds) {
+            if (ownerId !== senderId) {
+                if (await this.isBlockedEitherDirection(senderId, ownerId)) continue;
+                if (await this.isMuted(ownerId, senderId)) continue;
+            }
             const room = ownerId === senderId
                 ? senderRoom
                 : await this.getOrCreateOwnerLiveRoom(ownerId);
@@ -1665,10 +1684,6 @@ export const db = {
                    WHERE ((f.user_id = $1 AND f.friend_id = u.id)
                        OR (f.user_id = u.id AND f.friend_id = $1))
                      AND f.status = 'blocked'
-               )
-               AND NOT EXISTS (
-                   SELECT 1 FROM muted_users m
-                   WHERE m.user_id = $1 AND m.muted_id = u.id
                )
              ORDER BY m.created_at DESC NULLS LAST, c.created_at DESC
              LIMIT $2 OFFSET $3`,
@@ -2311,7 +2326,7 @@ export const db = {
 
     async getBlockedUsers(userId: string) {
         const res = await pool.query(
-            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl", u.is_verified as "isVerified"
              FROM friends f
              JOIN users u ON u.id = f.friend_id
              WHERE f.user_id = $1 AND f.status = 'blocked' AND COALESCE(u.is_deleted, FALSE) = FALSE
@@ -2380,7 +2395,7 @@ export const db = {
 
     async getMutedUsers(userId: string) {
         const res = await pool.query(
-            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl", u.is_verified as "isVerified"
              FROM muted_users m
              JOIN users u ON u.id = m.muted_id
              WHERE m.user_id = $1 AND COALESCE(u.is_deleted, FALSE) = FALSE
@@ -2598,3 +2613,4 @@ export const db = {
         return res.rows[0]?.email_verified ?? false;
     }
 };
+

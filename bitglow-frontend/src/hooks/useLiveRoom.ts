@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, api, LiveRoom } from "../services/api";
+import { useChatStore } from "../store/chatStore";
 
 type ChatMessage = {
   id: string;
@@ -155,6 +156,8 @@ export function useLiveRoom(token: string | null) {
         if (data.type === "server:room:message" && data.roomId === activeRoomIdRef.current) {
           const msg = data.message;
           if (!msg) return;
+          const { restrictedUsers, mutedUsers } = useChatStore.getState();
+          if (msg.userId && (restrictedUsers.has(msg.userId) || mutedUsers.has(msg.userId))) return;
           const msgTs: number = msg.ts ?? Date.now();
           if (Date.now() - msgTs >= MESSAGE_TTL) return;
 
@@ -168,8 +171,9 @@ export function useLiveRoom(token: string | null) {
         }
 
         if (data.type === "server:room:presence" && data.roomId === activeRoomIdRef.current) {
+          const { restrictedUsers, mutedUsers } = useChatStore.getState();
           setRoomOnline(Number(data.count) || 0);
-          setRoomUsers(data.users || []);
+          setRoomUsers((data.users || []).filter((u: RoomUser) => !restrictedUsers.has(u.id) && !mutedUsers.has(u.id)));
         }
 
         if (data.type === "server:room:system" && data.roomId === activeRoomIdRef.current) {
@@ -229,6 +233,26 @@ export function useLiveRoom(token: string | null) {
       }
     };
   }, [token, openOwnLiveRoom, reconnectAttempt]);
+
+  useEffect(() => {
+    const applyRelationshipChange = (event: Event) => {
+      const { userId, blocked, muted } = (event as CustomEvent).detail || {};
+      if (!userId || (!blocked && !muted)) return;
+      setMessages((prev) => prev.filter((message) => message.userId !== userId));
+      setRoomUsers((prev) => prev.filter((roomUser) => roomUser.id !== userId));
+      setTypingUsers((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    };
+    window.addEventListener("bitglow:block-changed", applyRelationshipChange);
+    window.addEventListener("bitglow:mute-changed", applyRelationshipChange);
+    return () => {
+      window.removeEventListener("bitglow:block-changed", applyRelationshipChange);
+      window.removeEventListener("bitglow:mute-changed", applyRelationshipChange);
+    };
+  }, []);
 
   useEffect(() => {
     const socket = socketRef.current;

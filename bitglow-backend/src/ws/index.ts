@@ -49,7 +49,7 @@ export function startWS(httpServer: any) {
         };
 
     clients.add(meta);
-    console.log(`✅ Client ${userId} connected. Total: ${clients.size}`);
+    console.info(`✅ Client ${userId} connected. Total: ${clients.size}`);
 
     // Broadcast updated presence
     broadcastPresence(clients);
@@ -81,7 +81,7 @@ export function startWS(httpServer: any) {
       clearTimeout(helloTimeout);
       const joinedRooms = Array.from(meta.rooms);
       clients.delete(meta);
-      console.log(`❌ Client ${userId} disconnected. Total: ${clients.size}`);
+      console.info(`❌ Client ${userId} disconnected. Total: ${clients.size}`);
       
       broadcastPresence(clients);
 
@@ -117,7 +117,7 @@ export function startWS(httpServer: any) {
     });
   });
 
-  console.log("🚀 WebSocket server ready");
+  console.info("🚀 WebSocket server ready");
 }
 
 export function disconnectUserSockets(userId: string) {
@@ -131,3 +131,37 @@ export function disconnectUserSockets(userId: string) {
     }
   }
 }
+
+export function broadcastUserRelationshipUpdate(actorId: string, targetId: string, kind: "block" | "mute" | "unblock" | "unmute") {
+  const payload = JSON.stringify({
+    type: "server:user_relationship:update",
+    kind,
+    actorId,
+    targetId,
+    ts: Date.now(),
+  });
+
+  for (const client of clients) {
+    if ((client.userId === actorId || client.userId === targetId) && client.socket.readyState === WebSocket.OPEN) {
+      client.socket.send(payload);
+    }
+  }
+
+  if (kind === "block") {
+    for (const client of clients) {
+      if (client.userId !== actorId && client.userId !== targetId) continue;
+      const rooms = Array.from(client.rooms);
+      for (const roomId of rooms) {
+        const ownerId = client.roomOwners.get(roomId);
+        if (ownerId !== actorId && ownerId !== targetId) continue;
+        client.rooms.delete(roomId);
+        client.roomOwners.delete(roomId);
+        const users = roomUsers.get(roomId);
+        users?.delete(client.userId);
+        if (users?.size === 0) roomUsers.delete(roomId);
+        broadcastRoomPresence(clients, roomId);
+      }
+    }
+  }
+}
+

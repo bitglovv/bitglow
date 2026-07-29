@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
 import { InboxSidebar } from "../components/chat/InboxSidebar";
@@ -7,6 +8,9 @@ import { EmptyChatState } from "../components/chat/EmptyChatState";
 import { useChatStore } from "../store/chatStore";
 import { useVisualViewport } from "../hooks/useVisualViewport";
 import { api } from "../services/api";
+import ConfirmDialog from "../components/common/ConfirmDialog";
+import { ReportSheet } from "../components/common/ReportSheet";
+import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
 
 const STACKED_MAX_PX = 767;
 
@@ -17,6 +21,7 @@ function isStackedMessagesLayout() {
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const dmChatPushedRef = useRef(false);
   const {
     conversations,
@@ -40,6 +45,9 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
   const [isStackedLayout, setIsStackedLayout] = useState(isStackedMessagesLayout);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showReportSheet, setShowReportSheet] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const viewport = useVisualViewport();
 
   useEffect(() => {
@@ -158,6 +166,50 @@ export default function MessagesPage() {
     await sendMessage(activeConversationId, text, user.id);
   };
 
+  const activeTarget = activeConversation ? {
+    id: activeConversation.userId,
+    username: activeConversation.username,
+    displayName: activeConversation.displayName,
+    avatarUrl: activeConversation.avatarUrl,
+  } : null;
+
+  const handleBlockActive = async () => {
+    if (!activeTarget) return;
+    setActionLoading(true);
+    try {
+      await blockUserEverywhere(activeTarget);
+      setActiveConversation(null);
+      setMobileView("inbox");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to block user");
+    } finally {
+      setActionLoading(false);
+      setShowBlockConfirm(false);
+    }
+  };
+
+  const handleMuteActive = async () => {
+    if (!activeTarget || actionLoading) return;
+    setActionLoading(true);
+    try {
+      await muteUserEverywhere(activeTarget);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to mute user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReportActive = async (reason: string) => {
+    if (!activeTarget) return;
+    try {
+      await reportUser(activeTarget.id, reason);
+      setShowReportSheet(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to submit report");
+    }
+  };
+
   const showMobileInbox = mobileView === "inbox";
 
   return (
@@ -234,12 +286,34 @@ export default function MessagesPage() {
                   }
                 }
               }}
+              onViewProfile={() => navigate(`/profile/${activeConversation.username}`)}
+              onMuteUser={() => void handleMuteActive()}
+              onBlockUser={() => setShowBlockConfirm(true)}
+              onReportUser={() => setShowReportSheet(true)}
             />
           ) : (
             <EmptyChatState />
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={showBlockConfirm}
+        title="Block user"
+        message={<div>Block @{activeTarget?.username}? This closes the chat and prevents future messages.</div>}
+        confirmLabel="Block"
+        cancelLabel="Cancel"
+        loading={actionLoading}
+        onConfirm={handleBlockActive}
+        onClose={() => setShowBlockConfirm(false)}
+      />
+      <ReportSheet
+        isOpen={showReportSheet}
+        title="Report User"
+        prompt={`Why are you reporting @${activeTarget?.username || "this user"}?`}
+        options={["Harassment or bullying", "Spam or scams", "Hate speech", "Impersonation", "Inappropriate content"]}
+        onClose={() => setShowReportSheet(false)}
+        onSubmit={handleReportActive}
+      />
     </div>
   );
 }

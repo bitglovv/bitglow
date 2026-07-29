@@ -269,9 +269,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   handleIncomingMessage: (msg: DMMessage & { receiverId: string }, currentUserId: string, clientMsgId?: string) => {
-    const { activeConversationId } = get();
+    const { activeConversationId, restrictedUsers, mutedUsers } = get();
     const otherUserId = msg.senderId === currentUserId ? msg.receiverId : msg.senderId;
     const isMe = msg.senderId === currentUserId;
+    if (restrictedUsers.has(otherUserId)) return;
 
     set((state) => {
       const prevMsgs = state.messages[otherUserId] || [];
@@ -304,7 +305,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const convs = [...state.conversations];
       const idx = convs.findIndex((c) => c.userId === otherUserId);
       const isActive = activeConversationId === otherUserId;
-      const unreadDelta = !isMe && !isActive ? 1 : 0;
+      const unreadDelta = !isMe && !isActive && !mutedUsers.has(otherUserId) ? 1 : 0;
 
       if (idx !== -1) {
         const copy = {
@@ -390,6 +391,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         restrictedUsers: next,
         conversations: state.conversations.filter((c) => c.userId !== userId),
         messages: Object.fromEntries(Object.entries(state.messages).filter(([k]) => k !== userId)),
+        friends: state.friends.filter((f) => f.id !== userId),
+        activeConversationId: state.activeConversationId === userId ? null : state.activeConversationId,
       } as any;
     });
   },

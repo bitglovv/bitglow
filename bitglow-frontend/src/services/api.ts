@@ -65,6 +65,7 @@ export type User = {
     postsCount?: number;
     isPrivate?: boolean;
     onlineStatusVisible?: boolean;
+    isVerified?: boolean;
 };
 
 export type DMMessage = {
@@ -108,6 +109,7 @@ export type Friend = {
     username: string;
     displayName?: string;
     avatarUrl?: string;
+    isVerified?: boolean;
 };
 
 export type FollowStatus = "pending" | "accepted";

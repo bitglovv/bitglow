@@ -135,6 +135,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 useChatStore.getState().handleEditedMessage(data.message, user.id);
             } else if (data.type === "server:dm:deleted") {
                 useChatStore.getState().handleDeletedMessage(data, user.id);
+            } else if (data.type === "server:user_relationship:update") {
+                const otherId = data.actorId === user.id ? data.targetId : data.actorId;
+                if (!otherId) return;
+                if (data.kind === "block") {
+                    useChatStore.getState().blockLocal(otherId);
+                    window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: otherId, blocked: true } }));
+                } else if (data.kind === "unblock" && data.actorId === user.id) {
+                    useChatStore.getState().unblockLocal(otherId);
+                    window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: otherId, blocked: false } }));
+                } else if (data.kind === "mute" && data.actorId === user.id) {
+                    useChatStore.getState().muteLocal(otherId);
+                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: otherId, muted: true } }));
+                } else if (data.kind === "unmute" && data.actorId === user.id) {
+                    useChatStore.getState().unmuteLocal(otherId);
+                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: otherId, muted: false } }));
+                }
             }
         });
 
