@@ -1,25 +1,27 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { MoreHorizontal } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useChatStore } from "../../store/chatStore";
 import ConfirmDialog from "../common/ConfirmDialog";
 import { ReportSheet } from "../common/ReportSheet";
+import ActionSheet from "../common/ActionSheet";
 import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../../utils/socialActions";
 
-export default function ParticipantMenu({ user }: { user: { id: string; username: string; displayName?: string; avatarUrl?: string } }) {
+type Participant = {
+  id: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+};
+
+export default function ParticipantMenu({ user }: { user: Participant }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const chatStore = useChatStore();
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (!ref.current) return; if (!ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
 
   const handleBlock = async () => {
     setLoading(true);
@@ -27,7 +29,10 @@ export default function ParticipantMenu({ user }: { user: { id: string; username
       await blockUserEverywhere(user);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to block user");
-    } finally { setLoading(false); setOpen(false); setShowBlockConfirm(false); }
+    } finally {
+      setLoading(false);
+      setShowBlockConfirm(false);
+    }
   };
 
   const handleMute = async () => {
@@ -36,7 +41,9 @@ export default function ParticipantMenu({ user }: { user: { id: string; username
       await muteUserEverywhere(user);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to mute user");
-    } finally { setLoading(false); setOpen(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReport = async (reason: string) => {
@@ -48,18 +55,41 @@ export default function ParticipantMenu({ user }: { user: { id: string; username
     }
   };
 
+  const handleMessage = () => {
+    sessionStorage.setItem("bitglow:dmUserId", user.id);
+    sessionStorage.setItem("bitglow:dmUsername", user.username);
+    if (user.displayName) sessionStorage.setItem("bitglow:dmDisplayName", user.displayName);
+    if (user.avatarUrl) sessionStorage.setItem("bitglow:dmAvatarUrl", user.avatarUrl);
+    navigate("/messages");
+    chatStore.openFriendConversation({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+    });
+  };
+
   return (
-    <div className="relative inline-block" ref={ref}>
-      <Button size="sm" variant="secondary" onClick={() => setOpen((v) => !v)}>•••</Button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-zinc-950 p-2 shadow-2xl z-50">
-          <button className="w-full text-left px-3 py-2 rounded-md text-sm text-white hover:bg-white/[0.02]" onClick={() => navigate(`/profile/${user.username}`)}>View Profile</button>
-          <button className="w-full text-left px-3 py-2 rounded-md text-sm text-white hover:bg-white/[0.02]" onClick={() => { sessionStorage.setItem("bitglow:dmUserId", user.id); sessionStorage.setItem("bitglow:dmUsername", user.username); if (user.displayName) sessionStorage.setItem("bitglow:dmDisplayName", user.displayName); if (user.avatarUrl) sessionStorage.setItem("bitglow:dmAvatarUrl", user.avatarUrl); navigate('/messages'); chatStore.openFriendConversation({ id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl }); }}>Message</button>
-          <button className="w-full text-left px-3 py-2 rounded-md text-sm text-zinc-300 hover:bg-white/[0.02]" onClick={handleMute} disabled={loading}>Mute</button>
-          <button className="w-full text-left px-3 py-2 rounded-md text-sm text-rose-400 hover:bg-rose-500/10" onClick={() => { setOpen(false); setShowBlockConfirm(true); }} disabled={loading}>Block</button>
-          <button className="w-full text-left px-3 py-2 rounded-md text-sm text-white hover:bg-white/[0.02]" onClick={() => { setOpen(false); setShowReportSheet(true); }}>Report</button>
-        </div>
-      )}
+    <div className="relative inline-block">
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)} aria-label={`Actions for @${user.username}`}>
+        <MoreHorizontal className="h-4 w-4" />
+      </Button>
+
+      <ActionSheet
+        open={open}
+        title={`@${user.username}`}
+        onClose={() => setOpen(false)}
+        items={[
+          { label: "View Profile", onClick: () => navigate(`/profile/${user.username}`) },
+          { label: "Message", onClick: handleMessage },
+          { label: "Report User", onClick: () => setShowReportSheet(true) },
+          { type: "separator" },
+          { label: "Mute User", onClick: () => void handleMute(), disabled: loading },
+          { label: "Block User", onClick: () => setShowBlockConfirm(true), danger: true, disabled: loading },
+          { type: "separator" },
+        ]}
+      />
+
       <ConfirmDialog
         open={showBlockConfirm}
         title="Block user"

@@ -1,8 +1,9 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MoreVertical } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
-import MoreMenu from "../common/MoreMenu";
+import ActionSheet from "../common/ActionSheet";
 
 type Props = {
   conversation: Conversation;
@@ -17,6 +18,8 @@ type Props = {
 };
 
 export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true, onViewProfile, onMuteUser, onBlockUser, onReportUser }: Props) => {
+  const [showActionSheet, setShowActionSheet] = useState(false);
+
   return (
     <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -48,12 +51,26 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
           </span>
         </Link>
 
-        <MoreMenu
+        <button
+          type="button"
+          onClick={() => setShowActionSheet(true)}
+          aria-label="More conversation actions"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-1 focus:ring-white/20 active:scale-95"
+        >
+          <MoreVertical className="h-5 w-5" />
+        </button>
+
+        <ActionSheet
+          open={showActionSheet}
+          title={conversation.displayName || conversation.username}
+          onClose={() => setShowActionSheet(false)}
           items={[
             { label: "View Profile", onClick: onViewProfile || (() => {}) },
+            { label: "Report User", onClick: onReportUser || (() => {}) },
+            { type: "separator" },
             { label: "Mute User", onClick: onMuteUser || (() => {}) },
             { label: "Block User", onClick: onBlockUser || (() => {}), danger: true },
-            { label: "Report User", onClick: onReportUser || (() => {}) },
+            { type: "separator" },
           ]}
         />
       </div>

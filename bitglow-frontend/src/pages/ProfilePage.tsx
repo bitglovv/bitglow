@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Header from "../components/common/Header";
 import { api, User, Friend } from "../services/api";
@@ -10,13 +10,13 @@ import {
   Video, UserPlus, ArrowLeft, MoreVertical, 
   UserMinus, UserX, Link2 
 } from "lucide-react";
-import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { ReportSheet } from "../components/common/ReportSheet";
 import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
+import ActionSheet from "../components/common/ActionSheet";
 
 function CountButton({
   label,
@@ -116,11 +116,9 @@ export default function ProfilePage() {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [muteLoading, setMuteLoading] = useState(false);
-
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const isOwner = loggedInUser && profile && loggedInUser.username === profile.username;
   const isOnline =
@@ -137,16 +135,6 @@ export default function ProfilePage() {
   const friendsCount = isOwner ? friends.length : ((profile as any)?.friendsCount ?? 0);
   const isMutualFriend = !!profile && friends.some((f) => f.id === profile.id);
   const canOpenLiveRoom = !!profile && (isOwner || isMutualFriend);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMoreMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,7 +263,6 @@ export default function ProfilePage() {
 
   const handleBlockUser = async () => {
     if (!profile || isOwner) return;
-    setShowMoreMenu(false);
     setShowBlockConfirm(true);
   };
 
@@ -298,7 +285,6 @@ export default function ProfilePage() {
 
   const handleMuteUser = async () => {
     if (!profile || isOwner || muteLoading) return;
-    setShowMoreMenu(false);
     setMuteLoading(true);
     try {
       await muteUserEverywhere(profile);
@@ -430,65 +416,15 @@ export default function ProfilePage() {
                 <Settings className="h-5 w-5" />
               </Link>
             ) : (
-              <div className="relative" ref={menuRef}>
+              <>
                  <button 
-                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  onClick={() => setShowActionSheet(true)}
                   className="p-2.5 rounded-2xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-white transition-all hover:bg-white/10"
                   aria-label="More Options"
                 >
                   <MoreVertical className="w-6 h-6" />
                 </button>
-
-                {showMoreMenu && (
-                  <div className="absolute right-0 top-12 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200 z-[100]">
-                    {(isFollowing || isMutualFriend) && (
-                       <button 
-                        onClick={() => { handleFollowToggle(); setShowMoreMenu(false); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-                      >
-                        <UserMinus className="w-4 h-4" />
-                        {isMutualFriend ? "Unfriend" : "Unfollow"}
-                      </button>
-                    )}
-                    <button 
-                      onClick={handleShare}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      Share Profile
-                    </button>
-                    <button 
-                      onClick={() => { void handleCopyProfileLink(); setShowMoreMenu(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-                    >
-                      <Link2 className="w-4 h-4" />
-                      Copy Profile Link
-                    </button>
-                    <button 
-                      onClick={() => { setShowReportSheet(true); setShowMoreMenu(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-                    >
-                      <UserX className="w-4 h-4" />
-                      Report User
-                    </button>
-                    <button 
-                      onClick={() => void handleMuteUser()}
-                      disabled={muteLoading}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all disabled:opacity-50"
-                    >
-                      <UserMinus className="w-4 h-4" />
-                      Mute User
-                    </button>
-                    <button 
-                      onClick={handleBlockUser}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
-                    >
-                      <UserX className="w-4 h-4" />
-                      Block User
-                    </button>
-                  </div>
-                )}
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -670,6 +606,20 @@ export default function ProfilePage() {
         onConfirm={handleBlockConfirm}
         onClose={() => setShowBlockConfirm(false)}
         loading={blockLoading}
+      />
+      <ActionSheet
+        open={showActionSheet}
+        title={`@${profile.username}`}
+        onClose={() => setShowActionSheet(false)}
+        items={[
+          { label: "Share Profile", onClick: handleShare, icon: <Share2 className="h-4 w-4" /> },
+          { label: "Copy Profile Link", onClick: () => void handleCopyProfileLink(), icon: <Link2 className="h-4 w-4" /> },
+          { label: "Report User", onClick: () => setShowReportSheet(true), icon: <UserX className="h-4 w-4" /> },
+          { type: "separator" },
+          { label: "Mute User", onClick: () => void handleMuteUser(), disabled: muteLoading, icon: <UserMinus className="h-4 w-4" /> },
+          { label: "Block User", onClick: handleBlockUser, danger: true, icon: <UserX className="h-4 w-4" /> },
+          { type: "separator" },
+        ]}
       />
       <ReportSheet
         isOpen={showReportSheet}
