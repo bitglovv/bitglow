@@ -1,6 +1,5 @@
 -- BitGlow production Row Level Security
 -- Date: 2026-07-29
---
 -- Design:
 -- - Fastify remains the privileged application API through its direct pg connection.
 -- - Supabase anon/authenticated roles get least-privilege access only where useful.
