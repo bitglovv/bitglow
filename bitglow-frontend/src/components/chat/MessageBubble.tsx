@@ -177,7 +177,12 @@ export function MessageBubble(props: MessageBubbleProps) {
       <div className={clsx("flex max-w-[85%] flex-col md:max-w-[65%] xl:max-w-[55%]", isMe ? "items-end" : "items-start")}>
         {!isMe && isFirstInGroup && username && username !== "User" && username !== "Other" && (
           <div className="flex h-6 items-center mb-1 ml-1">
-            <span className="text-[12px] font-bold text-zinc-400">{username}</span>
+            <Link
+              to={`/profile/${username}`}
+              className="text-[12px] font-bold text-zinc-400 transition-colors hover:text-white focus:outline-none focus:ring-1 focus:ring-white/20 rounded-sm"
+            >
+              {username}
+            </Link>
           </div>
         )}
         <div
