@@ -52,6 +52,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const [convs, friendList] = await Promise.all([api.dms.list(), api.user.friends()]);
       
+      // Normalize avatar fields returned by different backend endpoints (avatar, avatar_url, avatarUrl)
+      const normalizeAvatar = (obj: any) => {
+        if (!obj) return undefined;
+        return obj.avatarUrl ?? obj.avatar ?? obj.avatar_url ?? undefined;
+      };
+
+      const normalizedConversations = (convs || []).map((c: any) => ({
+        ...c,
+        avatarUrl: normalizeAvatar(c),
+      }));
+
+      const normalizedFriends = (friendList || []).map((f: any) => ({
+        ...f,
+        avatarUrl: normalizeAvatar(f),
+      }));
+
       const restrictedStr = localStorage.getItem("bitglow:restricted_users") || "[]";
       let restricted = new Set<string>();
       try {
@@ -65,7 +81,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Keep conversations intact even for users marked as restricted so DM history is preserved locally.
       // Server-side access rules still prevent blocked users from viewing profile/posts/messages as appropriate.
       // The UI components will react to restrictedUsers/mutedUsers via events and store reads.
-      set({ conversations: convs, friends: friendList, restrictedUsers: restricted, mutedUsers: muted });
+      set({ conversations: normalizedConversations, friends: normalizedFriends, restrictedUsers: restricted, mutedUsers: muted });
     } finally {
       set({ isLoadingConversations: false });
     }
