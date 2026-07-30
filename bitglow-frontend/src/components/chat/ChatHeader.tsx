@@ -1,5 +1,5 @@
 import { ArrowLeft, MoreVertical } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
@@ -23,6 +23,7 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [moreButtonPressed, setMoreButtonPressed] = useState(false);
 
   useEffect(() => {
     const s = useChatStore.getState();
@@ -63,6 +64,15 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
     } catch (e) { /* ignore */ }
   };
 
+  const handleActionButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail !== 0 && !moreButtonPressed) {
+      return;
+    }
+
+    setShowActionSheet(true);
+    setMoreButtonPressed(false);
+  };
+
   return (
     <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -96,7 +106,9 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
 
         <button
           type="button"
-          onClick={() => setShowActionSheet(true)}
+          onPointerDown={() => setMoreButtonPressed(true)}
+          onPointerLeave={() => setMoreButtonPressed(false)}
+          onClick={handleActionButtonClick}
           aria-label="More conversation actions"
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-1 focus:ring-white/20 active:scale-95"
         >
