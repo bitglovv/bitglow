@@ -18,8 +18,9 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
 
   return (
     <button
-      onClick={() => onSelect(conversation.userId)}
-      className={clsx(
+          onMouseDown={(e) => { e.preventDefault(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(conversation.userId); }}
+          className={clsx(
         "group relative w-full overflow-hidden rounded-[16px] border border-transparent py-2 pl-2.5 text-left transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15", // compact layout: no action menu reserved on the right (inbox is minimal)
         isActive ? "border-white/[0.08] bg-white/[0.05]" : "bg-transparent"
       )}
