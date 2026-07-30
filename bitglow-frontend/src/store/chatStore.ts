@@ -62,9 +62,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       let muted = new Set<string>();
       try { muted = new Set(JSON.parse(mutedStr)); } catch (e) {}
 
-      const filteredConvs = convs.filter(c => !restricted.has(c.userId));
-
-      set({ conversations: filteredConvs, friends: friendList, restrictedUsers: restricted, mutedUsers: muted });
+      // Keep conversations intact even for users marked as restricted so DM history is preserved locally.
+      // Server-side access rules still prevent blocked users from viewing profile/posts/messages as appropriate.
+      // The UI components will react to restrictedUsers/mutedUsers via events and store reads.
+      set({ conversations: convs, friends: friendList, restrictedUsers: restricted, mutedUsers: muted });
     } finally {
       set({ isLoadingConversations: false });
     }
@@ -387,15 +388,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       next.add(userId);
       try { localStorage.setItem("bitglow:restricted_users", JSON.stringify(Array.from(next))); } catch (e) {}
 
+      // Preserve conversation history and messages for audit / UX reasons.
+      // Only mark the user as restricted and remove them from friends list locally.
+      // Active conversation is cleared if it was the blocked user.
       return {
         restrictedUsers: next,
-        conversations: state.conversations.filter((c) => c.userId !== userId),
-        messages: Object.fromEntries(Object.entries(state.messages).filter(([k]) => k !== userId)),
         friends: state.friends.filter((f) => f.id !== userId),
         activeConversationId: state.activeConversationId === userId ? null : state.activeConversationId,
       } as any;
     });
   },
+
 
   unblockLocal: (userId: string) => {
     set((state) => {

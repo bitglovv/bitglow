@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "../ui/Button";
@@ -6,7 +6,7 @@ import { useChatStore } from "../../store/chatStore";
 import ConfirmDialog from "../common/ConfirmDialog";
 import { ReportSheet } from "../common/ReportSheet";
 import ActionSheet from "../common/ActionSheet";
-import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../../utils/socialActions";
+import { blockUserEverywhere, muteUserEverywhere, reportUser, unmuteUserEverywhere, unblockUserEverywhere } from "../../utils/socialActions";
 
 type Participant = {
   id: string;
@@ -20,13 +20,41 @@ export default function ParticipantMenu({ user }: { user: Participant }) {
   const [loading, setLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const navigate = useNavigate();
   const chatStore = useChatStore();
+
+  // initialize local state from store
+  useEffect(() => {
+    const s = useChatStore.getState();
+    setIsMuted(!!s.mutedUsers.has(user.id));
+    setIsBlocked(!!s.restrictedUsers.has(user.id));
+  }, [user.id]);
+
+  // listen for global changes (keeps menus in sync immediately)
+  useEffect(() => {
+    const onMute = (e: Event) => {
+      const { userId, muted } = (e as CustomEvent).detail || {};
+      if (userId === user.id) setIsMuted(!!muted);
+    };
+    const onBlock = (e: Event) => {
+      const { userId, blocked } = (e as CustomEvent).detail || {};
+      if (userId === user.id) setIsBlocked(!!blocked);
+    };
+    window.addEventListener("bitglow:mute-changed", onMute);
+    window.addEventListener("bitglow:block-changed", onBlock);
+    return () => {
+      window.removeEventListener("bitglow:mute-changed", onMute);
+      window.removeEventListener("bitglow:block-changed", onBlock);
+    };
+  }, [user.id]);
 
   const handleBlock = async () => {
     setLoading(true);
     try {
       await blockUserEverywhere(user);
+      setIsBlocked(true);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to block user");
     } finally {
@@ -38,11 +66,30 @@ export default function ParticipantMenu({ user }: { user: Participant }) {
   const handleMute = async () => {
     setLoading(true);
     try {
-      await muteUserEverywhere(user);
+      if (isMuted) {
+        await unmuteUserEverywhere(user.id);
+        setIsMuted(false);
+      } else {
+        await muteUserEverywhere(user);
+        setIsMuted(true);
+      }
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to mute user");
+      window.alert(err instanceof Error ? err.message : "Failed to toggle mute");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleBlock = async () => {
+    if (isBlocked) {
+      try {
+        await unblockUserEverywhere(user.id);
+        setIsBlocked(false);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+      }
+    } else {
+      setShowBlockConfirm(true);
     }
   };
 
@@ -83,10 +130,8 @@ export default function ParticipantMenu({ user }: { user: Participant }) {
           { label: "View Profile", onClick: () => navigate(`/profile/${user.username}`) },
           { label: "Message", onClick: handleMessage },
           { label: "Report User", onClick: () => setShowReportSheet(true) },
-          { type: "separator" },
-          { label: "Mute User", onClick: () => void handleMute(), disabled: loading },
-          { label: "Block User", onClick: () => setShowBlockConfirm(true), danger: true, disabled: loading },
-          { type: "separator" },
+          { label: isMuted ? "Unmute User" : "Mute User", onClick: () => void handleMute(), disabled: loading },
+          { label: isBlocked ? "Unblock User" : "Block User", onClick: () => void handleToggleBlock(), danger: !isBlocked, disabled: loading },
         ]}
       />
 

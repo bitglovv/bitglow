@@ -22,13 +22,14 @@ export async function dmRoutes(fastify: FastifyInstance) {
         const conversations = rows.map((r: any) => ({
             userId: r.other_id,
             username: r.other_username,
-            displayName: r.other_display_name || r.other_username,
-            avatarUrl: r.other_avatar_url,
+            displayName: r.is_masked ? 'BitGlow User' : (r.other_display_name || r.other_username),
+            avatarUrl: r.is_masked ? null : r.other_avatar_url,
             lastMessage: r.last_message || "",
             lastMessageSenderId: r.last_message_sender_id || null,
             lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
             unreadCount: Number(r.unread_count || 0),
-            conversationStatus: r.conversationStatus || r.status || "accepted"
+            conversationStatus: r.conversationStatus || r.status || "accepted",
+            isMasked: !!r.is_masked
         }));
 
         return conversations;
@@ -54,7 +55,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
 
         const convo = await db.getOrCreateDMConversation(userId, otherId);
-        if (!convo) return reply.code(403).send({ message: "Messaging blocked" });
+        // Always return history even if a block exists; masking of participant details is handled in the conversation list.
+        if (!convo) return reply.code(404).send({ message: "Conversation not found" });
         const messages = await db.getDMHistory(convo.id, 200);
         await db.markDMConversationRead(convo.id, userId);
 
@@ -98,9 +100,14 @@ export async function dmRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Invalid message" });
         }
 
+        // Check if recipient has blocked the sender — if so, prevent sending
+        if (await db.isBlockedBy(userId, otherId)) {
+            return reply.code(403).send({ message: "Messaging blocked" });
+        }
+
         // Open messaging enabled
         const convo = await db.getOrCreateDMConversation(userId, otherId);
-        if (!convo) return reply.code(403).send({ message: "Messaging blocked" });
+        if (!convo) return reply.code(404).send({ message: "Conversation not found" });
         const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000), type || 'text', postId, profileId);
 
         const responseMsg = {
@@ -146,8 +153,13 @@ export async function dmRoutes(fastify: FastifyInstance) {
         }
         const source = await db.getForwardableDMMessage(messageId, req.auth.id);
         if (!source) return reply.code(404).send({ message: "Message not found" });
+        // Prevent forwarding if the target user has blocked the sender
+        if (await db.isBlockedBy(req.auth.id, targetUserId)) {
+            return reply.code(403).send({ message: "Messaging blocked" });
+        }
+
         const conversation = await db.getOrCreateDMConversation(req.auth.id, targetUserId);
-        if (!conversation) return reply.code(403).send({ message: "Messaging blocked" });
+        if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
         const saved = await db.saveDMMessage(
             conversation.id,
             req.auth.id,

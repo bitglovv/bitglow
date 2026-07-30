@@ -15,7 +15,8 @@ import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { ReportSheet } from "../components/common/ReportSheet";
-import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
+import { blockUserEverywhere, muteUserEverywhere, reportUser, unmuteUserEverywhere, unblockUserEverywhere } from "../utils/socialActions";
+import { useChatStore } from "../store/chatStore";
 import ActionSheet from "../components/common/ActionSheet";
 
 function CountButton({
@@ -119,6 +120,8 @@ export default function ProfilePage() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [muteLoading, setMuteLoading] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const isOwner = loggedInUser && profile && loggedInUser.username === profile.username;
   const isOnline =
@@ -212,6 +215,36 @@ export default function ProfilePage() {
     const isPendingUser = pendingFollows.some((f) => f.id === profile.id);
     setIsFollowing(isFollowingUser || isFriend);
     setIsPending(isPendingUser);
+
+    // initialize mute/block state from chat store for immediate UI feedback
+    const chatState = useChatStore.getState();
+    setIsMuted(!!profile.id && chatState.mutedUsers.has(profile.id));
+    setIsBlocked(!!profile.id && chatState.restrictedUsers.has(profile.id));
+
+    const onMuteChanged = (event: Event) => {
+      const { userId, muted } = (event as CustomEvent).detail || {};
+      if (!userId || userId !== profile.id) return;
+      setIsMuted(!!muted);
+    };
+    const onBlockChanged = (event: Event) => {
+      const { userId, blocked } = (event as CustomEvent).detail || {};
+      if (!userId || userId !== profile.id) return;
+      setIsBlocked(!!blocked);
+      // if blocked, reflect relationship removals immediately in UI
+      if (blocked) {
+        setIsFollowing(false);
+        setIsPending(false);
+        setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
+        setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+      }
+    };
+
+    window.addEventListener("bitglow:mute-changed", onMuteChanged);
+    window.addEventListener("bitglow:block-changed", onBlockChanged);
+    return () => {
+      window.removeEventListener("bitglow:mute-changed", onMuteChanged);
+      window.removeEventListener("bitglow:block-changed", onBlockChanged);
+    };
   }, [friends, following, pendingFollows, profile, loggedInUser]);
 
   const handleFollowToggle = async () => {
@@ -263,6 +296,7 @@ export default function ProfilePage() {
 
   const handleBlockUser = async () => {
     if (!profile || isOwner) return;
+    // show confirm when attempting to block; unblocking happens inline
     setShowBlockConfirm(true);
   };
 
@@ -274,7 +308,13 @@ export default function ProfilePage() {
     setBlockLoading(true);
     try {
       await blockUserEverywhere(profile);
-      navigate('/home');
+      // immediately remove follow/friend relationships in the UI
+      setIsFollowing(false);
+      setIsPending(false);
+      setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
+      setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+      setIsBlocked(true);
+      // keep on the profile page so users can quickly Unblock if they change their mind
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to block user");
     } finally {
@@ -287,11 +327,31 @@ export default function ProfilePage() {
     if (!profile || isOwner || muteLoading) return;
     setMuteLoading(true);
     try {
-      await muteUserEverywhere(profile);
+      if (isMuted) {
+        await unmuteUserEverywhere(profile.id);
+        setIsMuted(false);
+      } else {
+        await muteUserEverywhere(profile);
+        setIsMuted(true);
+      }
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to mute user");
+      window.alert(err instanceof Error ? err.message : "Failed to toggle mute");
     } finally {
       setMuteLoading(false);
+    }
+  };
+
+  const handleToggleBlock = async () => {
+    if (!profile || isOwner) return;
+    if (isBlocked) {
+      try {
+        await unblockUserEverywhere(profile.id);
+        setIsBlocked(false);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+      }
+    } else {
+      setShowBlockConfirm(true);
     }
   };
 
@@ -615,10 +675,9 @@ export default function ProfilePage() {
           { label: "Share Profile", onClick: handleShare, icon: <Share2 className="h-4 w-4" /> },
           { label: "Copy Profile Link", onClick: () => void handleCopyProfileLink(), icon: <Link2 className="h-4 w-4" /> },
           { label: "Report User", onClick: () => setShowReportSheet(true), icon: <UserX className="h-4 w-4" /> },
-          { type: "separator" },
-          { label: "Mute User", onClick: () => void handleMuteUser(), disabled: muteLoading, icon: <UserMinus className="h-4 w-4" /> },
-          { label: "Block User", onClick: handleBlockUser, danger: true, icon: <UserX className="h-4 w-4" /> },
-          { type: "separator" },
+          // simplified: use a single clean section for moderation actions and auto-toggle labels
+          { label: isMuted ? "Unmute User" : "Mute User", onClick: () => void handleMuteUser(), disabled: muteLoading, icon: <UserMinus className="h-4 w-4" /> },
+          { label: isBlocked ? "Unblock User" : "Block User", onClick: handleToggleBlock, danger: !isBlocked, icon: <UserX className="h-4 w-4" /> },
         ]}
       />
       <ReportSheet

@@ -1,9 +1,11 @@
 import { ArrowLeft, MoreVertical } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
 import ActionSheet from "../common/ActionSheet";
+import { useChatStore } from "../../store/chatStore";
+import { muteUserEverywhere, unmuteUserEverywhere, blockUserEverywhere, unblockUserEverywhere } from "../../utils/socialActions";
 
 type Props = {
   conversation: Conversation;
@@ -19,6 +21,47 @@ type Props = {
 
 export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true, onViewProfile, onMuteUser, onBlockUser, onReportUser }: Props) => {
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+
+  useEffect(() => {
+    const s = useChatStore.getState();
+    setIsMuted(!!s.mutedUsers.has(conversation.userId));
+    setIsBlocked(!!s.restrictedUsers.has(conversation.userId));
+
+    const onMute = (e: Event) => {
+      const { userId, muted } = (e as CustomEvent).detail || {};
+      if (userId === conversation.userId) setIsMuted(!!muted);
+    };
+    const onBlock = (e: Event) => {
+      const { userId, blocked } = (e as CustomEvent).detail || {};
+      if (userId === conversation.userId) setIsBlocked(!!blocked);
+    };
+
+    window.addEventListener('bitglow:mute-changed', onMute);
+    window.addEventListener('bitglow:block-changed', onBlock);
+    return () => {
+      window.removeEventListener('bitglow:mute-changed', onMute);
+      window.removeEventListener('bitglow:block-changed', onBlock);
+    };
+  }, [conversation.userId]);
+
+  const handleMuteToggle = async () => {
+    if (onMuteUser) return onMuteUser();
+    // fallback behaviour: toggle via global actions
+    try {
+      if (isMuted) await unmuteUserEverywhere(conversation.userId);
+      else await muteUserEverywhere({ id: conversation.userId, username: conversation.username, displayName: conversation.displayName, avatarUrl: conversation.avatarUrl } as any);
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleBlockToggle = async () => {
+    if (onBlockUser) return onBlockUser();
+    try {
+      if (isBlocked) await unblockUserEverywhere(conversation.userId);
+      else await blockUserEverywhere({ id: conversation.userId, username: conversation.username, displayName: conversation.displayName, avatarUrl: conversation.avatarUrl } as any);
+    } catch (e) { /* ignore */ }
+  };
 
   return (
     <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
@@ -67,10 +110,8 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
           items={[
             { label: "View Profile", onClick: onViewProfile || (() => {}) },
             { label: "Report User", onClick: onReportUser || (() => {}) },
-            { type: "separator" },
-            { label: "Mute User", onClick: onMuteUser || (() => {}) },
-            { label: "Block User", onClick: onBlockUser || (() => {}), danger: true },
-            { type: "separator" },
+            { label: isMuted ? "Unmute User" : "Mute User", onClick: handleMuteToggle },
+            { label: isBlocked ? "Unblock User" : "Block User", onClick: handleBlockToggle, danger: !isBlocked },
           ]}
         />
       </div>

@@ -1072,6 +1072,17 @@ export const db = {
         return (res.rowCount ?? 0) > 0;
     },
 
+    // Check if `userId` is blocked BY `otherId` (i.e., otherId -> userId is a blocked relationship)
+    async isBlockedBy(userId: string, otherId: string) {
+        const res = await pool.query(
+            `SELECT 1 FROM friends
+             WHERE user_id = $1 AND friend_id = $2 AND status = 'blocked'
+             LIMIT 1`,
+            [otherId, userId]
+        );
+        return (res.rowCount ?? 0) > 0;
+    },
+
     async revokeSessionById(sessionId: string) {
         await pool.query(
             `UPDATE user_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`,
@@ -1592,9 +1603,7 @@ export const db = {
     },
 
     async getOrCreateDMConversation(userId: string, otherId: string) {
-        if (await this.isBlockedEitherDirection(userId, otherId)) {
-            return null;
-        }
+        // Allow fetching or creating a conversation even if a block relationship exists.
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
 
@@ -1605,6 +1614,7 @@ export const db = {
 
         return await this.createDMConversationWithStatus(userId, otherId, status);
     },
+
 
     async createDMConversationWithStatus(userId: string, otherId: string, status: 'pending' | 'accepted' = 'accepted') {
         if (userId === otherId) return null;
@@ -1656,7 +1666,12 @@ export const db = {
                     CASE WHEN m.is_forwarded THEN 'Forwarded: ' || m.text ELSE m.text END as last_message,
                     m.sender_id as last_message_sender_id,
                     m.created_at as last_message_at,
-                    COALESCE(unread.count, 0)::int as unread_count
+                    COALESCE(unread.count, 0)::int as unread_count,
+                    -- is_masked when the other participant has blocked the viewer
+                    EXISTS(
+                      SELECT 1 FROM friends f
+                      WHERE f.user_id = u.id AND f.friend_id = $1 AND f.status = 'blocked'
+                    ) AS is_masked
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              LEFT JOIN LATERAL (
@@ -1679,18 +1694,13 @@ export const db = {
              ) unread ON true
              WHERE (c.user_a = $1 OR c.user_b = $1)
                AND COALESCE(u.is_deleted, FALSE) = FALSE
-               AND NOT EXISTS (
-                   SELECT 1 FROM friends f
-                   WHERE ((f.user_id = $1 AND f.friend_id = u.id)
-                       OR (f.user_id = u.id AND f.friend_id = $1))
-                     AND f.status = 'blocked'
-               )
              ORDER BY m.created_at DESC NULLS LAST, c.created_at DESC
              LIMIT $2 OFFSET $3`,
             [userId, cappedLimit, safeOffset]
         );
         return res.rows.map((r: any) => ({ ...r, conversationStatus: r.status || 'accepted' }));
     },
+
     async getDMHistory(conversationId: string, limit = 100) {
         const res = await pool.query(
             `SELECT m.id, m.sender_id, m.text, m.type, m.post_id, m.profile_id, m.edited_at, m.is_forwarded, m.created_at
@@ -2353,12 +2363,8 @@ export const db = {
                  ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'blocked'`,
                 [userId, blockedId]
             );
-            await client.query(
-                `DELETE FROM dm_conversations
-                 WHERE (user_a = $1 AND user_b = $2)
-                    OR (user_a = $2 AND user_b = $1)`,
-                [userId, blockedId]
-            );
+            // Preserve DM conversations and messages when blocking — do not delete conversation history.
+            // Previous behavior removed conversations on block; keep them for audit and restore on unblock.
             await client.query("COMMIT");
         } catch (error) {
             await client.query("ROLLBACK");

@@ -12,6 +12,10 @@ type Props = {
 export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, onSelect }: Props) => {
   const isUnread = (conversation.unreadCount ?? 0) > 0;
 
+  const isMasked = (conversation as any).isMasked === true || conversation.displayName === 'BitGlow User';
+  const displayName = isMasked ? 'BitGlow User' : (conversation.displayName || conversation.username);
+  const avatarSrc = isMasked ? undefined : conversation.avatarUrl;
+
   return (
     <button
       onClick={() => onSelect(conversation.userId)}
@@ -22,13 +26,13 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
     >
       <div className="relative flex items-center gap-3">
         <div className="relative shrink-0">
-          <Avatar src={conversation.avatarUrl} alt={conversation.username} size="md" />
+          <Avatar src={avatarSrc} alt={displayName} size="md" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300">
-              {conversation.displayName || conversation.username}
+              {displayName}
             </span>
           </div>
 
