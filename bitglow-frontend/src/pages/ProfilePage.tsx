@@ -323,8 +323,18 @@ export default function ProfilePage() {
     }
   };
 
+  const [showMuteConfirm, setShowMuteConfirm] = useState(false);
+  const [muteTargetAction, setMuteTargetAction] = useState<'mute' | 'unmute'>('mute');
+
   const handleMuteUser = async () => {
     if (!profile || isOwner || muteLoading) return;
+    // show confirmation for both mute and unmute
+    setMuteTargetAction(isMuted ? 'unmute' : 'mute');
+    setShowMuteConfirm(true);
+  };
+
+  const handleMuteConfirm = async () => {
+    if (!profile) return;
     setMuteLoading(true);
     try {
       if (isMuted) {
@@ -338,20 +348,31 @@ export default function ProfilePage() {
       window.alert(err instanceof Error ? err.message : "Failed to toggle mute");
     } finally {
       setMuteLoading(false);
+      setShowMuteConfirm(false);
     }
   };
+
+  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false);
 
   const handleToggleBlock = async () => {
     if (!profile || isOwner) return;
     if (isBlocked) {
-      try {
-        await unblockUserEverywhere(profile.id);
-        setIsBlocked(false);
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Failed to unblock user");
-      }
+      // show confirm for unblock as well
+      setShowUnblockConfirm(true);
     } else {
       setShowBlockConfirm(true);
+    }
+  };
+
+  const handleUnblockConfirm = async () => {
+    if (!profile) return;
+    try {
+      await unblockUserEverywhere(profile.id);
+      setIsBlocked(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+    } finally {
+      setShowUnblockConfirm(false);
     }
   };
 
@@ -667,6 +688,29 @@ export default function ProfilePage() {
         onClose={() => setShowBlockConfirm(false)}
         loading={blockLoading}
       />
+
+      <ConfirmDialog
+        open={showUnblockConfirm}
+        title="Unblock user"
+        message={<div>Are you sure you want to unblock this user? They will be able to follow and message you again.</div>}
+        confirmLabel="Unblock"
+        cancelLabel="Cancel"
+        onConfirm={handleUnblockConfirm}
+        onClose={() => setShowUnblockConfirm(false)}
+        loading={false}
+      />
+
+      <ConfirmDialog
+        open={showMuteConfirm}
+        title={muteTargetAction === 'mute' ? 'Mute user' : 'Unmute user'}
+        message={muteTargetAction === 'mute' ? <div>Muting will hide posts and DM notifications from this user. You will remain connected. Proceed?</div> : <div>Unmute will restore posts and DM notifications from this user. Proceed?</div>}
+        confirmLabel={muteTargetAction === 'mute' ? 'Mute' : 'Unmute'}
+        cancelLabel="Cancel"
+        onConfirm={handleMuteConfirm}
+        onClose={() => setShowMuteConfirm(false)}
+        loading={muteLoading}
+      />
+
       <ActionSheet
         open={showActionSheet}
         title={`@${profile.username}`}

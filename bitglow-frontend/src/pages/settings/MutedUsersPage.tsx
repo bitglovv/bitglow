@@ -33,12 +33,23 @@ export default function MutedUsersPage() {
     return () => window.removeEventListener("bitglow:mute-changed", onChanged);
   }, []);
 
-  const handleUnmute = async (userId: string) => {
+  const [confirmUnmuteId, setConfirmUnmuteId] = useState<string | null>(null);
+  const [unmuteLoadingId, setUnmuteLoadingId] = useState<string | null>(null);
+
+  const handleUnmute = (userId: string) => {
+    setConfirmUnmuteId(userId);
+  };
+
+  const performUnmute = async (userId: string) => {
+    setUnmuteLoadingId(userId);
     try {
       await unmuteUserEverywhere(userId);
       setMutedUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to unmute user");
+    } finally {
+      setUnmuteLoadingId(null);
+      setConfirmUnmuteId(null);
     }
   };
 
@@ -63,10 +74,22 @@ export default function MutedUsersPage() {
                 </div>
                 <div className="mt-0.5 truncate text-xs text-zinc-400">@{u.username}</div>
               </div>
-              <Button size="sm" variant="secondary" onClick={() => handleUnmute(u.id)}>Unmute</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleUnmute(u.id)}>{unmuteLoadingId === u.id ? 'Working...' : 'Unmute'}</Button>
             </div>
           ))}
         </div>
+
+        <ConfirmDialog
+          open={!!confirmUnmuteId}
+          title="Unmute user"
+          message="Unmuting will restore notifications and live alerts from this user. Are you sure you want to unmute?"
+          confirmLabel="Unmute"
+          cancelLabel="Cancel"
+          loading={!!unmuteLoadingId}
+          onConfirm={() => performUnmute(confirmUnmuteId as string)}
+          onClose={() => setConfirmUnmuteId(null)}
+        />
+
       </main>
     </div>
   );

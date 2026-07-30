@@ -2375,12 +2375,15 @@ export const db = {
     },
 
     async unblockUser(userId: string, unblockedId: string) {
+        // Remove any blocked relationship between the two users in either direction
         await pool.query(
             `DELETE FROM friends
-             WHERE user_id = $1 AND friend_id = $2 AND status = 'blocked'`,
+             WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))
+               AND status = 'blocked'`,
             [userId, unblockedId]
         );
     },
+
 
     async muteUser(userId: string, mutedId: string) {
         await pool.query(

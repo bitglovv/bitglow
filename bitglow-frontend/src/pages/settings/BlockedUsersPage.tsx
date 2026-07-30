@@ -33,12 +33,23 @@ export default function BlockedUsersPage() {
     return () => window.removeEventListener("bitglow:block-changed", onChanged);
   }, []);
 
-  const handleUnblock = async (userId: string) => {
+  const [confirmUnblockId, setConfirmUnblockId] = useState<string | null>(null);
+  const [unblockLoadingId, setUnblockLoadingId] = useState<string | null>(null);
+
+  const handleUnblock = (userId: string) => {
+    setConfirmUnblockId(userId);
+  };
+
+  const performUnblock = async (userId: string) => {
+    setUnblockLoadingId(userId);
     try {
       await unblockUserEverywhere(userId);
       setBlockedUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+    } finally {
+      setUnblockLoadingId(null);
+      setConfirmUnblockId(null);
     }
   };
 
@@ -63,10 +74,22 @@ export default function BlockedUsersPage() {
                 </div>
                 <div className="mt-0.5 truncate text-xs text-zinc-400">@{u.username}</div>
               </div>
-              <Button size="sm" variant="secondary" onClick={() => handleUnblock(u.id)}>Unblock</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleUnblock(u.id)}>{unblockLoadingId === u.id ? 'Working...' : 'Unblock'}</Button>
             </div>
           ))}
         </div>
+
+        <ConfirmDialog
+          open={!!confirmUnblockId}
+          title="Unblock user"
+          message="Unblocking will allow this user to follow and message you again. Are you sure you want to unblock?"
+          confirmLabel="Unblock"
+          cancelLabel="Cancel"
+          loading={!!unblockLoadingId}
+          onConfirm={() => performUnblock(confirmUnblockId as string)}
+          onClose={() => setConfirmUnblockId(null)}
+        />
+
       </main>
     </div>
   );
