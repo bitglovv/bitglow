@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { X, Search as SearchIcon } from "lucide-react";
 import Header from "../components/common/Header";
 import { api, User } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/Button";
-import { Avatar } from "../components/ui/Avatar";
+import { UserListItem } from "../components/user/UserListItem";
 
 export default function SearchPage() {
   const { user } = useAuth();
@@ -126,48 +125,33 @@ export default function SearchPage() {
           <div className="flex flex-col gap-1.5">
             {listToRender.length > 0 ? (
               listToRender.map((u) => (
-                <div
+                <UserListItem
                   key={u.id}
-                  className="group flex items-center justify-between rounded-[1.35rem] border border-white/[0.04] bg-white/[0.02] px-3 py-3 transition-all duration-200 hover:border-white/[0.08] hover:bg-white/[0.03]"
-                >
-                  <Link to={`/profile/${u.username}`} className="flex min-w-0 items-center gap-3 overflow-hidden">
-                    <Avatar
-                      src={u.avatarUrl}
-                      alt={u.username}
-                      size="md"
-                      className="transition-all"
-                    />
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-[15px] font-semibold leading-tight text-white">
-                        @{u.username}
-                      </span>
-                      <span className="truncate text-xs text-zinc-500">
-                        {u.displayName || u.username}
-                      </span>
+                  user={u}
+                  href={`/profile/${u.username}`}
+                  actionSlot={(
+                    <div className="ml-3 shrink-0 flex items-center gap-2">
+                      {pending.has(u.id) ? (
+                        <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-500">
+                          Requested
+                        </span>
+                      ) : following.has(u.id) ? (
+                        <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-400">
+                          Following
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => handleFollow(u)}
+                          className="h-9 rounded-full px-5 text-[13px] font-semibold transition-all"
+                        >
+                          Follow
+                        </Button>
+                      )}
                     </div>
-                  </Link>
-
-                  <div className="ml-3 shrink-0 flex items-center gap-2">
-                    {pending.has(u.id) ? (
-                      <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-500">
-                        Requested
-                      </span>
-                    ) : following.has(u.id) ? (
-                      <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-400">
-                        Following
-                      </span>
-                    ) : (
-                      <Button 
-                        size="sm" 
-                        variant="primary"
-                        onClick={() => handleFollow(u)}
-                        className="h-9 rounded-full px-5 text-[13px] font-semibold transition-all"
-                      >
-                        Follow
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                  )}
+                />
               ))
             ) : query.trim() ? (
               <div className="flex flex-col items-center justify-center rounded-[1.35rem] border border-white/[0.04] bg-white/[0.015] py-12 text-zinc-500">
