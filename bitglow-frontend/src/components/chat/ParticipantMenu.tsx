@@ -1,12 +1,4 @@
-import React from "react";
-
-// ParticipantMenu removed from inbox to keep the Messages inbox minimal.
-// Moderation actions remain available in ChatHeader and ProfilePage.
-
-export default function ParticipantMenu(_: { user?: any } = {}) {
-  return null;
-}
-
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "../ui/Button";

@@ -47,6 +47,7 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
             </p>
           </div>
         </div>
+
       </div>
 
       {isUnread && (

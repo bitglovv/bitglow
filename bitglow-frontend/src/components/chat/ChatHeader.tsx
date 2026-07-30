@@ -65,7 +65,9 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
   };
 
   const handleActionButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.detail !== 0 && !moreButtonPressed) {
+    // Only open the action sheet when the user explicitly presses the More button (pointer down occurred on it).
+    // Guard against synthetic or programmatic clicks that can have detail===0.
+    if (!moreButtonPressed) {
       return;
     }
 

@@ -116,11 +116,11 @@ export function MessageBubble(props: MessageBubbleProps) {
     timeLabel,
     editedAt,
     isForwarded,
-    onEdit,
-    onDelete,
-    onCopy,
-    onForward,
-  } = "message" in props 
+      onEdit,
+      onDelete,
+      onCopy,
+      onForward,
+    } = "message" in props 
     ? {
         username: props.isMe ? "You" : "Other",
         avatarUrl: undefined,
@@ -187,9 +187,9 @@ export function MessageBubble(props: MessageBubbleProps) {
         )}
         <div
           onContextMenu={(event) => {
-            if (!hasActions) return;
-            event.preventDefault();
-            setShowMenu(true);
+          if (!hasActions) return;
+          event.preventDefault();
+          setShowMenu(true);
           }}
           onPointerDown={(event) => {
             if (event.pointerType === "touch") {
