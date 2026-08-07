@@ -1,4 +1,4 @@
-ï»¿const isLoopbackHost = (value?: string | null) => {
+const isLoopbackHost = (value?: string | null) => {
     if (!value) return false;
     try {
         const host = new URL(value).hostname;
@@ -19,13 +19,13 @@ const getApiHost = () => {
     const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
     const hostname = window.location.hostname;
 
-    // Case 1: localhost â€” straightforward local dev
+    // Case 1: localhost — straightforward local dev
     if (hostname === "localhost" || hostname === "127.0.0.1") {
         return envHost ?? "http://127.0.0.1:3003";
     }
 
     // Case 2: LAN / private network IP (phone/tablet on same WiFi as dev machine)
-    // Backend is on the same machine â€” use same hostname but port 3003
+    // Backend is on the same machine — use same hostname but port 3003
     if (isPrivateNetworkHost(hostname)) {
         // If VITE_API_HOST is explicitly set to a non-loopback address, use it
         if (envHost && !isLoopbackHost(envHost)) return envHost;
@@ -33,12 +33,12 @@ const getApiHost = () => {
         return `http://${hostname}:3003`;
     }
 
-    // Case 3: Public domain (Vercel, etc.) â€” VITE_API_HOST MUST point to Render backend
+    // Case 3: Public domain (Vercel, etc.) — VITE_API_HOST MUST point to Render backend
     if (envHost && !isLoopbackHost(envHost)) {
         return envHost;
     }
 
-    // VITE_API_HOST not configured for production â€” warn loudly
+    // VITE_API_HOST not configured for production — warn loudly
     console.error(
         "[BitGlow] VITE_API_HOST is not configured for production. " +
         "Add VITE_API_HOST=https://bitglow-backend-hh2h.onrender.com to your Vercel environment variables."

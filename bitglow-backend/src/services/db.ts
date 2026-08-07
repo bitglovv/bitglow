@@ -1679,7 +1679,7 @@ export const db = {
                     ) AS is_masked
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
-             LEFT JOIN LATERAL (
+             JOIN LATERAL (
                 SELECT dm.text, dm.created_at, dm.sender_id, dm.is_forwarded
                 FROM dm_messages dm
                 JOIN users dmu ON dmu.id = dm.sender_id

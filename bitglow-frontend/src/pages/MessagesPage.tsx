@@ -28,6 +28,7 @@ export default function MessagesPage() {
     friends,
     messages,
     activeConversationId,
+    activeConversationUser,
     isLoadingConversations,
     isLoadingMessages,
     typingUsers,
@@ -105,8 +106,8 @@ export default function MessagesPage() {
   }, [isLoadingConversations, hasProcessedInitialDm, openFriendConversation]);
 
   const activeConversation = useMemo(
-    () => conversations.find((c) => c.userId === activeConversationId) ?? null,
-    [conversations, activeConversationId]
+    () => conversations.find((c) => c.userId === activeConversationId) ?? activeConversationUser ?? null,
+    [conversations, activeConversationId, activeConversationUser]
   );
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];

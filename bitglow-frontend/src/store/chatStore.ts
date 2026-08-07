@@ -6,6 +6,7 @@ interface ChatState {
   friends: Friend[];
   messages: Record<string, DMMessage[]>;
   activeConversationId: string | null;
+  activeConversationUser: Friend | null;
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
   typingUsers: Set<string>;
@@ -40,6 +41,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   friends: [],
   messages: {},
   activeConversationId: null,
+  activeConversationUser: null,
   isLoadingConversations: false,
   isLoadingMessages: false,
   typingUsers: new Set(),
@@ -114,7 +116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setActiveConversation: (userId: string | null) => {
-    set({ activeConversationId: userId });
+    set({ activeConversationId: userId, activeConversationUser: null });
     if (userId) {
       set((state) => ({
         conversations: state.conversations.map((c) =>
@@ -128,21 +130,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   openFriendConversation: (friend: Friend) => {
     const { conversations } = get();
     const existing = conversations.find((c) => c.userId === friend.id);
-    
+
     if (!existing) {
-      set({
-        conversations: [
-          {
-            userId: friend.id,
-            username: friend.username,
-            avatarUrl: friend.avatarUrl,
-            lastMessage: "",
-            unreadCount: 0,
-          },
-          ...conversations,
-        ]
-      });
+      // Do not add empty conversations to the inbox until the first message is sent.
+      set({ activeConversationId: friend.id, activeConversationUser: friend });
+      get().fetchHistory(friend.id);
+      return;
     }
+
     get().setActiveConversation(friend.id);
   },
 
@@ -184,18 +179,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // API Call
     const savedMsg = await api.dms.send(userId, text, 'text', undefined, undefined, optimisticMsg.id);
     if (savedMsg) {
-      // Replace optimistic message
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [userId]: (state.messages[userId] || []).map((m) =>
-            m.id === optimisticMsg.id ? savedMsg : m
-          )
-        },
-        conversations: state.conversations.map((c) =>
-          c.userId === userId ? { ...c, lastMessage: savedMsg.text, lastMessageAt: savedMsg.createdAt } : c
-        )
-      }));
+      set((state) => {
+        const convs = [...state.conversations];
+        const idx = convs.findIndex((c) => c.userId === userId);
+
+        if (idx !== -1) {
+          const updated = {
+            ...convs[idx],
+            lastMessage: savedMsg.text,
+            lastMessageAt: savedMsg.createdAt,
+          };
+          convs.splice(idx, 1);
+          convs.unshift(updated);
+        } else if (state.activeConversationUser) {
+          convs.unshift({
+            userId,
+            username: state.activeConversationUser.username,
+            displayName: state.activeConversationUser.displayName,
+            avatarUrl: state.activeConversationUser.avatarUrl,
+            lastMessage: savedMsg.text,
+            lastMessageAt: savedMsg.createdAt,
+            unreadCount: 0,
+          });
+        } else {
+          convs.unshift({
+            userId,
+            username: "",
+            displayName: "",
+            lastMessage: savedMsg.text,
+            lastMessageAt: savedMsg.createdAt,
+            unreadCount: 0,
+          });
+        }
+
+        return {
+          messages: {
+            ...state.messages,
+            [userId]: (state.messages[userId] || []).map((m) =>
+              m.id === optimisticMsg.id ? savedMsg : m
+            )
+          },
+          conversations: convs,
+          activeConversationUser: null,
+        };
+      });
     }
   },
 

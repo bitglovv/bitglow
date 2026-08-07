@@ -54,9 +54,12 @@ export async function dmRoutes(fastify: FastifyInstance) {
         // Open messaging enabled
 
 
-        const convo = await db.getOrCreateDMConversation(userId, otherId);
-        // Always return history even if a block exists; masking of participant details is handled in the conversation list.
-        if (!convo) return reply.code(404).send({ message: "Conversation not found" });
+        const convo = await db.getDMConversation(userId, otherId);
+        if (!convo) {
+            // No conversation exists yet. Do not create one on history reads.
+            return [];
+        }
+
         const messages = await db.getDMHistory(convo.id, 200);
         await db.markDMConversationRead(convo.id, userId);
 
