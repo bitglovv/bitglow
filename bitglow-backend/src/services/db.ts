@@ -1119,6 +1119,7 @@ export const db = {
         return this.isMutual(userId, friendId);
     },
 
+
     async isMutual(userId: string, otherId: string) {
         const res = await pool.query(
             `SELECT 1
@@ -1607,10 +1608,14 @@ export const db = {
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
 
-        // Check if other user is private and we are not friends
+        // Check if other user is private and whether the requester can message directly.
         const otherUser = await this.getUserById(otherId);
-        const areFriends = await this.areFriends(userId, otherId);
-        const status = (otherUser?.is_private && !areFriends && userId !== otherId) ? 'pending' : 'accepted';
+        // A requester can message directly if they are following the other user (one-way accepted)
+        // or they are mutual friends (both directions accepted). Also allow creating your own convo.
+        const requesterFollows = await this.isFollowing(userId, otherId);
+        const mutual = await this.areFriends(userId, otherId);
+        const canMessageDirectly = requesterFollows || mutual || userId === otherId;
+        const status = (otherUser?.is_private && !canMessageDirectly && userId !== otherId) ? 'pending' : 'accepted';
 
         return await this.createDMConversationWithStatus(userId, otherId, status);
     },
@@ -1806,7 +1811,10 @@ export const db = {
 
     async isFollowing(userId: string, otherId: string) {
         const res = await pool.query(
-            `SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2 LIMIT 1`,
+            `SELECT 1 FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.friend_id = $2 AND f.status = 'accepted' AND COALESCE(u.is_deleted, FALSE) = FALSE
+             LIMIT 1`,
             [userId, otherId]
         );
         return (res.rowCount ?? 0) > 0;

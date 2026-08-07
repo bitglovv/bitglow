@@ -66,7 +66,10 @@ export async function profileRoutes(fastify: FastifyInstance) {
         };
 
         const requesterId = await getOptionalRequesterId(request);
-        const authorized = requesterId === dbUser.id || (!!requesterId && await db.areFriends(requesterId, dbUser.id));
+        // Authorized if requester is the owner, or the requester is a follower (one-way accepted) or mutual friend
+        const isFollower = requesterId ? await db.isFollowing(requesterId, dbUser.id) : false;
+        const isMutual = requesterId ? await db.areFriends(requesterId, dbUser.id) : false;
+        const authorized = requesterId === dbUser.id || !!requesterId && (isFollower || isMutual);
 
         // If the account is private and requester is not authorized, return only the minimal profile fields.
         if (dbUser.is_private && !authorized) {
