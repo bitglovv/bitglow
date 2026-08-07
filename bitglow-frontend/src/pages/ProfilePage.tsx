@@ -129,7 +129,8 @@ export default function ProfilePage() {
   // presence.visible controls whether any presence indicator is shown
   // presence.isOnline controls whether the green dot is shown
   // derive presence from presence store when available
-  const presenceEntry = profile && profile.id ? usePresenceStore((s) => s.presence[profile.id]) : undefined;
+  // Always call the hook (do not call hooks conditionally)
+  const presenceEntry = usePresenceStore((s) => (profile?.id ? s.presence[profile.id] : undefined));
   const visible = presenceEntry?.visible ?? (profile?.onlineStatusVisible ?? true);
   const isOnline = presenceEntry?.isOnline ?? false;
   const statusLabel = visible ? "ONLINE" : "";

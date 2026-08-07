@@ -32,6 +32,15 @@ export const useSettingsStore = create<SettingsState>()(
         set({ privateAccount: isPrivate });
         try {
           await api.settings.updatePrivacy(isPrivate);
+          // Refresh authoritative user profile from backend
+          try {
+            const freshUser = await api.auth.me();
+            localStorage.setItem('user', JSON.stringify(freshUser));
+            set({ privateAccount: !!freshUser.isPrivate, onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
+            try { window.dispatchEvent(new CustomEvent('bitglow:user-updated', { detail: freshUser })); } catch (e) {}
+          } catch (refreshErr) {
+            console.warn('Failed to refresh user after updating privacy', refreshErr);
+          }
         } catch (error) {
           console.error("Failed to update privacy", error);
           // revert
@@ -46,6 +55,19 @@ export const useSettingsStore = create<SettingsState>()(
         set({ onlineStatusVisible: isVisible });
         try {
           await api.settings.updateOnlineStatus(isVisible);
+          // Refresh authoritative user profile from backend to ensure persisted value is synced
+          try {
+            const freshUser = await api.auth.me();
+            // Persist the updated user to localStorage so hydrations use the fresh value
+            localStorage.setItem('user', JSON.stringify(freshUser));
+            // Update settings store from authoritative user
+            set({ privateAccount: !!freshUser.isPrivate, onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
+            // Notify interested parts of the app
+            try { window.dispatchEvent(new CustomEvent('bitglow:user-updated', { detail: freshUser })); } catch (e) {}
+          } catch (refreshErr) {
+            // Non-fatal: keep optimistic value if refresh fails
+            console.warn('Failed to refresh user after updating online status', refreshErr);
+          }
         } catch (error) {
           console.error("Failed to update online status", error);
           set({ onlineStatusVisible: !isVisible });
