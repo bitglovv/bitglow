@@ -22,6 +22,7 @@ import Header from "../components/common/Header";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
+import { api } from "../services/api";
 import { navigateBack } from "../utils/navigateBack";
 import { AppTheme, useSettingsStore } from "../store/settingsStore";
 
