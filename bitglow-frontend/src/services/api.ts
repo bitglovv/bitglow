@@ -1,4 +1,4 @@
-const isLoopbackHost = (value?: string | null) => {
+﻿const isLoopbackHost = (value?: string | null) => {
     if (!value) return false;
     try {
         const host = new URL(value).hostname;
@@ -160,11 +160,11 @@ export type Notification =
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     const token = localStorage.getItem("token");
     const hasBody = options.body !== undefined && !(options.body instanceof FormData);
-    const headers = {
+    const headers: Record<string, string> = {
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-    };
+        ...(options.headers || {}),
+    } as Record<string,string>;
+    if (token) headers.Authorization = `Bearer ${token}`;
 
     let fullUrl: string;
     if (url.startsWith("http")) {
@@ -913,3 +913,6 @@ export const api = {
         },
     }
 };
+
+
+

@@ -524,7 +524,7 @@ export default function ProfilePage() {
                 <span className="text-[15px] font-semibold text-zinc-400">@{profile.username}</span>
               )}
               <div className="flex items-center justify-center gap-2 text-xs mt-1 sm:mt-0">
-                <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-500"}`} />
+                {visible && isOnline ? <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" /> : null}
                 <span className="font-bold uppercase tracking-widest text-[#8b8f9c]">{statusLabel}</span>
               </div>
 
