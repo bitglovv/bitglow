@@ -24,21 +24,21 @@ export default function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-zinc-950 rounded-2xl border border-white/10 p-5 shadow-2xl">
+      <div className="relative w-full max-w-sm bg-zinc-950 rounded-2xl border border-white/10 p-4 shadow-2xl">
         <h3 className="text-lg font-bold text-white">{title}</h3>
-        <div className="mt-3 text-sm text-zinc-400">{message}</div>
+        <div className="mt-2 text-sm text-zinc-400">{message}</div>
 
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="mt-4 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]"
+            className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-60"
             disabled={loading}
           >
             {cancelLabel}
           </button>
           <button
             onClick={() => void onConfirm()}
-            className="px-4 py-2 rounded-xl bg-rose-500 text-white font-semibold hover:bg-rose-600 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 disabled:opacity-60"
             disabled={loading}
           >
             {loading ? "Working..." : confirmLabel}

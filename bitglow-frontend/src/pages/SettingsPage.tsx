@@ -166,15 +166,23 @@ export default function SettingsPage() {
     if (privacyNextValue === null) return;
     const next = privacyNextValue;
     setPrivacyLoading(true);
-    // optimistically set
-    setPrivateAccount(next);
+    // apply after confirmation (optimistic UI update during request)
     try {
+      setPrivateAccount(next);
       await api.settings.updatePrivacy(next);
+      // notify listeners (toast) and close dialog
+      try {
+        window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Account is now private" : "Account is now public" } }));
+      } catch {}
       setPrivacyConfirmOpen(false);
     } catch (err) {
       // revert on error
       setPrivateAccount(!next);
-      // keep dialog open to let user retry or cancel
+      const msg = err instanceof Error ? err.message : "Failed to update privacy";
+      try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
+      // fallback alert
+      window.alert(msg);
+      // keep dialog open so user can retry or cancel
     } finally {
       setPrivacyLoading(false);
       setPrivacyNextValue(null);
@@ -190,12 +198,18 @@ export default function SettingsPage() {
     if (onlineNextValue === null) return;
     const next = onlineNextValue;
     setOnlineLoading(true);
-    setOnlineStatusVisible(next);
     try {
+      setOnlineStatusVisible(next);
       await api.settings.updateOnlineStatus(next);
+      try {
+        window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Online status shown" : "Online status hidden" } }));
+      } catch {}
       setOnlineConfirmOpen(false);
     } catch (err) {
       setOnlineStatusVisible(!next);
+      const msg = err instanceof Error ? err.message : "Failed to update online status";
+      try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
+      window.alert(msg);
     } finally {
       setOnlineLoading(false);
       setOnlineNextValue(null);
@@ -280,23 +294,9 @@ export default function SettingsPage() {
           {/* Confirmation dialogs for toggles */}
           <ConfirmDialog
             open={privacyConfirmOpen}
-            title={privacyNextValue ? "Confirm Private Account" : "Confirm Public Account"}
-            message={
-              privacyNextValue
-                ? (
-                  <>
-                    Making your account private will hide your bio, website, location, posts, followers, following and friends from users who do not follow you. Non-followers will not be able to access Live Space or send direct messages (they will become Message Requests). Follow actions will become Follow Requests.
-                    <div className="mt-2 text-sm text-zinc-400">Are you sure you want to continue?</div>
-                  </>
-                )
-                : (
-                  <>
-                    Making your account public will allow non-followers to view your bio, website, location and posts. Follow behavior will return to normal and Live Space may be accessible by non-followers depending on other settings.
-                    <div className="mt-2 text-sm text-zinc-400">Are you sure you want to continue?</div>
-                  </>
-                )
-            }
-            confirmLabel={privacyNextValue ? "Turn Private" : "Make Public"}
+            title={privacyNextValue ? "Make account private?" : "Make account public?"}
+            message={privacyNextValue ? "Only approved followers can view your profile and posts." : "Everyone can view your profile and posts."}
+            confirmLabel={privacyNextValue ? "Make Private" : "Make Public"}
             cancelLabel="Cancel"
             onConfirm={performPrivacyToggle}
             onClose={() => { setPrivacyConfirmOpen(false); setPrivacyNextValue(null); }}
@@ -305,23 +305,9 @@ export default function SettingsPage() {
 
           <ConfirmDialog
             open={onlineConfirmOpen}
-            title={onlineNextValue ? "Show Online Status" : "Hide Online Status"}
-            message={
-              onlineNextValue
-                ? (
-                  <>
-                    Enabling Online Status will show "ONLINE" on your profile and a green dot when you are actively online. If you are offline, only the text "ONLINE" will be visible (no green dot).
-                    <div className="mt-2 text-sm text-zinc-400">Do you want to enable this?</div>
-                  </>
-                )
-                : (
-                  <>
-                    Disabling Online Status will hide all presence indicators across the app (profile, search, messages, followers, following, friends, live chat, notifications and user cards).
-                    <div className="mt-2 text-sm text-zinc-400">Do you want to disable this?</div>
-                  </>
-                )
-            }
-            confirmLabel={onlineNextValue ? "Turn On" : "Turn Off"}
+            title={onlineNextValue ? "Show online status?" : "Hide online status?"}
+            message={onlineNextValue ? "Others can see when you're online." : "Others won't see when you're online."}
+            confirmLabel={onlineNextValue ? "Show Status" : "Hide Status"}
             cancelLabel="Cancel"
             onConfirm={performOnlineStatusToggle}
             onClose={() => { setOnlineConfirmOpen(false); setOnlineNextValue(null); }}
