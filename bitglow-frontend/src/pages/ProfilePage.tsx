@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import Header from "../components/common/Header";
 import { api, User, Friend } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { usePresenceStore } from "../store/presenceStore";
 import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
 import { 
@@ -124,14 +125,14 @@ export default function ProfilePage() {
   const [isBlocked, setIsBlocked] = useState(false);
 
   const isOwner = loggedInUser && profile && loggedInUser.username === profile.username;
-  const isOnline =
-    (isOwner && true) ||
-    (profile as any)?.isOnline ||
-    (profile as any)?.online ||
-    (profile as any)?.is_online ||
-    ((profile as any)?.status === "online") ||
-    (!isOwner && (profile as any)?.status === undefined && true);
-  const statusLabel = isOnline ? "Online" : "Offline";
+  // Use centralized presence store for accurate presence + visibility handling
+  // presence.visible controls whether any presence indicator is shown
+  // presence.isOnline controls whether the green dot is shown
+  // derive presence from presence store when available
+  const presenceEntry = profile && profile.id ? usePresenceStore((s) => s.presence[profile.id]) : undefined;
+  const visible = presenceEntry?.visible ?? (profile?.onlineStatusVisible ?? true);
+  const isOnline = presenceEntry?.isOnline ?? false;
+  const statusLabel = visible ? "ONLINE" : "";
 
   const followersCount = isOwner ? followers.length : (profile?.followersCount ?? 0);
   const followingCount = isOwner ? following.length : (profile?.followsCount ?? 0);
@@ -512,7 +513,7 @@ export default function ProfilePage() {
 
         <div className="flex flex-col md:flex-row gap-8 items-center md:items-start pt-8">
           <div className="shrink-0 relative">
-            <Avatar src={profile.avatarUrl} alt={profile.username} size="2xl" />
+            <Avatar src={profile.avatarUrl} alt={profile.username} size="2xl" status={visible && isOnline ? 'online' : 'none'} />
           </div>
 
           <div className="flex-1 w-full text-center md:text-left">
