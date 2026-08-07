@@ -28,22 +28,28 @@ export const useSettingsStore = create<SettingsState>()(
 
       privateAccount: false,
       setPrivateAccount: async (isPrivate) => {
+        // Optimistic update, revert if API fails
         set({ privateAccount: isPrivate });
         try {
           await api.settings.updatePrivacy(isPrivate);
         } catch (error) {
           console.error("Failed to update privacy", error);
-          // Revert optimistic update? For now just log
+          // revert
+          set({ privateAccount: !isPrivate });
+          throw error;
         }
       },
 
       onlineStatusVisible: true,
       setOnlineStatusVisible: async (isVisible) => {
+        // Optimistic update, revert if API fails
         set({ onlineStatusVisible: isVisible });
         try {
           await api.settings.updateOnlineStatus(isVisible);
         } catch (error) {
           console.error("Failed to update online status", error);
+          set({ onlineStatusVisible: !isVisible });
+          throw error;
         }
       },
 

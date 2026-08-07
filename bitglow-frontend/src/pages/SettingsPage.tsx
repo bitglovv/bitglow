@@ -167,21 +167,16 @@ export default function SettingsPage() {
     if (privacyNextValue === null) return;
     const next = privacyNextValue;
     setPrivacyLoading(true);
-    // apply after confirmation (optimistic UI update during request)
     try {
-      setPrivateAccount(next);
-      await api.settings.updatePrivacy(next);
-      // notify listeners (toast) and close dialog
+      // Use store setter which performs API and reverts on error
+      await setPrivateAccount(next);
       try {
         window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Account is now private" : "Account is now public" } }));
       } catch {}
       setPrivacyConfirmOpen(false);
     } catch (err) {
-      // revert on error
-      setPrivateAccount(!next);
       const msg = err instanceof Error ? err.message : "Failed to update privacy";
       try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
-      // fallback alert
       window.alert(msg);
       // keep dialog open so user can retry or cancel
     } finally {
@@ -200,17 +195,17 @@ export default function SettingsPage() {
     const next = onlineNextValue;
     setOnlineLoading(true);
     try {
-      setOnlineStatusVisible(next);
-      await api.settings.updateOnlineStatus(next);
+      // Use store setter which performs API and reverts on error
+      await setOnlineStatusVisible(next);
       try {
         window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Online status shown" : "Online status hidden" } }));
       } catch {}
       setOnlineConfirmOpen(false);
     } catch (err) {
-      setOnlineStatusVisible(!next);
       const msg = err instanceof Error ? err.message : "Failed to update online status";
       try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
       window.alert(msg);
+      // keep dialog open so user can retry or cancel
     } finally {
       setOnlineLoading(false);
       setOnlineNextValue(null);
