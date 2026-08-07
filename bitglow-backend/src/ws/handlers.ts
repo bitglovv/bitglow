@@ -56,11 +56,12 @@ export function broadcastPresence(clients: Set<ClientMeta>) {
  * Broadcast a specific user's online/offline status to all connected clients.
  * This allows the frontend to update individual user indicators in real-time.
  */
-export function broadcastUserStatus(userId: string, isOnline: boolean, clients: Set<ClientMeta>) {
+export function broadcastUserStatus(userId: string, isOnline: boolean, clients: Set<ClientMeta>, visible: boolean = true) {
     const message = JSON.stringify({
         type: "server:user_status",
         userId,
         isOnline,
+        visible,
         ts: Date.now(),
     });
     for (const c of clients) {
@@ -210,7 +211,7 @@ export async function handleMessage(
 
             // Broadcast this user is now online to all connected clients
             if (meta.isAuth && meta.onlineVisible) {
-                broadcastUserStatus(meta.userId, true, clients);
+                broadcastUserStatus(meta.userId, true, clients, meta.onlineVisible);
             }
             return;
         }

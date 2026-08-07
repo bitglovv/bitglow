@@ -4,7 +4,7 @@ import { db } from "../services/db";
 import { getRequestIp, hashToken, logSecurityEvent, normalizeIdentifier, sanitizeText, validatePassword } from "../services/security";
 import { sendEmailChangedNotification, sendPasswordChangedNotification } from "../services/email";
 import { VerificationService } from "../services/verification/VerificationService";
-import { broadcastUserRelationshipUpdate, disconnectUserSockets } from "../ws";
+import { broadcastUserRelationshipUpdate, disconnectUserSockets, clients, broadcastUserStatus } from "../ws";
 import {
     emailConfirmSchema,
     emailResendSchema,
@@ -239,6 +239,28 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         }
 
         await db.updateUserOnlineStatusVisible(userId, isVisible);
+
+        // Update any active WebSocket client metadata for this user so future presence broadcasts respect the new visibility.
+        try {
+            for (const c of clients) {
+                if (c.userId === userId) {
+                    c.onlineVisible = isVisible;
+                }
+            }
+
+            if (isVisible) {
+                // If the user turned visibility ON, broadcast their current online state (true if any active authenticated connection exists)
+                const currentlyOnline = Array.from(clients).some((c) => c.userId === userId && c.isAuth);
+                broadcastUserStatus(userId, Boolean(currentlyOnline), clients, true);
+            } else {
+                // If turned OFF, broadcast that presence is not visible so frontends can hide indicators
+                broadcastUserStatus(userId, false, clients, false);
+            }
+        } catch (err) {
+            // Non-fatal: if WS subsystem is unavailable, still persist DB change.
+            console.warn("Failed to propagate online-status change to WebSocket clients:", err);
+        }
+
         return { ok: true, isVisible };
     });
 

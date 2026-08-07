@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BadgeCheck } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/common/Header";
-import { Avatar } from "../../components/ui/Avatar";
 import { Button } from "../../components/ui/Button";
+import { UserListItem } from "../../components/user/UserListItem";
 import { api, Friend } from "../../services/api";
 import { navigateBack } from "../../utils/navigateBack";
 import { unmuteUserEverywhere } from "../../utils/socialActions";
@@ -65,17 +65,17 @@ export default function MutedUsersPage() {
           ) : mutedUsers.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-zinc-500">No muted users yet.</div>
           ) : mutedUsers.map((u) => (
-            <div key={u.id} className="flex min-h-[72px] items-center gap-3 border-b border-white/[0.07] px-4 py-3 last:border-b-0">
-              <Avatar src={u.avatarUrl} alt={u.username} size="sm" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-[15px] font-bold text-white">
-                  <span className="truncate">{u.displayName || u.username}</span>
-                  {u.isVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-blue-400" />}
-                </div>
-                <div className="mt-0.5 truncate text-xs text-zinc-400">@{u.username}</div>
-              </div>
-              <Button size="sm" variant="secondary" onClick={() => handleUnmute(u.id)}>{unmuteLoadingId === u.id ? 'Working...' : 'Unmute'}</Button>
-            </div>
+            <UserListItem
+              key={u.id}
+              user={u}
+              href={`/profile/${u.username}`}
+              className="rounded-none border-b border-white/[0.07] bg-transparent px-4 py-3 text-white last:border-b-0"
+              actionSlot={
+                <Button size="sm" variant="secondary" onClick={() => handleUnmute(u.id)}>
+                  {unmuteLoadingId === u.id ? 'Working...' : 'Unmute'}
+                </Button>
+              }
+            />
           ))}
         </div>
 

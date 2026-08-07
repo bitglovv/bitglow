@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Avatar } from "../ui/Avatar";
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, Lock } from "lucide-react";
 
 interface UserListItemUser {
   id: string;
@@ -8,6 +8,7 @@ interface UserListItemUser {
   displayName?: string;
   avatarUrl?: string;
   isVerified?: boolean;
+  isPrivate?: boolean;
 }
 
 interface UserListItemProps {
@@ -37,6 +38,12 @@ export const UserListItem = ({ user, actionSlot, href, onClick, className = "" }
           <span className="truncate text-[15px] font-semibold leading-tight text-white">
             @{user.username}
           </span>
+          {user.isPrivate && (
+            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-white/[0.03] px-2 py-0.5 text-xs text-zinc-300">
+              <Lock className="w-3 h-3" />
+              <span className="font-semibold">Private</span>
+            </span>
+          )}
           {user.isVerified && (
             <BadgeCheck className="w-4 h-4 text-brand shrink-0" strokeWidth={2.5} />
           )}
@@ -47,7 +54,11 @@ export const UserListItem = ({ user, actionSlot, href, onClick, className = "" }
   );
 
   const mainContent = href ? (
-    <Link to={href} className="flex min-w-0 items-center gap-3 overflow-hidden">
+    <Link
+      to={href}
+      onClick={(event) => event.stopPropagation()}
+      className="flex min-w-0 items-center gap-3 overflow-hidden"
+    >
       {leftContent}
     </Link>
   ) : (

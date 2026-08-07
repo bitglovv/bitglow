@@ -23,7 +23,6 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [moreButtonPressed, setMoreButtonPressed] = useState(false);
 
   useEffect(() => {
     const s = useChatStore.getState();
@@ -65,14 +64,12 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
   };
 
   const handleActionButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
-    // Only open the action sheet when the user explicitly presses the More button (pointer down occurred on it).
-    // Guard against synthetic or programmatic clicks that can have detail===0.
-    if (!moreButtonPressed) {
+    // Only open the action sheet for real user interaction.
+    if (!event.nativeEvent.isTrusted) {
       return;
     }
 
     setShowActionSheet(true);
-    setMoreButtonPressed(false);
   };
 
   return (
@@ -108,8 +105,6 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
 
         <button
           type="button"
-          onPointerDown={() => setMoreButtonPressed(true)}
-          onPointerLeave={() => setMoreButtonPressed(false)}
           onClick={handleActionButtonClick}
           aria-label="More conversation actions"
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-1 focus:ring-white/20 active:scale-95"

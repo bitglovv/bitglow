@@ -469,20 +469,26 @@ function filterPublicUser(user: any, isAuthorized = false) {
         username: user.username,
         displayName: user.displayName || user.display_name,
         avatarUrl: user.avatarUrl || user.avatar_url,
-        followersCount: user.followersCount ?? user.followers_count ?? 0,
-        followsCount: user.followsCount ?? user.follows_count ?? 0,
+        // Expose privacy flag so frontend can show lock icon & message
         isPrivate: user.isPrivate ?? user.is_private ?? false,
+        // Expose online status visibility setting so frontend/presence logic can respect it
+        onlineStatusVisible: user.onlineStatusVisible ?? user.online_status_visible ?? true,
     };
 
+    // If the account is private and the requester is not authorized (not the owner or a follower/friend),
+    // only return the minimal public-facing fields specified in the requirements: profile picture, display name, username, and online status visibility.
     if (base.isPrivate && !isAuthorized) {
         return base;
     }
 
+    // For authorized viewers (owner or accepted follower/friend) return the full profile fields including bio, website, location and counts.
     return {
         ...base,
         website: user.website,
         location: user.location,
         bio: user.bio,
+        followersCount: user.followersCount ?? user.followers_count ?? 0,
+        followsCount: user.followsCount ?? user.follows_count ?? 0,
     };
 }
 async function getOptionalRequesterId(req: any) {

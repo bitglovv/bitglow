@@ -1,6 +1,8 @@
+import { KeyboardEvent } from "react";
 import clsx from "clsx";
 import { Conversation } from "../../services/api";
 import { Avatar } from "../ui/Avatar";
+import { Link } from "react-router-dom";
 
 type Props = {
   conversation: Conversation;
@@ -16,24 +18,44 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
   const displayName = isMasked ? 'BitGlow User' : (conversation.displayName || conversation.username);
   const avatarSrc = isMasked ? undefined : conversation.avatarUrl;
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(conversation.userId);
+    }
+  };
+
   return (
-    <button
-          onClick={() => onSelect(conversation.userId)}
-          className={clsx(
-        "group relative w-full overflow-hidden rounded-[16px] border border-transparent py-2 pl-2.5 text-left transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15", // compact layout: no action menu reserved on the right (inbox is minimal)
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onClick={() => onSelect(conversation.userId)}
+      className={clsx(
+        "group relative w-full overflow-hidden rounded-[16px] border border-transparent py-2 pl-2.5 text-left transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-white/15",
         isActive ? "border-white/[0.08] bg-white/[0.05]" : "bg-transparent"
       )}
     >
       <div className="relative flex items-center gap-3">
         <div className="relative shrink-0">
-          <Avatar src={avatarSrc} alt={displayName} size="md" />
+          <Link
+            to={`/profile/${conversation.username}`}
+            onClick={(event) => event.stopPropagation()}
+            className="block"
+          >
+            <Avatar src={avatarSrc} alt={displayName} size="md" />
+          </Link>
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300">
+            <Link
+              to={`/profile/${conversation.username}`}
+              onClick={(event) => event.stopPropagation()}
+              className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300 hover:underline"
+            >
               {displayName}
-            </span>
+            </Link>
           </div>
 
           <div className="mt-0.5 flex items-center gap-2">
@@ -56,6 +78,6 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
           className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand ring-[1.5px] ring-black shadow-[0_0_6px_rgba(16,185,129,0.45)]"
         />
       )}
-    </button>
+    </div>
   );
 };

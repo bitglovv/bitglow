@@ -87,8 +87,9 @@ export function startWS(httpServer: any) {
 
       // Broadcast offline status if no other connections for this user
       const stillConnected = Array.from(clients).some(c => c.userId === meta.userId && c.isAuth);
-      if (!stillConnected && meta.isAuth && meta.onlineVisible) {
-        broadcastUserStatus(meta.userId, false, clients);
+      if (!stillConnected && meta.isAuth) {
+        // Only broadcast offline if the user had presence visible
+        broadcastUserStatus(meta.userId, false, clients, meta.onlineVisible ?? true);
       }
       
       for (const roomId of joinedRooms) {
@@ -131,6 +132,8 @@ export function disconnectUserSockets(userId: string) {
     }
   }
 }
+
+export { broadcastUserStatus } from "./handlers";
 
 export function broadcastUserRelationshipUpdate(actorId: string, targetId: string, kind: "block" | "mute" | "unblock" | "unmute") {
   const payload = JSON.stringify({

@@ -54,31 +54,38 @@ export async function profileRoutes(fastify: FastifyInstance) {
         const postsRes = await db.query('SELECT COUNT(*)::int FROM posts WHERE author_id = $1', [dbUser.id]);
         const postsCount = postsRes.rows[0].count;
 
-        const publicProfile = {
+        // Minimal public profile (visible to everyone)
+        const minimalPublicProfile: any = {
             id: dbUser.id,
             username: dbUser.username,
             displayName: dbUser.display_name,
             avatarUrl: dbUser.avatar_url,
-            followersCount,
-            followsCount,
-            friendsCount,
-            postsCount,
-            createdAt: dbUser.created_at
+            // Expose privacy flag and online status visibility so frontend can display lock and presence appropriately
+            isPrivate: dbUser.is_private,
+            onlineStatusVisible: dbUser.online_status_visible,
         };
 
         const requesterId = await getOptionalRequesterId(request);
         const authorized = requesterId === dbUser.id || (!!requesterId && await db.areFriends(requesterId, dbUser.id));
 
+        // If the account is private and requester is not authorized, return only the minimal profile fields.
         if (dbUser.is_private && !authorized) {
-            return publicProfile;
+            return minimalPublicProfile;
         }
 
-        return {
-            ...publicProfile,
+        // For authorized viewers return full profile including counts and profile fields.
+        const publicProfile = {
+            ...minimalPublicProfile,
+            followersCount,
+            followsCount,
+            friendsCount,
+            postsCount,
+            createdAt: dbUser.created_at,
             bio: dbUser.bio,
             website: dbUser.website,
             location: dbUser.location,
         };
+        return publicProfile;
     });
 
     /**

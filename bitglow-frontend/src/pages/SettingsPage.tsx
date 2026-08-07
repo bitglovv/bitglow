@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import Header from "../components/common/Header";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
 import { navigateBack } from "../utils/navigateBack";
@@ -141,27 +142,63 @@ export default function SettingsPage() {
   
   const { theme, setTheme, privateAccount, setPrivateAccount, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
 
+  const [privacyConfirmOpen, setPrivacyConfirmOpen] = useState(false);
+  const [privacyNextValue, setPrivacyNextValue] = useState<boolean | null>(null);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+
+  const [onlineConfirmOpen, setOnlineConfirmOpen] = useState(false);
+  const [onlineNextValue, setOnlineNextValue] = useState<boolean | null>(null);
+  const [onlineLoading, setOnlineLoading] = useState(false);
+
   useEffect(() => {
     if (user) {
       hydrateFromUser(!!user.isPrivate, user.onlineStatusVisible !== false);
     }
   }, [user, hydrateFromUser]);
 
-  const handlePrivacyToggle = async (next: boolean) => {
+  // When Toggle is clicked, open a confirmation dialog. The actual update happens after confirmation.
+  const handlePrivacyToggle = (next: boolean) => {
+    setPrivacyNextValue(next);
+    setPrivacyConfirmOpen(true);
+  };
+
+  const performPrivacyToggle = async () => {
+    if (privacyNextValue === null) return;
+    const next = privacyNextValue;
+    setPrivacyLoading(true);
+    // optimistically set
     setPrivateAccount(next);
     try {
       await api.settings.updatePrivacy(next);
-    } catch {
-      setPrivateAccount(!next); // revert on error
+      setPrivacyConfirmOpen(false);
+    } catch (err) {
+      // revert on error
+      setPrivateAccount(!next);
+      // keep dialog open to let user retry or cancel
+    } finally {
+      setPrivacyLoading(false);
+      setPrivacyNextValue(null);
     }
   };
 
-  const handleOnlineStatusToggle = async (next: boolean) => {
+  const handleOnlineStatusToggle = (next: boolean) => {
+    setOnlineNextValue(next);
+    setOnlineConfirmOpen(true);
+  };
+
+  const performOnlineStatusToggle = async () => {
+    if (onlineNextValue === null) return;
+    const next = onlineNextValue;
+    setOnlineLoading(true);
     setOnlineStatusVisible(next);
     try {
       await api.settings.updateOnlineStatus(next);
-    } catch {
-      setOnlineStatusVisible(!next); // revert on error
+      setOnlineConfirmOpen(false);
+    } catch (err) {
+      setOnlineStatusVisible(!next);
+    } finally {
+      setOnlineLoading(false);
+      setOnlineNextValue(null);
     }
   };
 
@@ -239,7 +276,59 @@ export default function SettingsPage() {
             >
               Log Out
             </button>
-          </div>
+
+          {/* Confirmation dialogs for toggles */}
+          <ConfirmDialog
+            open={privacyConfirmOpen}
+            title={privacyNextValue ? "Confirm Private Account" : "Confirm Public Account"}
+            message={
+              privacyNextValue
+                ? (
+                  <>
+                    Making your account private will hide your bio, website, location, posts, followers, following and friends from users who do not follow you. Non-followers will not be able to access Live Space or send direct messages (they will become Message Requests). Follow actions will become Follow Requests.
+                    <div className="mt-2 text-sm text-zinc-400">Are you sure you want to continue?</div>
+                  </>
+                )
+                : (
+                  <>
+                    Making your account public will allow non-followers to view your bio, website, location and posts. Follow behavior will return to normal and Live Space may be accessible by non-followers depending on other settings.
+                    <div className="mt-2 text-sm text-zinc-400">Are you sure you want to continue?</div>
+                  </>
+                )
+            }
+            confirmLabel={privacyNextValue ? "Turn Private" : "Make Public"}
+            cancelLabel="Cancel"
+            onConfirm={performPrivacyToggle}
+            onClose={() => { setPrivacyConfirmOpen(false); setPrivacyNextValue(null); }}
+            loading={privacyLoading}
+          />
+
+          <ConfirmDialog
+            open={onlineConfirmOpen}
+            title={onlineNextValue ? "Show Online Status" : "Hide Online Status"}
+            message={
+              onlineNextValue
+                ? (
+                  <>
+                    Enabling Online Status will show "ONLINE" on your profile and a green dot when you are actively online. If you are offline, only the text "ONLINE" will be visible (no green dot).
+                    <div className="mt-2 text-sm text-zinc-400">Do you want to enable this?</div>
+                  </>
+                )
+                : (
+                  <>
+                    Disabling Online Status will hide all presence indicators across the app (profile, search, messages, followers, following, friends, live chat, notifications and user cards).
+                    <div className="mt-2 text-sm text-zinc-400">Do you want to disable this?</div>
+                  </>
+                )
+            }
+            confirmLabel={onlineNextValue ? "Turn On" : "Turn Off"}
+            cancelLabel="Cancel"
+            onConfirm={performOnlineStatusToggle}
+            onClose={() => { setOnlineConfirmOpen(false); setOnlineNextValue(null); }}
+            loading={onlineLoading}
+          />
+
+        </div>
         </div>
       </main>
     </div>

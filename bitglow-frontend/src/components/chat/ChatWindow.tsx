@@ -8,6 +8,7 @@ import { ChatHeader } from "./ChatHeader";
 import LiveMessageList from "./LiveMessageList";
 import { MessageComposer } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
+import { UserListItem } from "../user/UserListItem";
 
 interface ChatWindowProps {
   conversation: Conversation | null;
@@ -296,11 +297,11 @@ export const ChatWindow = ({
                 <p className="px-4 py-8 text-center text-sm text-zinc-500">No other inbox contacts available.</p>
               ) : (
                 forwardTargets.map((target) => (
-                  <button
+                  <UserListItem
                     key={target.userId}
-                    type="button"
-                    disabled={isForwarding}
-                    onClick={async () => {
+                    user={target}
+                    href={`/profile/${target.username}`}
+                    onClick={isForwarding ? undefined : async () => {
                       setIsForwarding(true);
                       try {
                         await onForwardMessage(forwardingMessage.id, target.userId);
@@ -311,14 +312,8 @@ export const ChatWindow = ({
                         setIsForwarding(false);
                       }
                     }}
-                    className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-white/[0.06] disabled:opacity-50"
-                  >
-                    <Avatar src={target.avatarUrl} alt={target.username} size="sm" />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white">{target.displayName || target.username}</div>
-                      <div className="truncate text-xs text-zinc-500">@{target.username}</div>
-                    </div>
-                  </button>
+                    className="rounded-2xl px-3 py-2.5 hover:bg-white/[0.06]"
+                  />
                 ))
               )}
             </div>

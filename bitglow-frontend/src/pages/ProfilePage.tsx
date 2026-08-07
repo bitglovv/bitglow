@@ -8,7 +8,7 @@ import { Button } from "../components/ui/Button";
 import { 
   Settings, X, Edit3, Share2, Send, MessageSquare, 
   Video, UserPlus, ArrowLeft, MoreVertical, 
-  UserMinus, UserX, Link2 
+  UserMinus, UserX, Link2, Lock 
 } from "lucide-react";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 import { UserListItem } from '../components/user/UserListItem';
@@ -525,14 +525,21 @@ export default function ProfilePage() {
                 <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-500"}`} />
                 <span className="font-bold uppercase tracking-widest text-[#8b8f9c]">{statusLabel}</span>
               </div>
+
+              {profile.isPrivate && (
+                <div className="ml-3 inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1 text-xs text-zinc-300 mt-2">
+                  <Lock className="w-4 h-4" />
+                  <span className="font-semibold">Private Account</span>
+                </div>
+              )}
             </div>
 
             {profile.isPrivate && !isOwner && !isFollowing && !isMutualFriend ? (
               <div className="mt-8 text-center md:text-left">
                 <div className="inline-flex items-center justify-center p-4 rounded-2xl bg-white/[0.02] border border-white/5">
                   <div className="flex items-center gap-3 text-zinc-400">
-                    <UserX className="w-5 h-5" />
-                    <span className="font-medium">This account is private</span>
+                    <Lock className="w-5 h-5" />
+                    <span className="font-medium">This account is private. Follow this account to view posts and profile information.</span>
                   </div>
                 </div>
               </div>
@@ -607,7 +614,7 @@ export default function ProfilePage() {
                     disabled={isFollowLoading}
                   >
                     {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
+                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : (profile.isPrivate ? "Request Follow" : "Follow")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -616,7 +623,7 @@ export default function ProfilePage() {
                       navigate("/messages");
                     }}
                   >
-                    <MessageSquare className="w-4 h-4 mr-2" /> Message
+                    <MessageSquare className="w-4 h-4 mr-2" /> {(profile.isPrivate && !isFollowing && !isMutualFriend) ? "Message Request" : "Message"}
                   </Button>
                   <Button
                     variant="secondary"
@@ -648,7 +655,7 @@ export default function ProfilePage() {
             return isFollowingThem ? (
               <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfollow</Button>
             ) : (
-              <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>Follow Back</Button>
+              <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>{f.isPrivate ? "Request Follow" : "Follow Back"}</Button>
             );
           } : undefined}
         />

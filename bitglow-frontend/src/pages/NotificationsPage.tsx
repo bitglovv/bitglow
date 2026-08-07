@@ -239,7 +239,7 @@ export default function NotificationsPage() {
                     onClick={(e) => { e.preventDefault(); handleFollow(user.id, user.username); }}
                     disabled={isLoading}
                 >
-                    {item.type === "follow_back" ? "Follow back" : "Follow"}
+                        {item.type === "follow_back" ? "Follow back" : (user.isPrivate ? "Request Follow" : "Follow")}
                 </Button>
             );
         }
@@ -256,7 +256,7 @@ export default function NotificationsPage() {
                 className="font-semibold text-white hover:underline cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); navigate(`/profile/${user.username}`); }}
             >
-                {user.username}
+                {user.displayName?.trim() || user.username}
             </span>
         );
 

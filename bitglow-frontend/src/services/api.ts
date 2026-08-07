@@ -228,6 +228,66 @@ async function performLoginRequest(payload: Record<string, string>) {
     });
 }
 
+function normalizeAvatarUrl(obj: any): string | undefined {
+    return obj?.avatarUrl ?? obj?.avatar ?? obj?.avatar_url ?? undefined;
+}
+
+function normalizeDisplayName(obj: any): string | undefined {
+    const rawDisplayName = obj?.displayName ?? obj?.name ?? obj?.display_name;
+    if (typeof rawDisplayName === "string" && rawDisplayName.trim()) {
+        return rawDisplayName.trim();
+    }
+    return typeof obj?.username === "string" ? obj.username.trim() : undefined;
+}
+
+function normalizeUser<T extends Record<string, any>>(user: T): T & { avatarUrl?: string; displayName?: string } {
+    return {
+        ...user,
+        avatarUrl: normalizeAvatarUrl(user),
+        displayName: normalizeDisplayName(user) || user?.username || "",
+    };
+}
+
+function normalizeUsers<T extends Record<string, any>>(items: T[] = []): Array<T & { avatarUrl?: string; displayName?: string }> {
+    return items.map(normalizeUser);
+}
+
+function normalizeConversation(obj: any): Conversation {
+    return {
+        ...obj,
+        avatarUrl: normalizeAvatarUrl(obj),
+        displayName: normalizeDisplayName(obj) || obj?.username || "",
+    };
+}
+
+function normalizePostObject(obj: any): Post {
+    return {
+        ...obj,
+        author: normalizeUser(obj.author || {}),
+        likesCount: Number(obj.likesCount ?? obj.likes_count ?? obj.likes ?? obj.count ?? 0) || 0,
+        commentsCount: Number(obj.commentsCount ?? obj.comments_count ?? obj.comments ?? 0) || 0,
+        savesCount: Number(obj.savesCount ?? obj.saves_count ?? obj.saves ?? 0) || 0,
+        likedByMe: obj.likedByMe ?? !!obj.liked_by_me,
+        savedByMe: obj.savedByMe ?? !!obj.saved_by_me,
+    };
+}
+
+function normalizeCommentObject(obj: any): Comment {
+    return {
+        ...obj,
+        author: normalizeUser(obj.author || {}),
+        likesCount: Number(obj.likesCount ?? obj.likes_count ?? obj.count ?? 0) || 0,
+        likedByMe: obj.likedByMe ?? !!obj.liked_by_me,
+    };
+}
+
+function normalizeNotificationObject(obj: any): Notification {
+    return {
+        ...obj,
+        user: normalizeUser(obj.user || {}),
+    } as Notification;
+}
+
 async function checkRestorationResponse(res: Response) {
     try {
         const cloned = res.clone();
@@ -256,10 +316,11 @@ async function readAuthResponse(res: Response): Promise<{ token: string; user: U
         throw new Error("Login response missing token or user");
     }
 
+    const normalizedUser = normalizeUser(user);
     localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(user));
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
 
-    return { token, user };
+    return { token, user: normalizedUser as User };
 }
 
 async function resolveEmailFromUsername(username: string): Promise<string | null> {
@@ -407,14 +468,14 @@ export const api = {
                 const errorText = await res.text();
                 throw new Error(`Failed to fetch user: ${res.status} ${errorText}`);
             }
-            return res.json();
+            return normalizeUser(await res.json()) as User;
         },
     },
     user: {
         list: async (): Promise<User[]> => {
             const res = await fetchWithAuth("/users");
             if (!res.ok) return [];
-            return res.json();
+            return normalizeUsers(await res.json()) as User[];
         },
         checkUsername: async (username: string): Promise<{ available: boolean }> => {
             const res = await fetchWithAuth(`/api/username/check?u=${encodeURIComponent(username)}`);
@@ -427,7 +488,7 @@ export const api = {
         get: async (id: string): Promise<User> => {
             const res = await fetchWithAuth(`/users/${id}`);
             if (!res.ok) throw new Error("User not found");
-            return res.json();
+            return normalizeUser(await res.json()) as User;
         },
         update: async (data: Partial<User>): Promise<User> => {
             if (data.website) {
@@ -491,31 +552,31 @@ export const api = {
             const res = await fetchWithAuth("/friends");
             if (!res.ok) return [];
             const data = await res.json();
-            return data.friends || [];
+            return normalizeUsers(data.friends || []) as Friend[];
         },
         followers: async (): Promise<Friend[]> => {
             const res = await fetchWithAuth("/followers");
             if (!res.ok) return [];
             const data = await res.json();
-            return data.followers || [];
+            return normalizeUsers(data.followers || []) as Friend[];
         },
         following: async (): Promise<Friend[]> => {
             const res = await fetchWithAuth("/following");
             if (!res.ok) return [];
             const data = await res.json();
-            return data.following || [];
+            return normalizeUsers(data.following || []) as Friend[];
         },
         followRequests: async (): Promise<Friend[]> => {
             const res = await fetchWithAuth("/follow/requests");
             if (!res.ok) return [];
             const data = await res.json();
-            return data.requests || [];
+            return normalizeUsers(data.requests || []) as Friend[];
         },
         pendingFollows: async (): Promise<Friend[]> => {
             const res = await fetchWithAuth("/follow/pending");
             if (!res.ok) return [];
             const data = await res.json();
-            return data.pending || [];
+            return normalizeUsers(data.pending || []) as Friend[];
         },
         acceptFollow: async (followerId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/follow/requests/${followerId}/accept`, { method: "POST" });
@@ -526,12 +587,12 @@ export const api = {
         get: async (username: string): Promise<User> => {
             const res = await fetchWithAuth(`/api/profile/${username}`);
             if (!res.ok) throw new Error("Profile not found");
-            return res.json();
+            return normalizeUser(await res.json()) as User;
         },
         me: async (): Promise<User> => {
             const res = await fetchWithAuth("/api/me");
             if (!res.ok) throw new Error("Failed to fetch my profile");
-            return res.json();
+            return normalizeUser(await res.json()) as User;
         }
     },
     live: {

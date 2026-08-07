@@ -146,7 +146,7 @@ export default function SearchPage() {
                           onClick={() => handleFollow(u)}
                           className="h-9 rounded-full px-5 text-[13px] font-semibold transition-all"
                         >
-                          Follow
+                          {u.isPrivate ? "Request Follow" : "Follow"}
                         </Button>
                       )}
                     </div>
