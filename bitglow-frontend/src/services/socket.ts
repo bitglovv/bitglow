@@ -38,7 +38,14 @@ function getWsUrl(): string {
         return envHost.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
     }
 
-    return "wss://bitglow-backend-hh2h.onrender.com"; // safe fallback
+    // VITE_API_HOST is not configured for this production deployment.
+    // Throw so the misconfiguration is immediately visible rather than
+    // silently routing WebSocket traffic to a hardcoded host.
+    const msg =
+        "[BitGlow] VITE_API_HOST is not set for a production build. " +
+        "Add VITE_API_HOST=https://<your-backend>.onrender.com to your Vercel environment variables.";
+    console.error(msg);
+    throw new Error(msg);
 }
 
 class SocketService {
