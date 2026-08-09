@@ -355,7 +355,7 @@ export async function authRoutes(fastify: FastifyInstance) {
      * POST /api/auth/send-restoration-otp
      * Sends a 6-digit Email OTP to verify account ownership before restoration
      */
-    fastify.post("/send-restoration-otp", { schema: sendRestorationOtpSchema }, async (req, reply) => {
+    fastify.post("/send-restoration-otp", { config: { rateLimit: { max: 3, timeWindow: "1 hour" } }, schema: sendRestorationOtpSchema }, async (req, reply) => {
         const { identifier, password } = req.body as SendRestorationOtp;
 
         if (!identifier || !password) {
@@ -395,7 +395,7 @@ export async function authRoutes(fastify: FastifyInstance) {
      * POST /api/auth/restore-account
      * Restores an account after ownership verification via Email OTP (and 2FA TOTP)
      */
-    fastify.post("/restore-account", { schema: restoreAccountSchema }, async (req, reply) => {
+    fastify.post("/restore-account", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } }, schema: restoreAccountSchema }, async (req, reply) => {
         const { identifier, password, otpCode, twoFactorCode } = req.body as RestoreAccount;
 
         if (!identifier || !password || !otpCode) {

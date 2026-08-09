@@ -49,7 +49,7 @@ export const env = {
     APP_URL: requireEnv("APP_URL"),
     JWT_ISSUER: process.env.JWT_ISSUER || "bitglow-backend",
     JWT_AUDIENCE: process.env.JWT_AUDIENCE || "bitglow-api",
-    ACCESS_TOKEN_TTL_SECONDS: parsePositiveInteger("ACCESS_TOKEN_TTL_SECONDS", process.env.ACCESS_TOKEN_TTL_SECONDS, 7 * 24 * 60 * 60),
+    ACCESS_TOKEN_TTL_SECONDS: parsePositiveInteger("ACCESS_TOKEN_TTL_SECONDS", process.env.ACCESS_TOKEN_TTL_SECONDS, 15 * 60),
     REFRESH_TOKEN_TTL_SECONDS: parsePositiveInteger("REFRESH_TOKEN_TTL_SECONDS", process.env.REFRESH_TOKEN_TTL_SECONDS, 30 * 24 * 60 * 60),
     CORS_ORIGINS: parseCsv(corsOriginsRaw),
     LOG_SECURITY_EVENTS: process.env.LOG_SECURITY_EVENTS !== "false",

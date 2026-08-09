@@ -92,11 +92,20 @@ export interface SecurityLogRow {
     ts?: string | number | Date;
 }
 
+// In production, validate the server TLS certificate unless the operator
+// explicitly opts out (e.g. DATABASE_URL already contains sslmode=no-verify
+// or the DB host uses a self-signed cert). Set DB_SSL_REJECT_UNAUTHORIZED=false
+// to disable certificate validation when necessary.
+const dbSslRejectUnauthorized =
+    process.env.DB_SSL_REJECT_UNAUTHORIZED === undefined
+        ? env.NODE_ENV === "production"
+        : !["false", "0", "no"].includes((process.env.DB_SSL_REJECT_UNAUTHORIZED || "").toLowerCase());
+
 const pool = new Pool({
     connectionString: env.DATABASE_URL,
 
     ssl: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: dbSslRejectUnauthorized,
     },
 
     connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
@@ -349,8 +358,10 @@ const initSecurityTables = async () => {
                 otp_code_hash TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 used_at TIMESTAMPTZ,
+                attempts INT NOT NULL DEFAULT 0,
                 created_at TIMESTAMPTZ DEFAULT now()
             );
+            ALTER TABLE account_restoration_otps ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;
             CREATE INDEX IF NOT EXISTS idx_restoration_otps_user ON account_restoration_otps(user_id);
 
             CREATE TABLE IF NOT EXISTS action_verifications (
@@ -960,8 +971,9 @@ export const db = {
     },
 
     async verifyRestorationOtp(userId: string, otpCode: string): Promise<boolean> {
+        const MAX_RESTORATION_ATTEMPTS = 5;
         const res = await pool.query(
-            `SELECT id, otp_code_hash, expires_at FROM account_restoration_otps
+            `SELECT id, otp_code_hash, expires_at, COALESCE(attempts, 0) AS attempts FROM account_restoration_otps
              WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()
              ORDER BY created_at DESC LIMIT 1`,
             [userId]
@@ -970,6 +982,23 @@ export const db = {
         if (res.rows.length === 0) return false;
 
         const row = res.rows[0];
+
+        // Enforce max attempt count — mark as used (exhausted) if exceeded
+        if (row.attempts >= MAX_RESTORATION_ATTEMPTS) {
+            await pool.query(
+                `UPDATE account_restoration_otps SET used_at = NOW() WHERE id = $1`,
+                [row.id]
+            );
+            return false;
+        }
+
+        // Increment attempts before comparing to prevent parallel brute-force
+        const newAttempts = row.attempts + 1;
+        await pool.query(
+            `UPDATE account_restoration_otps SET attempts = $1 WHERE id = $2`,
+            [newAttempts, row.id]
+        );
+
         const isValid = await bcrypt.compare(otpCode, row.otp_code_hash);
 
         if (isValid) {
@@ -978,6 +1007,14 @@ export const db = {
                 [row.id]
             );
             return true;
+        }
+
+        // Exhaust the OTP if max attempts reached after this failure
+        if (newAttempts >= MAX_RESTORATION_ATTEMPTS) {
+            await pool.query(
+                `UPDATE account_restoration_otps SET used_at = NOW() WHERE id = $1`,
+                [row.id]
+            );
         }
 
         return false;
@@ -2198,22 +2235,30 @@ export const db = {
                  UNION ALL
 
                  SELECT 'dm' AS type,
-                        m.sender_id AS user_id,
+                        latest_dm.sender_id AS user_id,
                         u.username,
                         u.display_name,
                         u.avatar_url,
                         NULL::uuid AS post_id,
-                        m.text AS content,
+                        NULL::text AS content,
                         NULL::text AS comment_content,
                         NULL::text AS status,
                         false AS is_mutual,
-                        m.created_at
-                 FROM dm_messages m
-                 JOIN dm_conversations c ON c.id = m.conversation_id
-                 JOIN users u ON u.id = m.sender_id
-                 WHERE (c.user_a = $1 OR c.user_b = $1)
-                   AND m.sender_id <> $1
-                   AND COALESCE(u.is_deleted, FALSE) = FALSE
+                        latest_dm.created_at
+                 FROM (
+                     SELECT DISTINCT ON (m.sender_id)
+                            m.sender_id,
+                            m.created_at,
+                            m.conversation_id
+                     FROM dm_messages m
+                     JOIN dm_conversations c ON c.id = m.conversation_id
+                     WHERE (c.user_a = $1 OR c.user_b = $1)
+                       AND m.sender_id <> $1
+                       AND m.read_at IS NULL
+                     ORDER BY m.sender_id, m.created_at DESC
+                 ) latest_dm
+                 JOIN users u ON u.id = latest_dm.sender_id
+                 WHERE COALESCE(u.is_deleted, FALSE) = FALSE
              ) notifications
              WHERE NOT EXISTS (
                  SELECT 1 FROM muted_users m

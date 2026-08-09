@@ -64,17 +64,20 @@ export function startWS(httpServer: any) {
         });
     });
 
+    // Reject connections that do not send a client:hello within 10 seconds.
+    // This prevents unauthenticated sockets from sitting idle and consuming
+    // server resources or attempting to exploit pre-auth message paths.
     const helloTimeout = setTimeout(() => {
-        if (!meta.helloReceived) {
+        if (!meta.helloReceived || !meta.isAuth) {
             void db.insertSecurityLog({
               eventType: "ws_auth_rejected",
               ipAddress: meta.ipAddress,
               userAgent: meta.userAgent,
-              details: { reason: "hello_timeout" },
+              details: { reason: "hello_timeout", helloReceived: meta.helloReceived },
             });
-            socket.close();
+            socket.close(1008, "Authentication timeout");
         }
-    }, 5_000);
+    }, 10_000);
 
     // Handle disconnection
     socket.on("close", () => {

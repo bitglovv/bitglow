@@ -13,7 +13,10 @@ export async function userRoutes(fastify: FastifyInstance) {
      * POST /api/upload/avatar
      * Uploads an avatar image and returns the public URL
      */
-    fastify.post("/upload/avatar", { preHandler: fastify.requireAuth }, async (req, reply) => {
+    fastify.post("/upload/avatar", {
+        preHandler: fastify.requireAuth,
+        config: { rateLimit: { max: 5, timeWindow: "1 hour" } },
+    }, async (req, reply) => {
         const data = await req.file();
         if (!data) {
             return reply.code(400).send({ message: "No file uploaded" });
@@ -27,6 +30,34 @@ export async function userRoutes(fastify: FastifyInstance) {
         const buffer = await data.toBuffer();
         if (buffer.length > 5 * 1024 * 1024) {
             return reply.code(400).send({ message: "File exceeds 5MB limit" });
+        }
+
+        // Magic byte validation — verify the actual file bytes match the declared MIME type.
+        // This prevents MIME spoofing (e.g. sending an HTML/SVG with Content-Type: image/jpeg).
+        const isValidMagic = (() => {
+            if (buffer.length < 4) return false;
+            const b0 = buffer[0], b1 = buffer[1], b2 = buffer[2], b3 = buffer[3];
+            switch (data.mimetype) {
+                case "image/jpeg":
+                    // JPEG: FF D8 FF
+                    return b0 === 0xFF && b1 === 0xD8 && b2 === 0xFF;
+                case "image/png":
+                    // PNG: 89 50 4E 47
+                    return b0 === 0x89 && b1 === 0x50 && b2 === 0x4E && b3 === 0x47;
+                case "image/webp":
+                    // WebP: RIFF .... WEBP (bytes 0-3 = RIFF, bytes 8-11 = WEBP)
+                    if (buffer.length < 12) return false;
+                    return (
+                        b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46 &&
+                        buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+                    );
+                default:
+                    return false;
+            }
+        })();
+
+        if (!isValidMagic) {
+            return reply.code(400).send({ message: "File content does not match the declared image format" });
         }
 
         try {

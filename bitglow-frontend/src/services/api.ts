@@ -38,12 +38,13 @@ const getApiHost = () => {
         return envHost;
     }
 
-    // VITE_API_HOST not configured for production — warn loudly
-    console.error(
-        "[BitGlow] VITE_API_HOST is not configured for production. " +
-        "Add VITE_API_HOST=https://bitglow-backend-hh2h.onrender.com to your Vercel environment variables."
-    );
-    return "https://bitglow-backend-hh2h.onrender.com"; // safe fallback for this project
+    // VITE_API_HOST not configured for production — fail loudly so misconfiguration
+    // is caught at deploy time rather than silently routing to a hardcoded host.
+    const msg =
+        "[BitGlow] VITE_API_HOST is not set for a production build. " +
+        "Add VITE_API_HOST=https://<your-backend>.onrender.com to your Vercel environment variables.";
+    console.error(msg);
+    throw new Error(msg)
 };
 
 const API_HOST = getApiHost();
