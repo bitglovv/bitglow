@@ -60,6 +60,10 @@ export const env = {
     WS_MAX_PAYLOAD_BYTES: parsePositiveInteger("WS_MAX_PAYLOAD_BYTES", process.env.WS_MAX_PAYLOAD_BYTES, 16_384),
     SUPABASE_URL: process.env.SUPABASE_URL || "",
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    // Optional: base64-encoded PEM CA certificate for PostgreSQL TLS verification.
+    // Required in production when the database uses a CA not in Node's built-in
+    // Mozilla root store (e.g. Supabase / Amazon RDS).
+    DB_SSL_CA_BASE64: process.env.DB_SSL_CA_BASE64 || "",
 };
 
 if (env.NODE_ENV === "production" && env.JWT_SECRET.length < 32) {

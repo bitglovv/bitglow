@@ -92,21 +92,121 @@ export interface SecurityLogRow {
     ts?: string | number | Date;
 }
 
-// In production, validate the server TLS certificate unless the operator
-// explicitly opts out (e.g. DATABASE_URL already contains sslmode=no-verify
-// or the DB host uses a self-signed cert). Set DB_SSL_REJECT_UNAUTHORIZED=false
-// to disable certificate validation when necessary.
-const dbSslRejectUnauthorized =
-    process.env.DB_SSL_REJECT_UNAUTHORIZED === undefined
-        ? env.NODE_ENV === "production"
-        : !["false", "0", "no"].includes((process.env.DB_SSL_REJECT_UNAUTHORIZED || "").toLowerCase());
+// ─── PostgreSQL TLS configuration ─────────────────────────────────────────────────────────────────────────────
+//
+// IMPORTANT: node-postgres merges the parsed connection string OVER the Pool
+// config object (Object.assign({}, poolConfig, parse(connectionString))).
+// If DATABASE_URL contains ?sslmode=require, the parsed result is ssl:{}, which
+// silently overwrites any ssl object we pass — including the 'ca' field.
+//
+// To make TLS configuration fully deterministic we:
+//   1. Strip all SSL query-string parameters from DATABASE_URL before passing
+//      it to the Pool, so pg-connection-string never returns an ssl field.
+//   2. Build and pass our own ssl object explicitly.
+//
+// All TLS behaviour is controlled by environment variables, not by whatever
+// ssl params happen to be in the connection string.
+
+function stripSslParamsFromUrl(url: string): string {
+    try {
+        const u = new URL(url);
+        for (const key of ["sslmode", "ssl", "sslcert", "sslkey", "sslrootcert", "sslca"]) {
+            u.searchParams.delete(key);
+        }
+        return u.toString();
+    } catch {
+        // Not a parseable URL (e.g. unix socket path) — return as-is.
+        return url;
+    }
+}
+
+function buildDbSslConfig(): { rejectUnauthorized: boolean; ca?: string } {
+    const isProduction = env.NODE_ENV === "production";
+
+    // Determine rejectUnauthorized:
+    //   • unset in production  → true  (fail closed)
+    //   • unset in development → false (allow self-signed local DBs)
+    //   • explicitly set       → honour the explicit value
+    const rejectUnauthorized: boolean =
+        process.env.DB_SSL_REJECT_UNAUTHORIZED === undefined
+            ? isProduction
+            : !["false", "0", "no"].includes(
+                  (process.env.DB_SSL_REJECT_UNAUTHORIZED || "").trim().toLowerCase()
+              );
+
+    // Decode the CA certificate if supplied.
+    // DB_SSL_CA_BASE64 is a base64-encoded PEM string. Encoding as base64 makes it
+    // safe for all CI/CD and deployment platforms that struggle with multiline env vars.
+    let caPem: string | undefined;
+    if (env.DB_SSL_CA_BASE64.trim()) {
+        try {
+            const decoded = Buffer.from(env.DB_SSL_CA_BASE64.trim(), "base64").toString("utf8");
+            if (!decoded.includes("-----BEGIN CERTIFICATE-----")) {
+                throw new Error("Decoded value does not contain a PEM certificate header");
+            }
+            caPem = decoded;
+        } catch (err) {
+            const msg =
+                "[DB] DB_SSL_CA_BASE64 is set but could not be decoded as a base64 PEM " +
+                "certificate: " + (err instanceof Error ? err.message : String(err));
+            console.error(msg);
+            // In production this is a hard error — a malformed CA cert must not be silently ignored.
+            if (isProduction) {
+                throw new Error(msg);
+            }
+        }
+    }
+
+    if (!rejectUnauthorized) {
+        if (isProduction) {
+            // Production must fail closed. Disabling certificate verification
+            // exposes every database credential and query to interception.
+            throw new Error(
+                "[DB] FATAL: DB_SSL_REJECT_UNAUTHORIZED=false is not permitted in production. " +
+                "PostgreSQL TLS certificate verification must be enabled. " +
+                "Set DB_SSL_CA_BASE64 to the base64-encoded Supabase CA certificate and " +
+                "remove DB_SSL_REJECT_UNAUTHORIZED (or set it to true)."
+            );
+        }
+        return { rejectUnauthorized: false };
+    }
+
+    // rejectUnauthorized=true from here on.
+    if (isProduction && !caPem) {
+        // Production must fail closed. Supabase and Amazon RDS use a CA that is NOT
+        // in Node's built-in Mozilla root store. Without DB_SSL_CA_BASE64 the
+        // TLS handshake will fail with SELF_SIGNED_CERT_IN_CHAIN. We throw here,
+        // before the pool is created, so the error is immediate and unambiguous.
+        throw new Error(
+            "[DB] FATAL: DB_SSL_CA_BASE64 is required in production. " +
+            "Supabase and Amazon RDS use a CA that is not in Node's built-in root store. " +
+            "Set DB_SSL_CA_BASE64 to the base64-encoded PEM CA certificate from your " +
+            "Supabase project dashboard: Settings → Database → 'Download SSL certificate'. " +
+            "See .env.example for encoding instructions."
+        );
+    }
+
+    return {
+        rejectUnauthorized: true,
+        ...(caPem ? { ca: caPem } : {}),
+    };
+}
+
+const dbSslConfig = buildDbSslConfig();
+
+// Sanitise the connection string so pg-connection-string never returns an ssl
+// field that would override our explicit ssl object.
+const sanitisedDatabaseUrl = stripSslParamsFromUrl(env.DATABASE_URL);
+
+console.info(
+    `[DB] TLS: rejectUnauthorized=${dbSslConfig.rejectUnauthorized}, ` +
+    `ca=${dbSslConfig.ca ? "provided via DB_SSL_CA_BASE64" : "Node built-in CA store"}`
+);
 
 const pool = new Pool({
-    connectionString: env.DATABASE_URL,
+    connectionString: sanitisedDatabaseUrl,
 
-    ssl: {
-        rejectUnauthorized: dbSslRejectUnauthorized,
-    },
+    ssl: dbSslConfig,
 
     connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
     statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
