@@ -144,10 +144,10 @@ export default function SettingsPage() {
     document.title = "BitGlow Settings";
   }, []);
 
-  const { logout, user, updatePrivacy } = useAuth();
+  const { logout, user, updatePrivacy, updateOnlineStatusVisible } = useAuth();
   const navigate = useNavigate();
   
-  const { theme, setTheme, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
+  const { theme, setTheme } = useSettingsStore();
 
   const [privacyConfirmOpen, setPrivacyConfirmOpen] = useState(false);
   const [privacyNextValue, setPrivacyNextValue] = useState<boolean | null>(null);
@@ -156,12 +156,6 @@ export default function SettingsPage() {
   const [onlineConfirmOpen, setOnlineConfirmOpen] = useState(false);
   const [onlineNextValue, setOnlineNextValue] = useState<boolean | null>(null);
   const [onlineLoading, setOnlineLoading] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      hydrateFromUser(user.onlineStatusVisible !== false);
-    }
-  }, [user, hydrateFromUser]);
 
   // When Toggle is clicked, open a confirmation dialog. The actual update happens after confirmation.
   const currentPrivate = !!user?.isPrivate;
@@ -192,8 +186,10 @@ export default function SettingsPage() {
     }
   };
 
-  const handleOnlineStatusToggle = (next: boolean) => {
-    setOnlineNextValue(next);
+  const onlineStatusVisible = user?.onlineStatusVisible !== false;
+  const handleOnlineStatusToggle = () => {
+    if (onlineLoading) return;
+    setOnlineNextValue(!onlineStatusVisible);
     setOnlineConfirmOpen(true);
   };
 
@@ -202,12 +198,12 @@ export default function SettingsPage() {
     const next = onlineNextValue;
     setOnlineLoading(true);
     try {
-      // Use store setter which performs API and reverts on error
-      await setOnlineStatusVisible(next);
+      await updateOnlineStatusVisible(next);
       try {
         window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Online status shown" : "Online status hidden" } }));
       } catch {}
       setOnlineConfirmOpen(false);
+      setOnlineNextValue(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to update online status";
       try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
@@ -215,7 +211,6 @@ export default function SettingsPage() {
       // keep dialog open so user can retry or cancel
     } finally {
       setOnlineLoading(false);
-      setOnlineNextValue(null);
     }
   };
 
@@ -252,7 +247,7 @@ export default function SettingsPage() {
 
             <SettingsSection title="Privacy">
               <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: currentPrivate, onChange: handlePrivacyToggle, disabled: privacyLoading }} />
-              <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: handleOnlineStatusToggle }} />
+              <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: handleOnlineStatusToggle, disabled: onlineLoading }} />
               <SettingsItem icon={<UserX className="h-5 w-5" />} title="Blocked Users" subtitle="Review accounts you blocked" to="/settings/blocked-users" />
               <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Muted Users" subtitle="Review accounts you muted" to="/settings/muted-users" />
             </SettingsSection>

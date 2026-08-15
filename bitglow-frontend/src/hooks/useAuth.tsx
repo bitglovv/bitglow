@@ -1,6 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, User } from "../services/api";
-import { useSettingsStore } from "../store/settingsStore";
 import { socketService } from "../services/socket";
 import { useChatStore } from "../store/chatStore";
 
@@ -13,6 +12,7 @@ type AuthContextType = {
     logout: () => void;
     refreshUser: () => Promise<void>;
     updatePrivacy: (isPrivate: boolean) => Promise<boolean>;
+    updateOnlineStatusVisible: (isVisible: boolean) => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,23 +43,18 @@ function persistUser(user: User) {
     localStorage.setItem("user", JSON.stringify(user));
 }
 
-function hydrateStores(user: User | null) {
-    if (!user) return;
-    useSettingsStore.getState().hydrateFromUser(user.onlineStatusVisible ?? true);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [token, setToken] = useState<string | null>(() => loadToken());
     const [user, setUser] = useState<User | null>(() => loadStoredUser());
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const userSyncVersion = useRef(0);
     const privacyMutationInFlight = useRef(false);
+    const onlineStatusMutationInFlight = useRef(false);
 
     const applyUser = (nextUser: User, version: number) => {
         if (version !== userSyncVersion.current) return false;
         setUser(nextUser);
         persistUser(nextUser);
-        hydrateStores(nextUser);
         return true;
     };
 
@@ -98,7 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const cachedUser = loadStoredUser();
             if (cachedUser && !cancelled) {
                 setUser(cachedUser);
-                hydrateStores(cachedUser);
             }
 
             try {
@@ -117,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 } else if (cachedUser) {
                     setToken(storedToken);
                     setUser(cachedUser);
-                    hydrateStores(cachedUser);
                     console.log("AUTH_USER_RESTORED");
                 } else {
                     console.error("Auth hydration failed before user restore", error);
@@ -192,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const handleFocus = () => {
-            if (!token || isAuthLoading || privacyMutationInFlight.current) return;
+            if (!token || isAuthLoading || privacyMutationInFlight.current || onlineStatusMutationInFlight.current) return;
 
             refreshAuthenticatedUser()
                 .catch((error) => {
@@ -206,30 +199,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("focus", handleFocus);
     }, [token, isAuthLoading]);
 
-    useEffect(() => {
-        const handleUserUpdated = (event: Event) => {
-            const updatedUser = (event as CustomEvent<unknown>).detail;
-            if (!updatedUser || typeof updatedUser !== "object" || !("id" in updatedUser)) return;
-
-            const userFromServer = updatedUser as User;
-            setUser((currentUser) => {
-                if (currentUser && currentUser.id !== userFromServer.id) return currentUser;
-                // Legacy settings events must not overwrite a privacy mutation in progress.
-                const mergedUser = currentUser
-                    ? { ...userFromServer, isPrivate: currentUser.isPrivate }
-                    : userFromServer;
-                persistUser(mergedUser);
-                hydrateStores(mergedUser);
-                return mergedUser;
-            });
-        };
-
-        window.addEventListener("bitglow:user-updated", handleUserUpdated);
-        return () => {
-            window.removeEventListener("bitglow:user-updated", handleUserUpdated);
-        };
-    }, []);
-
     const login = (newToken: string, userData?: User) => {
         localStorage.setItem("token", newToken);
         setToken(newToken);
@@ -238,7 +207,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (userData) {
             setUser(userData);
             persistUser(userData);
-            hydrateStores(userData);
             return;
         }
 
@@ -258,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const refreshUser = async () => {
-        if (!token || privacyMutationInFlight.current) return;
+        if (!token || privacyMutationInFlight.current || onlineStatusMutationInFlight.current) return;
         await refreshAuthenticatedUser();
     };
 
@@ -283,13 +251,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!currentUser || mutationVersion !== userSyncVersion.current) return currentUser;
                 const updatedUser = { ...currentUser, isPrivate: response.isPrivate };
                 persistUser(updatedUser);
-                hydrateStores(updatedUser);
                 return updatedUser;
             });
 
             return response.isPrivate;
         } finally {
             privacyMutationInFlight.current = false;
+        }
+    };
+
+    const updateOnlineStatusVisible = async (isVisible: boolean) => {
+        if (onlineStatusMutationInFlight.current) {
+            throw new Error("Online status update already in progress");
+        }
+
+        onlineStatusMutationInFlight.current = true;
+        const mutationVersion = ++userSyncVersion.current;
+        try {
+            const response = await api.settings.updateOnlineStatus(isVisible) as { ok: boolean; isVisible: boolean };
+            if (!response.ok || typeof response.isVisible !== "boolean") {
+                throw new Error("Invalid online status update response");
+            }
+            if (mutationVersion !== userSyncVersion.current) {
+                return response.isVisible;
+            }
+
+            setUser((currentUser) => {
+                if (!currentUser || mutationVersion !== userSyncVersion.current) return currentUser;
+                const updatedUser = { ...currentUser, onlineStatusVisible: response.isVisible };
+                persistUser(updatedUser);
+                return updatedUser;
+            });
+
+            return response.isVisible;
+        } finally {
+            onlineStatusMutationInFlight.current = false;
         }
     };
 
@@ -302,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshUser,
         updatePrivacy,
+        updateOnlineStatusVisible,
     }), [user, token, isAuthLoading]);
 
     return (
