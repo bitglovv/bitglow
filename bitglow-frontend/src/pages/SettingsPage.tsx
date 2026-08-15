@@ -147,7 +147,7 @@ export default function SettingsPage() {
   const { logout, user, updatePrivacy } = useAuth();
   const navigate = useNavigate();
   
-  const { theme, setTheme, privateAccount, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
+  const { theme, setTheme, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
 
   const [privacyConfirmOpen, setPrivacyConfirmOpen] = useState(false);
   const [privacyNextValue, setPrivacyNextValue] = useState<boolean | null>(null);
@@ -159,14 +159,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      hydrateFromUser(!!user.isPrivate, user.onlineStatusVisible !== false);
+      hydrateFromUser(user.onlineStatusVisible !== false);
     }
   }, [user, hydrateFromUser]);
 
   // When Toggle is clicked, open a confirmation dialog. The actual update happens after confirmation.
-  const handlePrivacyToggle = (next: boolean) => {
+  const currentPrivate = !!user?.isPrivate;
+  const handlePrivacyToggle = () => {
     if (privacyLoading) return;
-    setPrivacyNextValue(next);
+    setPrivacyNextValue(!currentPrivate);
     setPrivacyConfirmOpen(true);
   };
 
@@ -250,7 +251,7 @@ export default function SettingsPage() {
             </SettingsSection>
 
             <SettingsSection title="Privacy">
-              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: privateAccount, onChange: handlePrivacyToggle, disabled: privacyLoading }} />
+              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: currentPrivate, onChange: handlePrivacyToggle, disabled: privacyLoading }} />
               <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: handleOnlineStatusToggle }} />
               <SettingsItem icon={<UserX className="h-5 w-5" />} title="Blocked Users" subtitle="Review accounts you blocked" to="/settings/blocked-users" />
               <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Muted Users" subtitle="Review accounts you muted" to="/settings/muted-users" />

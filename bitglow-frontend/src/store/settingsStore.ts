@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { api } from "../services/api";
 
 export type AppTheme = "dark" | "white";
 
@@ -7,12 +8,10 @@ interface SettingsState {
   theme: AppTheme;
   setTheme: (theme: AppTheme) => void;
 
-  privateAccount: boolean;
-
   onlineStatusVisible: boolean;
   setOnlineStatusVisible: (isVisible: boolean) => Promise<void>;
 
-  hydrateFromUser: (isPrivate: boolean, onlineStatusVisible: boolean) => void;
+  hydrateFromUser: (onlineStatusVisible: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -24,7 +23,6 @@ export const useSettingsStore = create<SettingsState>()(
         applyTheme(theme);
       },
 
-      privateAccount: false,
       onlineStatusVisible: true,
       setOnlineStatusVisible: async (isVisible) => {
         // Optimistic update, revert if API fails
@@ -36,8 +34,8 @@ export const useSettingsStore = create<SettingsState>()(
             const freshUser = await api.auth.me();
             // Persist the updated user to localStorage so hydrations use the fresh value
             localStorage.setItem('user', JSON.stringify(freshUser));
-            // Update settings store from authoritative user
-            set({ privateAccount: !!freshUser.isPrivate, onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
+            // Privacy belongs to AuthContext; this store only mirrors online status.
+            set({ onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
             // Notify interested parts of the app
             try { window.dispatchEvent(new CustomEvent('bitglow:user-updated', { detail: freshUser })); } catch (e) {}
           } catch (refreshErr) {
@@ -51,8 +49,8 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
-      hydrateFromUser: (isPrivate, onlineStatusVisible) => {
-        set({ privateAccount: isPrivate, onlineStatusVisible });
+      hydrateFromUser: (onlineStatusVisible) => {
+        set({ onlineStatusVisible });
       },
     }),
     {

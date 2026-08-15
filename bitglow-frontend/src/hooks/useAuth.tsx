@@ -45,10 +45,7 @@ function persistUser(user: User) {
 
 function hydrateStores(user: User | null) {
     if (!user) return;
-    useSettingsStore.getState().hydrateFromUser(
-        !!user.isPrivate,
-        user.onlineStatusVisible ?? true
-    );
+    useSettingsStore.getState().hydrateFromUser(user.onlineStatusVisible ?? true);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -289,14 +286,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 hydrateStores(updatedUser);
                 return updatedUser;
             });
-
-            // Reconcile the full user from the authoritative endpoint.
-            try {
-                await refreshAuthenticatedUser();
-            } catch (error) {
-                // The persisted mutation response above is authoritative for privacy.
-                console.warn("Failed to refresh user after updating privacy", error);
-            }
 
             return response.isPrivate;
         } finally {
