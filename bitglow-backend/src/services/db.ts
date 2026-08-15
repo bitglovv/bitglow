@@ -2474,10 +2474,14 @@ export const db = {
     },
 
     async updateUserPrivacy(userId: string, isPrivate: boolean) {
-        await pool.query(
-            'UPDATE users SET is_private = $1, updated_at = NOW() WHERE id = $2',
+        const res = await pool.query(
+            `UPDATE users
+             SET is_private = $1, updated_at = NOW()
+             WHERE id = $2
+             RETURNING id, is_private`,
             [isPrivate, userId]
         );
+        return res.rows[0] as { id: string; is_private: boolean } | undefined;
     },
 
     async updateUserOnlineStatusVisible(userId: string, isVisible: boolean) {

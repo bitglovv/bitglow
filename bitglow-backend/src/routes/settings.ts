@@ -222,8 +222,12 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        await db.updateUserPrivacy(userId, isPrivate);
-        return { ok: true, isPrivate };
+        const updatedUser = await db.updateUserPrivacy(userId, isPrivate);
+        if (!updatedUser) {
+            return reply.code(404).send({ message: "User not found" });
+        }
+
+        return { ok: true, isPrivate: updatedUser.is_private };
     });
 
     /**

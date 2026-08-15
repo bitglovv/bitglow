@@ -197,6 +197,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("focus", handleFocus);
     }, [token, isAuthLoading]);
 
+    useEffect(() => {
+        const handlePrivacyUpdated = (event: Event) => {
+            const isPrivate = (event as CustomEvent<{ isPrivate?: unknown }>).detail?.isPrivate;
+            if (typeof isPrivate !== "boolean") return;
+
+            setUser((currentUser) => {
+                if (!currentUser) return currentUser;
+                const updatedUser = { ...currentUser, isPrivate };
+                persistUser(updatedUser);
+                hydrateStores(updatedUser);
+                return updatedUser;
+            });
+        };
+
+        const handleUserUpdated = (event: Event) => {
+            const updatedUser = (event as CustomEvent<unknown>).detail;
+            if (!updatedUser || typeof updatedUser !== "object" || !("id" in updatedUser)) return;
+
+            const userFromServer = updatedUser as User;
+            setUser((currentUser) => {
+                if (currentUser && currentUser.id !== userFromServer.id) return currentUser;
+                persistUser(userFromServer);
+                hydrateStores(userFromServer);
+                return userFromServer;
+            });
+        };
+
+        window.addEventListener("bitglow:privacy-updated", handlePrivacyUpdated);
+        window.addEventListener("bitglow:user-updated", handleUserUpdated);
+        return () => {
+            window.removeEventListener("bitglow:privacy-updated", handlePrivacyUpdated);
+            window.removeEventListener("bitglow:user-updated", handleUserUpdated);
+        };
+    }, []);
+
     const login = (newToken: string, userData?: User) => {
         localStorage.setItem("token", newToken);
         setToken(newToken);

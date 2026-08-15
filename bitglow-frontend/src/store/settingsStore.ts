@@ -19,7 +19,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       theme: "dark",
       setTheme: (theme) => {
         set({ theme });
@@ -28,23 +28,28 @@ export const useSettingsStore = create<SettingsState>()(
 
       privateAccount: false,
       setPrivateAccount: async (isPrivate) => {
-        // Optimistic update, revert if API fails
-        set({ privateAccount: isPrivate });
+        const previousValue = get().privateAccount;
         try {
-          await api.settings.updatePrivacy(isPrivate);
-          // Refresh authoritative user profile from backend
+          const response = await api.settings.updatePrivacy(isPrivate) as { ok: boolean; isPrivate: boolean };
+          if (!response.ok || typeof response.isPrivate !== "boolean") {
+            throw new Error("Invalid privacy update response");
+          }
+
+          set({ privateAccount: response.isPrivate });
+          window.dispatchEvent(new CustomEvent("bitglow:privacy-updated", {
+            detail: { isPrivate: response.isPrivate },
+          }));
+
+          // GET /api/me remains the full authenticated-user authority after mutation.
           try {
             const freshUser = await api.auth.me();
-            localStorage.setItem('user', JSON.stringify(freshUser));
             set({ privateAccount: !!freshUser.isPrivate, onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
-            try { window.dispatchEvent(new CustomEvent('bitglow:user-updated', { detail: freshUser })); } catch (e) {}
+            window.dispatchEvent(new CustomEvent("bitglow:user-updated", { detail: freshUser }));
           } catch (refreshErr) {
-            console.warn('Failed to refresh user after updating privacy', refreshErr);
+            console.warn("Failed to refresh user after updating privacy", refreshErr);
           }
         } catch (error) {
-          console.error("Failed to update privacy", error);
-          // revert
-          set({ privateAccount: !isPrivate });
+          set({ privateAccount: previousValue });
           throw error;
         }
       },
