@@ -1,24 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Header from "../components/common/Header";
 import { api, User, Friend } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
-import { usePresenceStore } from "../store/presenceStore";
 import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
 import { 
   Settings, X, Edit3, Share2, Send, MessageSquare, 
   Video, UserPlus, ArrowLeft, MoreVertical, 
-  UserMinus, UserX, Link2, Lock 
+  UserMinus, UserX, Link2 
 } from "lucide-react";
+import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
-import { UserListItem } from '../components/user/UserListItem';
 import { navigateBack } from "../utils/navigateBack";
-import ConfirmDialog from "../components/common/ConfirmDialog";
-import { ReportSheet } from "../components/common/ReportSheet";
-import { blockUserEverywhere, muteUserEverywhere, reportUser, unmuteUserEverywhere, unblockUserEverywhere } from "../utils/socialActions";
-import { useChatStore } from "../store/chatStore";
-import ActionSheet from "../components/common/ActionSheet";
 
 function CountButton({
   label,
@@ -82,15 +76,17 @@ function ListModal({
         ) : (
           <div className="space-y-1 overflow-y-auto custom-scrollbar pr-1 flex-1">
             {items.map((f) => (
-              <UserListItem
-                key={f.id}
-                user={f}
-                actionSlot={renderAction ? (
+              <div key={f.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.03] transition-colors">
+                <Link to={`/profile/${f.username}`} onClick={onClose} className="flex items-center gap-3 group shrink-0">
+                  <Avatar src={f.avatarUrl} alt={f.username} size="sm" />
+                  <div className="text-[15px] font-semibold text-white group-hover:underline">{f.username}</div>
+                </Link>
+                {renderAction && (
                   <div className="ml-4 shrink-0">
                     {renderAction(f)}
                   </div>
-                ) : undefined}
-              />
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -118,28 +114,35 @@ export default function ProfilePage() {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
-  const [showActionSheet, setShowActionSheet] = useState(false);
-  const [showReportSheet, setShowReportSheet] = useState(false);
-  const [muteLoading, setMuteLoading] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isOwner = loggedInUser && profile && loggedInUser.username === profile.username;
-  // Use centralized presence store for accurate presence + visibility handling
-  // presence.visible controls whether any presence indicator is shown
-  // presence.isOnline controls whether the green dot is shown
-  // derive presence from presence store when available
-  // Always call the hook (do not call hooks conditionally)
-  const presenceEntry = usePresenceStore((s) => (profile?.id ? s.presence[profile.id] : undefined));
-  const visible = presenceEntry?.visible ?? (profile?.onlineStatusVisible ?? true);
-  const isOnline = presenceEntry?.isOnline ?? false;
-  const statusLabel = visible ? "ONLINE" : "";
+  const isOnline =
+    (isOwner && true) ||
+    (profile as any)?.isOnline ||
+    (profile as any)?.online ||
+    (profile as any)?.is_online ||
+    ((profile as any)?.status === "online") ||
+    (!isOwner && (profile as any)?.status === undefined && true);
+  const statusLabel = isOnline ? "Online" : "Offline";
 
   const followersCount = isOwner ? followers.length : (profile?.followersCount ?? 0);
   const followingCount = isOwner ? following.length : (profile?.followsCount ?? 0);
   const friendsCount = isOwner ? friends.length : ((profile as any)?.friendsCount ?? 0);
   const isMutualFriend = !!profile && friends.some((f) => f.id === profile.id);
   const canOpenLiveRoom = !!profile && (isOwner || isMutualFriend);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,36 +220,6 @@ export default function ProfilePage() {
     const isPendingUser = pendingFollows.some((f) => f.id === profile.id);
     setIsFollowing(isFollowingUser || isFriend);
     setIsPending(isPendingUser);
-
-    // initialize mute/block state from chat store for immediate UI feedback
-    const chatState = useChatStore.getState();
-    setIsMuted(!!profile.id && chatState.mutedUsers.has(profile.id));
-    setIsBlocked(!!profile.id && chatState.restrictedUsers.has(profile.id));
-
-    const onMuteChanged = (event: Event) => {
-      const { userId, muted } = (event as CustomEvent).detail || {};
-      if (!userId || userId !== profile.id) return;
-      setIsMuted(!!muted);
-    };
-    const onBlockChanged = (event: Event) => {
-      const { userId, blocked } = (event as CustomEvent).detail || {};
-      if (!userId || userId !== profile.id) return;
-      setIsBlocked(!!blocked);
-      // if blocked, reflect relationship removals immediately in UI
-      if (blocked) {
-        setIsFollowing(false);
-        setIsPending(false);
-        setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
-        setFriends((prev) => prev.filter((f) => f.id !== profile.id));
-      }
-    };
-
-    window.addEventListener("bitglow:mute-changed", onMuteChanged);
-    window.addEventListener("bitglow:block-changed", onBlockChanged);
-    return () => {
-      window.removeEventListener("bitglow:mute-changed", onMuteChanged);
-      window.removeEventListener("bitglow:block-changed", onBlockChanged);
-    };
   }, [friends, following, pendingFollows, profile, loggedInUser]);
 
   const handleFollowToggle = async () => {
@@ -298,101 +271,13 @@ export default function ProfilePage() {
 
   const handleBlockUser = async () => {
     if (!profile || isOwner) return;
-    // show confirm when attempting to block; unblocking happens inline
-    setShowBlockConfirm(true);
-  };
-
-  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
-  const [blockLoading, setBlockLoading] = useState(false);
-
-  const handleBlockConfirm = async () => {
-    if (!profile) return;
-    setBlockLoading(true);
     try {
-      await blockUserEverywhere(profile);
-      // immediately remove follow/friend relationships in the UI
-      setIsFollowing(false);
-      setIsPending(false);
-      setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
-      setFriends((prev) => prev.filter((f) => f.id !== profile.id));
-      setIsBlocked(true);
-      // keep on the profile page so users can quickly Unblock if they change their mind
+      // Placeholder for block API
+      console.log("Blocking user:", profile.id);
+      setShowMoreMenu(false);
+      navigate("/home");
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to block user");
-    } finally {
-      setBlockLoading(false);
-      setShowBlockConfirm(false);
-    }
-  };
-
-  const [showMuteConfirm, setShowMuteConfirm] = useState(false);
-  const [muteTargetAction, setMuteTargetAction] = useState<'mute' | 'unmute'>('mute');
-
-  const handleMuteUser = async () => {
-    if (!profile || isOwner || muteLoading) return;
-    // show confirmation for both mute and unmute
-    setMuteTargetAction(isMuted ? 'unmute' : 'mute');
-    setShowMuteConfirm(true);
-  };
-
-  const handleMuteConfirm = async () => {
-    if (!profile) return;
-    setMuteLoading(true);
-    try {
-      if (isMuted) {
-        await unmuteUserEverywhere(profile.id);
-        setIsMuted(false);
-      } else {
-        await muteUserEverywhere(profile);
-        setIsMuted(true);
-      }
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to toggle mute");
-    } finally {
-      setMuteLoading(false);
-      setShowMuteConfirm(false);
-    }
-  };
-
-  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false);
-
-  const handleToggleBlock = async () => {
-    if (!profile || isOwner) return;
-    if (isBlocked) {
-      // show confirm for unblock as well
-      setShowUnblockConfirm(true);
-    } else {
-      setShowBlockConfirm(true);
-    }
-  };
-
-  const handleUnblockConfirm = async () => {
-    if (!profile) return;
-    try {
-      await unblockUserEverywhere(profile.id);
-      setIsBlocked(false);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to unblock user");
-    } finally {
-      setShowUnblockConfirm(false);
-    }
-  };
-
-  const handleCopyProfileLink = async () => {
-    if (!profile) return;
-    const url = `${window.location.origin}/profile/${profile.username}`;
-    await navigator.clipboard.writeText(url);
-    setShareLabel("Copied");
-    setTimeout(() => setShareLabel("Share Profile"), 2000);
-  };
-
-  const handleReportSubmit = async (reason: string) => {
-    if (!profile) return;
-    try {
-      await reportUser(profile.id, reason);
-      setShowReportSheet(false);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to submit report");
+      console.error("Failed to block", err);
     }
   };
 
@@ -499,22 +384,50 @@ export default function ProfilePage() {
                 <Settings className="h-5 w-5" />
               </Link>
             ) : (
-              <>
+              <div className="relative" ref={menuRef}>
                  <button 
-                  onClick={() => setShowActionSheet(true)}
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
                   className="p-2.5 rounded-2xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-white transition-all hover:bg-white/10"
                   aria-label="More Options"
                 >
                   <MoreVertical className="w-6 h-6" />
                 </button>
-              </>
+
+                {showMoreMenu && (
+                  <div className="absolute right-0 top-12 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200 z-[100]">
+                    {(isFollowing || isMutualFriend) && (
+                       <button 
+                        onClick={() => { handleFollowToggle(); setShowMoreMenu(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                        {isMutualFriend ? "Unfriend" : "Unfollow"}
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => { /* Block logic placeholder */ setShowMoreMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                    >
+                      <UserX className="w-4 h-4" />
+                      Block User
+                    </button>
+                    <button 
+                      onClick={() => { handleShare(); setShowMoreMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Share Profile
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-8 items-center md:items-start pt-8">
           <div className="shrink-0 relative">
-            <Avatar src={profile.avatarUrl} alt={profile.username} size="2xl" status={visible && isOnline ? 'online' : 'none'} />
+            <Avatar src={profile.avatarUrl} alt={profile.username} size="2xl" />
           </div>
 
           <div className="flex-1 w-full text-center md:text-left">
@@ -524,76 +437,56 @@ export default function ProfilePage() {
                 <span className="text-[15px] font-semibold text-zinc-400">@{profile.username}</span>
               )}
               <div className="flex items-center justify-center gap-2 text-xs mt-1 sm:mt-0">
-                {visible && isOnline ? <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" /> : null}
+                <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-500"}`} />
                 <span className="font-bold uppercase tracking-widest text-[#8b8f9c]">{statusLabel}</span>
               </div>
+            </div>
 
-              {profile.isPrivate && (
-                <div className="ml-3 inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1 text-xs text-zinc-300 mt-2">
-                  <Lock className="w-4 h-4" />
-                  <span className="font-semibold">Private Account</span>
+            <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
+              <CountButton
+                label="Followers"
+                count={followersCount}
+                onClick={isOwner ? () => setShowFollowers(true) : undefined}
+                disabled={!isOwner}
+              />
+              <CountButton
+                label="Following"
+                count={followingCount}
+                onClick={isOwner ? () => setShowFollowing(true) : undefined}
+                disabled={!isOwner}
+              />
+              <CountButton
+                label="Friends"
+                count={friendsCount}
+                onClick={isOwner ? () => setShowFriends(true) : undefined}
+                disabled={!isOwner}
+              />
+            </div>
+
+            <div className="mt-6 space-y-2 text-center md:text-left">
+              <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
+                {profile.bio || "No bio yet."}
+              </div>
+
+              {profile.website && (
+                <div className="pt-1">
+                  <a
+                    className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
+                    href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {profile.website}
+                  </a>
+                </div>
+              )}
+
+              {profile.location && (
+                <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
+                  {profile.location}
                 </div>
               )}
             </div>
-
-            {profile.isPrivate && !isOwner && !isFollowing && !isMutualFriend ? (
-              <div className="mt-8 text-center md:text-left">
-                <div className="inline-flex items-center justify-center p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-                  <div className="flex items-center gap-3 text-zinc-400">
-                    <Lock className="w-5 h-5" />
-                    <span className="font-medium">This account is private. Follow this account to view posts and profile information.</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
-                  <CountButton
-                    label="Followers"
-                    count={followersCount}
-                    onClick={isOwner ? () => setShowFollowers(true) : undefined}
-                    disabled={!isOwner}
-                  />
-                  <CountButton
-                    label="Following"
-                    count={followingCount}
-                    onClick={isOwner ? () => setShowFollowing(true) : undefined}
-                    disabled={!isOwner}
-                  />
-                  <CountButton
-                    label="Friends"
-                    count={friendsCount}
-                    onClick={isOwner ? () => setShowFriends(true) : undefined}
-                    disabled={!isOwner}
-                  />
-                </div>
-
-                <div className="mt-6 space-y-2 text-center md:text-left">
-                  <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
-                    {profile.bio || "No bio yet."}
-                  </div>
-
-                  {profile.website && (
-                    <div className="pt-1">
-                      <a
-                        className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
-                        href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {profile.website}
-                      </a>
-                    </div>
-                  )}
-
-                  {profile.location && (
-                    <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
-                      {profile.location}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
 
             <div className="mt-8 flex flex-wrap justify-center md:justify-start gap-4">
               {isOwner ? (
@@ -616,7 +509,7 @@ export default function ProfilePage() {
                     disabled={isFollowLoading}
                   >
                     {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : (profile.isPrivate ? "Request Follow" : "Follow")}
+                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
                   </Button>
                   <Button
                     variant="secondary"
@@ -625,7 +518,7 @@ export default function ProfilePage() {
                       navigate("/messages");
                     }}
                   >
-                    <MessageSquare className="w-4 h-4 mr-2" /> {(profile.isPrivate && !isFollowing && !isMutualFriend) ? "Message Request" : "Message"}
+                    <MessageSquare className="w-4 h-4 mr-2" /> Message
                   </Button>
                   <Button
                     variant="secondary"
@@ -657,7 +550,7 @@ export default function ProfilePage() {
             return isFollowingThem ? (
               <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfollow</Button>
             ) : (
-              <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>{f.isPrivate ? "Request Follow" : "Follow Back"}</Button>
+              <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>Follow Back</Button>
             );
           } : undefined}
         />
@@ -686,61 +579,6 @@ export default function ProfilePage() {
           ) : undefined}
         />
       )}
-
-      <ConfirmDialog
-        open={showBlockConfirm}
-        title="Block user"
-        message={<div>Are you sure you want to block this user? They will no longer be able to message or interact with you.</div>}
-        confirmLabel="Block"
-        cancelLabel="Cancel"
-        onConfirm={handleBlockConfirm}
-        onClose={() => setShowBlockConfirm(false)}
-        loading={blockLoading}
-      />
-
-      <ConfirmDialog
-        open={showUnblockConfirm}
-        title="Unblock user"
-        message={<div>Are you sure you want to unblock this user? They will be able to follow and message you again.</div>}
-        confirmLabel="Unblock"
-        cancelLabel="Cancel"
-        onConfirm={handleUnblockConfirm}
-        onClose={() => setShowUnblockConfirm(false)}
-        loading={false}
-      />
-
-      <ConfirmDialog
-        open={showMuteConfirm}
-        title={muteTargetAction === 'mute' ? 'Mute user' : 'Unmute user'}
-        message={muteTargetAction === 'mute' ? <div>Muting will hide posts and DM notifications from this user. You will remain connected. Proceed?</div> : <div>Unmute will restore posts and DM notifications from this user. Proceed?</div>}
-        confirmLabel={muteTargetAction === 'mute' ? 'Mute' : 'Unmute'}
-        cancelLabel="Cancel"
-        onConfirm={handleMuteConfirm}
-        onClose={() => setShowMuteConfirm(false)}
-        loading={muteLoading}
-      />
-
-      <ActionSheet
-        open={showActionSheet}
-        title={`@${profile.username}`}
-        onClose={() => setShowActionSheet(false)}
-        items={[
-          { label: "Share Profile", onClick: handleShare, icon: <Share2 className="h-4 w-4" /> },
-          { label: "Copy Profile Link", onClick: () => void handleCopyProfileLink(), icon: <Link2 className="h-4 w-4" /> },
-          { label: "Report User", onClick: () => setShowReportSheet(true), icon: <UserX className="h-4 w-4" /> },
-          // simplified: use a single clean section for moderation actions and auto-toggle labels
-          { label: isMuted ? "Unmute User" : "Mute User", onClick: () => void handleMuteUser(), disabled: muteLoading, icon: <UserMinus className="h-4 w-4" /> },
-          { label: isBlocked ? "Unblock User" : "Block User", onClick: handleToggleBlock, danger: !isBlocked, icon: <UserX className="h-4 w-4" /> },
-        ]}
-      />
-      <ReportSheet
-        isOpen={showReportSheet}
-        title="Report User"
-        prompt={`Why are you reporting @${profile.username}?`}
-        options={["Harassment or bullying", "Spam or scams", "Hate speech", "Impersonation", "Inappropriate content"]}
-        onClose={() => setShowReportSheet(false)}
-        onSubmit={handleReportSubmit}
-      />
     </div>
   );
 }
