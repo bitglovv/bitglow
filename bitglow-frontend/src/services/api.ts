@@ -464,7 +464,7 @@ export const api = {
             return readAuthResponse(res);
         },
         me: async (): Promise<User> => {
-            const res = await fetchWithAuth("/api/me");
+            const res = await fetchWithAuth("/api/me", { cache: "no-store" });
             if (!res.ok) {
                 const errorText = await res.text();
                 throw new Error(`Failed to fetch user: ${res.status} ${errorText}`);
@@ -914,6 +914,3 @@ export const api = {
         },
     }
 };
-
-
-

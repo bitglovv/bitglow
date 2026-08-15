@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api } from "../services/api";
 
 export type AppTheme = "dark" | "white";
 
@@ -9,7 +8,6 @@ interface SettingsState {
   setTheme: (theme: AppTheme) => void;
 
   privateAccount: boolean;
-  setPrivateAccount: (isPrivate: boolean) => Promise<void>;
 
   onlineStatusVisible: boolean;
   setOnlineStatusVisible: (isVisible: boolean) => Promise<void>;
@@ -19,7 +17,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       theme: "dark",
       setTheme: (theme) => {
         set({ theme });
@@ -27,33 +25,6 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       privateAccount: false,
-      setPrivateAccount: async (isPrivate) => {
-        const previousValue = get().privateAccount;
-        try {
-          const response = await api.settings.updatePrivacy(isPrivate) as { ok: boolean; isPrivate: boolean };
-          if (!response.ok || typeof response.isPrivate !== "boolean") {
-            throw new Error("Invalid privacy update response");
-          }
-
-          set({ privateAccount: response.isPrivate });
-          window.dispatchEvent(new CustomEvent("bitglow:privacy-updated", {
-            detail: { isPrivate: response.isPrivate },
-          }));
-
-          // GET /api/me remains the full authenticated-user authority after mutation.
-          try {
-            const freshUser = await api.auth.me();
-            set({ privateAccount: !!freshUser.isPrivate, onlineStatusVisible: freshUser.onlineStatusVisible ?? true });
-            window.dispatchEvent(new CustomEvent("bitglow:user-updated", { detail: freshUser }));
-          } catch (refreshErr) {
-            console.warn("Failed to refresh user after updating privacy", refreshErr);
-          }
-        } catch (error) {
-          set({ privateAccount: previousValue });
-          throw error;
-        }
-      },
-
       onlineStatusVisible: true,
       setOnlineStatusVisible: async (isVisible) => {
         // Optimistic update, revert if API fails

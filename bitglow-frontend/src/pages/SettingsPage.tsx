@@ -53,13 +53,14 @@ function IconWrap({ children, danger = false }: { children: React.ReactNode; dan
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (next: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       aria-pressed={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors active:scale-95 ${
+      className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
         checked ? "bg-emerald-500" : "bg-zinc-700"
       }`}
     >
@@ -82,6 +83,7 @@ type SettingsItemProps = {
   toggle?: {
     checked: boolean;
     onChange: (next: boolean) => void;
+    disabled?: boolean;
   };
   onClick?: () => void;
 };
@@ -109,7 +111,7 @@ function SettingsItem({
       </div>
       <div className="ml-3 flex shrink-0 items-center gap-2">
         {value ? <span className="max-w-[9rem] truncate text-xs font-semibold text-zinc-500">{value}</span> : null}
-        {toggle ? <Toggle checked={toggle.checked} onChange={toggle.onChange} /> : null}
+        {toggle ? <Toggle checked={toggle.checked} onChange={toggle.onChange} disabled={toggle.disabled} /> : null}
         {to || onClick ? <ChevronRight className="h-5 w-5 text-zinc-500" /> : null}
       </div>
     </>
@@ -126,6 +128,10 @@ function SettingsItem({
     );
   }
 
+  if (toggle) {
+    return <div className={className}>{content}</div>;
+  }
+
   return (
     <button type="button" onClick={onClick} className={className}>
       {content}
@@ -138,10 +144,10 @@ export default function SettingsPage() {
     document.title = "BitGlow Settings";
   }, []);
 
-  const { logout, user } = useAuth();
+  const { logout, user, updatePrivacy } = useAuth();
   const navigate = useNavigate();
   
-  const { theme, setTheme, privateAccount, setPrivateAccount, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
+  const { theme, setTheme, privateAccount, onlineStatusVisible, setOnlineStatusVisible, hydrateFromUser } = useSettingsStore();
 
   const [privacyConfirmOpen, setPrivacyConfirmOpen] = useState(false);
   const [privacyNextValue, setPrivacyNextValue] = useState<boolean | null>(null);
@@ -159,6 +165,7 @@ export default function SettingsPage() {
 
   // When Toggle is clicked, open a confirmation dialog. The actual update happens after confirmation.
   const handlePrivacyToggle = (next: boolean) => {
+    if (privacyLoading) return;
     setPrivacyNextValue(next);
     setPrivacyConfirmOpen(true);
   };
@@ -168,12 +175,12 @@ export default function SettingsPage() {
     const next = privacyNextValue;
     setPrivacyLoading(true);
     try {
-      // Use store setter which performs API and reverts on error
-      await setPrivateAccount(next);
+      await updatePrivacy(next);
       try {
         window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "success", message: next ? "Account is now private" : "Account is now public" } }));
       } catch {}
       setPrivacyConfirmOpen(false);
+      setPrivacyNextValue(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to update privacy";
       try { window.dispatchEvent(new CustomEvent("bitglow:toast", { detail: { type: "error", message: msg } })); } catch {}
@@ -181,7 +188,6 @@ export default function SettingsPage() {
       // keep dialog open so user can retry or cancel
     } finally {
       setPrivacyLoading(false);
-      setPrivacyNextValue(null);
     }
   };
 
@@ -244,7 +250,7 @@ export default function SettingsPage() {
             </SettingsSection>
 
             <SettingsSection title="Privacy">
-              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: privateAccount, onChange: handlePrivacyToggle }} />
+              <SettingsItem icon={<Lock className="h-5 w-5" />} title="Private Account" subtitle="Only followers can see your posts" toggle={{ checked: privateAccount, onChange: handlePrivacyToggle, disabled: privacyLoading }} />
               <SettingsItem icon={<Eye className="h-5 w-5" />} title="Show Online Status" subtitle="Let friends see when you are active" toggle={{ checked: onlineStatusVisible, onChange: handleOnlineStatusToggle }} />
               <SettingsItem icon={<UserX className="h-5 w-5" />} title="Blocked Users" subtitle="Review accounts you blocked" to="/settings/blocked-users" />
               <SettingsItem icon={<MessageCircle className="h-5 w-5" />} title="Muted Users" subtitle="Review accounts you muted" to="/settings/muted-users" />

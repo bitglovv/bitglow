@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, User } from "../services/api";
 import { useSettingsStore } from "../store/settingsStore";
 import { socketService } from "../services/socket";
@@ -12,6 +12,7 @@ type AuthContextType = {
     login: (token: string, user?: User) => void;
     logout: () => void;
     refreshUser: () => Promise<void>;
+    updatePrivacy: (isPrivate: boolean) => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,6 +55,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [token, setToken] = useState<string | null>(() => loadToken());
     const [user, setUser] = useState<User | null>(() => loadStoredUser());
     const [isAuthLoading, setIsAuthLoading] = useState(true);
+    const userSyncVersion = useRef(0);
+    const privacyMutationInFlight = useRef(false);
+
+    const applyUser = (nextUser: User, version: number) => {
+        if (version !== userSyncVersion.current) return false;
+        setUser(nextUser);
+        persistUser(nextUser);
+        hydrateStores(nextUser);
+        return true;
+    };
+
+    const refreshAuthenticatedUser = async () => {
+        const version = ++userSyncVersion.current;
+        const freshUser = await api.auth.me();
+        applyUser(freshUser, version);
+        return freshUser;
+    };
 
     const clearSession = () => {
         localStorage.removeItem("token");
@@ -87,13 +105,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             try {
+                const version = ++userSyncVersion.current;
                 const restoredUser = await api.auth.me();
                 if (cancelled) return;
 
                 setToken(storedToken);
-                setUser(restoredUser);
-                persistUser(restoredUser);
-                hydrateStores(restoredUser);
+                applyUser(restoredUser, version);
                 console.log("AUTH_USER_RESTORED");
             } catch (error) {
                 if (cancelled) return;
@@ -178,14 +195,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const handleFocus = () => {
-            if (!token || isAuthLoading) return;
+            if (!token || isAuthLoading || privacyMutationInFlight.current) return;
 
-            api.auth.me()
-                .then((freshUser) => {
-                    setUser(freshUser);
-                    persistUser(freshUser);
-                    hydrateStores(freshUser);
-                })
+            refreshAuthenticatedUser()
                 .catch((error) => {
                     if (isInvalidTokenError(error)) {
                         clearSession();
@@ -198,19 +210,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [token, isAuthLoading]);
 
     useEffect(() => {
-        const handlePrivacyUpdated = (event: Event) => {
-            const isPrivate = (event as CustomEvent<{ isPrivate?: unknown }>).detail?.isPrivate;
-            if (typeof isPrivate !== "boolean") return;
-
-            setUser((currentUser) => {
-                if (!currentUser) return currentUser;
-                const updatedUser = { ...currentUser, isPrivate };
-                persistUser(updatedUser);
-                hydrateStores(updatedUser);
-                return updatedUser;
-            });
-        };
-
         const handleUserUpdated = (event: Event) => {
             const updatedUser = (event as CustomEvent<unknown>).detail;
             if (!updatedUser || typeof updatedUser !== "object" || !("id" in updatedUser)) return;
@@ -218,16 +217,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const userFromServer = updatedUser as User;
             setUser((currentUser) => {
                 if (currentUser && currentUser.id !== userFromServer.id) return currentUser;
-                persistUser(userFromServer);
-                hydrateStores(userFromServer);
-                return userFromServer;
+                // Legacy settings events must not overwrite a privacy mutation in progress.
+                const mergedUser = currentUser
+                    ? { ...userFromServer, isPrivate: currentUser.isPrivate }
+                    : userFromServer;
+                persistUser(mergedUser);
+                hydrateStores(mergedUser);
+                return mergedUser;
             });
         };
 
-        window.addEventListener("bitglow:privacy-updated", handlePrivacyUpdated);
         window.addEventListener("bitglow:user-updated", handleUserUpdated);
         return () => {
-            window.removeEventListener("bitglow:privacy-updated", handlePrivacyUpdated);
             window.removeEventListener("bitglow:user-updated", handleUserUpdated);
         };
     }, []);
@@ -244,12 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        api.auth.me()
-            .then((freshUser) => {
-                setUser(freshUser);
-                persistUser(freshUser);
-                hydrateStores(freshUser);
-            })
+        refreshAuthenticatedUser()
             .catch((error) => {
                 if (isInvalidTokenError(error)) {
                     clearSession();
@@ -265,11 +261,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const refreshUser = async () => {
-        if (!token) return;
-        const freshUser = await api.auth.me();
-        setUser(freshUser);
-        persistUser(freshUser);
-        hydrateStores(freshUser);
+        if (!token || privacyMutationInFlight.current) return;
+        await refreshAuthenticatedUser();
+    };
+
+    const updatePrivacy = async (isPrivate: boolean) => {
+        if (privacyMutationInFlight.current) {
+            throw new Error("Privacy update already in progress");
+        }
+
+        privacyMutationInFlight.current = true;
+        // Invalidate any earlier /api/me response before sending the mutation.
+        const mutationVersion = ++userSyncVersion.current;
+        try {
+            const response = await api.settings.updatePrivacy(isPrivate) as { ok: boolean; isPrivate: boolean };
+            if (!response.ok || typeof response.isPrivate !== "boolean") {
+                throw new Error("Invalid privacy update response");
+            }
+            if (mutationVersion !== userSyncVersion.current) {
+                return response.isPrivate;
+            }
+
+            setUser((currentUser) => {
+                if (!currentUser || mutationVersion !== userSyncVersion.current) return currentUser;
+                const updatedUser = { ...currentUser, isPrivate: response.isPrivate };
+                persistUser(updatedUser);
+                hydrateStores(updatedUser);
+                return updatedUser;
+            });
+
+            // Reconcile the full user from the authoritative endpoint.
+            try {
+                await refreshAuthenticatedUser();
+            } catch (error) {
+                // The persisted mutation response above is authoritative for privacy.
+                console.warn("Failed to refresh user after updating privacy", error);
+            }
+
+            return response.isPrivate;
+        } finally {
+            privacyMutationInFlight.current = false;
+        }
     };
 
     const value = useMemo<AuthContextType>(() => ({
@@ -280,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshUser,
+        updatePrivacy,
     }), [user, token, isAuthLoading]);
 
     return (
