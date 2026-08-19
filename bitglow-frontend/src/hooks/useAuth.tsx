@@ -2,6 +2,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useSt
 import { api, User } from "../services/api";
 import { socketService } from "../services/socket";
 import { useChatStore } from "../store/chatStore";
+import { usePresenceStore } from "../store/presenceStore";
 
 type AuthContextType = {
     user: User | null;
@@ -162,14 +163,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Update local presence store and notify interested components via a custom event.
                 try {
                     const { userId: changedUserId, isOnline, visible } = data as any;
-                    // Lazy import to avoid circular deps when building modules                    const { usePresenceStore } = require("../store/presenceStore");
-                    // Update presence state
-                    // Due to module system, use the store's setter via getState if available
-                    const store = (usePresenceStore as any) as any;
-                    if (store && store.setPresence) {
-                        store.setPresence(changedUserId, !!isOnline, visible === undefined ? true : !!visible);
+                    if (changedUserId) {
+                        usePresenceStore.getState().setPresence(
+                            changedUserId,
+                            Boolean(isOnline),
+                            visible === undefined ? true : Boolean(visible)
+                        );
                     }
-                    window.dispatchEvent(new CustomEvent("bitglow:user-status-changed", { detail: { userId: changedUserId, isOnline: !!isOnline, visible: visible === undefined ? true : !!visible } }));
+                    window.dispatchEvent(
+                        new CustomEvent("bitglow:user-status-changed", {
+                            detail: {
+                                userId: changedUserId,
+                                isOnline: Boolean(isOnline),
+                                visible: visible === undefined ? true : Boolean(visible),
+                            },
+                        })
+                    );
                 } catch (err) {
                     // Non-fatal; log for debugging
                     console.warn("Failed to process server:user_status message", err);
