@@ -110,7 +110,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         const users = await db.getAllUsers(Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
         const filtered = [];
         for (const user of users) {
-            const authorized = requesterId === user.id || (!!requesterId && await db.areFriends(requesterId, user.id));
+            const isFollower = requesterId ? await db.isFollowing(requesterId, user.id) : false;
+            const isMutual = requesterId ? await db.areFriends(requesterId, user.id) : false;
+            const authorized = requesterId === user.id || (!!requesterId && (isFollower || isMutual));
             filtered.push(filterPublicUser(user, authorized));
         }
         return filtered;
@@ -132,7 +134,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         const followsCount = await db.getFollowingCount(dbUser.id);
 
         const requesterId = await getOptionalRequesterId(req);
-        const authorized = requesterId === dbUser.id || (!!requesterId && await db.areFriends(requesterId, dbUser.id));
+        const isFollower = requesterId ? await db.isFollowing(requesterId, dbUser.id) : false;
+        const isMutual = requesterId ? await db.areFriends(requesterId, dbUser.id) : false;
+        const authorized = requesterId === dbUser.id || (!!requesterId && (isFollower || isMutual));
         return filterPublicUser({
             id: dbUser.id,
             username: dbUser.username,

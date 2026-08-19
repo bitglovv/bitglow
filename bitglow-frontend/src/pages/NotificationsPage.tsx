@@ -57,6 +57,8 @@ export default function NotificationsPage() {
     const [loading, setLoading] = useState(true);
     const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
     const [followLoading, setFollowLoading] = useState<Set<string>>(new Set());
+    const [requestStatus, setRequestStatus] = useState<Record<string, 'accepted' | 'rejected'>>({});
+    const [requestLoading, setRequestLoading] = useState<Set<string>>(new Set());
 
     const [seenIds, setSeenIds] = useState<Set<string>>(() => {
         try {
@@ -212,8 +214,89 @@ export default function NotificationsPage() {
         }
     };
 
+    const handleAcceptRequest = async (userId: string) => {
+        if (requestLoading.has(userId)) return;
+        setRequestLoading(prev => new Set(prev).add(userId));
+        try {
+            const ok = await api.user.acceptFollow(userId);
+            if (ok) {
+                setRequestStatus(prev => ({ ...prev, [userId]: 'accepted' }));
+            }
+        } catch (err) {
+            console.error("Accept request failed", err);
+        } finally {
+            setRequestLoading(prev => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
+        }
+    };
+
+    const handleRejectRequest = async (userId: string) => {
+        if (requestLoading.has(userId)) return;
+        setRequestLoading(prev => new Set(prev).add(userId));
+        try {
+            const ok = await api.user.rejectFollow(userId);
+            if (ok) {
+                setRequestStatus(prev => ({ ...prev, [userId]: 'rejected' }));
+            }
+        } catch (err) {
+            console.error("Reject request failed", err);
+        } finally {
+            setRequestLoading(prev => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
+        }
+    };
+
     const renderAction = (item: GroupedItem) => {
-        if (item.type === "follow" || item.type === "follow_request" || item.type === "follow_back") {
+        if (item.type === "follow_request") {
+            const user = item.users[0];
+            const status = requestStatus[user.id];
+            const isLoading = requestLoading.has(user.id);
+
+            if (status === 'accepted') {
+                return (
+                    <span className="text-xs font-semibold text-emerald-400">
+                        Accepted
+                    </span>
+                );
+            }
+            if (status === 'rejected') {
+                return (
+                    <span className="text-xs font-semibold text-zinc-500">
+                        Deleted
+                    </span>
+                );
+            }
+
+            return (
+                <div className="flex items-center gap-2">
+                    <Button
+                        size="sm"
+                        className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 border-none text-white font-semibold text-xs"
+                        onClick={(e) => { e.preventDefault(); handleAcceptRequest(user.id); }}
+                        disabled={isLoading}
+                    >
+                        Confirm
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 border-none text-zinc-400 hover:text-white font-semibold text-xs"
+                        onClick={(e) => { e.preventDefault(); handleRejectRequest(user.id); }}
+                        disabled={isLoading}
+                    >
+                        Delete
+                    </Button>
+                </div>
+            );
+        }
+
+        if (item.type === "follow" || item.type === "follow_back") {
             const user = item.users[0];
             const isFollowing = followingIds.has(user.id);
             const isLoading = followLoading.has(user.id);
@@ -239,7 +322,7 @@ export default function NotificationsPage() {
                     onClick={(e) => { e.preventDefault(); handleFollow(user.id, user.username); }}
                     disabled={isLoading}
                 >
-                        {item.type === "follow_back" ? "Follow back" : (user.isPrivate ? "Request Follow" : "Follow")}
+                    {item.type === "follow_back" ? "Follow back" : "Follow"}
                 </Button>
             );
         }

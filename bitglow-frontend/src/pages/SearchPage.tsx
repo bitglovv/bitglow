@@ -17,7 +17,11 @@ export default function SearchPage() {
 
   useEffect(() => {
     let cancelled = false;
-    api.user.list().then((list) => {
+    Promise.all([
+      api.user.list(),
+      api.user.following(),
+      api.user.pendingFollows()
+    ]).then(([list, followingList, pendingList]) => {
       if (cancelled) return;
       const normalizedUsers = (list || []).map((u) => {
         const username = u.username?.trim() || "";
@@ -30,14 +34,10 @@ export default function SearchPage() {
         };
       });
       setUsers(normalizedUsers);
-    });
-    api.user.following().then((list) => {
-      if (cancelled) return;
-      const ids = new Set((list || []).map((u) => u.id));
-      setFollowing(ids);
-    });
-    api.user.followers().then((list) => {
-      if (cancelled) return;
+      setFollowing(new Set((followingList || []).map((u) => u.id)));
+      setPending(new Set((pendingList || []).map((u) => u.id)));
+    }).catch((err) => {
+      console.error("Failed to load search data", err);
     });
     return () => {
       cancelled = true;
@@ -146,7 +146,7 @@ export default function SearchPage() {
                           onClick={() => handleFollow(u)}
                           className="h-9 rounded-full px-5 text-[13px] font-semibold transition-all"
                         >
-                          {u.isPrivate ? "Request Follow" : "Follow"}
+                          Follow
                         </Button>
                       )}
                     </div>

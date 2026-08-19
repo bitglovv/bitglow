@@ -1235,7 +1235,7 @@ export const db = {
              WHERE p.id = $1
                AND COALESCE(u.is_deleted, FALSE) = FALSE
                AND (
-                   p.visibility = 'public'
+                   (p.visibility = 'public' AND u.is_private = false)
                    OR p.author_id = $2
                    OR EXISTS (
                        SELECT 1 FROM friends f
@@ -2422,7 +2422,7 @@ export const db = {
             WHERE p.id = $1
               AND COALESCE(u.is_deleted, FALSE) = FALSE
               AND (
-                  p.visibility = 'public'
+                  (p.visibility = 'public' AND u.is_private = false)
                   OR p.author_id = $2
                   OR EXISTS (
                       SELECT 1 FROM friends f

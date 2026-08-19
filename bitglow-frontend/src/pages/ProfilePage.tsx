@@ -9,11 +9,12 @@ import { Button } from "../components/ui/Button";
 import { 
   Settings, X, Edit3, Share2, Send, MessageSquare, 
   Video, UserPlus, ArrowLeft, MoreVertical, 
-  UserMinus, UserX, Link2 
+  UserMinus, UserX, Link2, Lock 
 } from "lucide-react";
 import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 import { navigateBack } from "../utils/navigateBack";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 
 function CountButton({
   label,
@@ -104,8 +105,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<User | null>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isPending, setIsPending] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [followers, setFollowers] = useState<Friend[]>([]);
@@ -116,10 +115,19 @@ export default function ProfilePage() {
   const [showFollowing, setShowFollowing] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
+  const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
+  const [showCancelRequestConfirm, setShowCancelRequestConfirm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const isOwner = loggedInUser && profile && loggedInUser.username === profile.username;
+  const isOwner = Boolean(loggedInUser && profile && loggedInUser.username === profile.username);
+  const isMutualFriend = Boolean(!isOwner && profile && friends.some((f) => f.id === profile.id));
+  const isFollowing = Boolean(!isOwner && !isMutualFriend && profile && following.some((f) => f.id === profile.id));
+  const isPending = Boolean(!isOwner && !isMutualFriend && !isFollowing && profile && pendingFollows.some((f) => f.id === profile.id));
+  const isAuthorized = Boolean(isOwner || isMutualFriend || isFollowing);
+
   const presenceEntry = usePresenceStore((s) => (profile?.id ? s.presence[profile.id] : undefined));
   const visible =
     presenceEntry?.visible ??
@@ -133,8 +141,7 @@ export default function ProfilePage() {
   const followersCount = isOwner ? followers.length : (profile?.followersCount ?? 0);
   const followingCount = isOwner ? following.length : (profile?.followsCount ?? 0);
   const friendsCount = isOwner ? friends.length : ((profile as any)?.friendsCount ?? 0);
-  const isMutualFriend = !!profile && friends.some((f) => f.id === profile.id);
-  const canOpenLiveRoom = !!profile && (isOwner || isMutualFriend);
+  const canOpenLiveRoom = Boolean(profile && (isOwner || isMutualFriend));
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -215,66 +222,111 @@ export default function ProfilePage() {
     }
   }, [profile, loading]);
 
-  useEffect(() => {
-    if (!profile || !loggedInUser) return;
-    const isFriend = friends.some((f) => f.id === profile.id);
-    const isFollowingUser = following.some((f) => f.id === profile.id);
-    const isPendingUser = pendingFollows.some((f) => f.id === profile.id);
-    setIsFollowing(isFollowingUser || isFriend);
-    setIsPending(isPendingUser);
-  }, [friends, following, pendingFollows, profile, loggedInUser]);
-
   const handleFollowToggle = async () => {
-    if (!profile || !loggedInUser || isOwner) return;
+    if (!profile || !loggedInUser || isOwner || isFollowLoading) return;
+    if (isMutualFriend) {
+      setShowUnfriendConfirm(true);
+      return;
+    }
+    if (isFollowing) {
+      setShowUnfollowConfirm(true);
+      return;
+    }
+    if (isPending) {
+      setShowCancelRequestConfirm(true);
+      return;
+    }
+
     setIsFollowLoading(true);
     try {
-      const isFriend = friends.some((f) => f.id === profile.id);
-      if (isFollowing || isPending) {
-        const success = await api.user.unfollow(profile.id);
-        if (success) {
-          setIsFollowing(false);
-          setIsPending(false);
-          setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
-          setFriends((prev) => prev.filter((f) => f.id !== profile.id));
-          setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
-        }
-      } else {
-        const status = await api.user.follow(profile.id, profile.username);
-        if (status === 'pending') {
-          setIsPending(true);
-          setPendingFollows((prev) => {
-            if (prev.some((f) => f.id === profile.id)) return prev;
-            return [...prev, { id: profile.id, username: profile.username, displayName: profile.displayName, avatarUrl: profile.avatarUrl }];
-          });
-        } else if (status === 'accepted' || status === true) {
-          setIsFollowing(true);
-          if (!isFriend) {
-            setFollowing((prev) => {
-              if (prev.some((f) => f.id === profile.id)) return prev;
-              return [
-                ...prev,
-                {
-                  id: profile.id,
-                  username: profile.username,
-                  displayName: profile.displayName,
-                  avatarUrl: profile.avatarUrl
-                }
-              ];
-            });
-          }
-        }
+      const status = await api.user.follow(profile.id, profile.username);
+      if (status === 'pending') {
+        setPendingFollows((prev) => {
+          if (prev.some((f) => f.id === profile.id)) return prev;
+          return [...prev, { id: profile.id, username: profile.username, displayName: profile.displayName, avatarUrl: profile.avatarUrl }];
+        });
+      } else if (status === 'accepted' || status === true) {
+        setFollowing((prev) => {
+          if (prev.some((f) => f.id === profile.id)) return prev;
+          return [
+            ...prev,
+            {
+              id: profile.id,
+              username: profile.username,
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl
+            }
+          ];
+        });
+        const fresh = await api.profile.get(profile.username);
+        if (fresh) setProfile(fresh);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Follow action failed", err);
     } finally {
       setIsFollowLoading(false);
+    }
+  };
+
+  const handleConfirmUnfollow = async () => {
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      const ok = await api.user.unfollow(profile.id);
+      if (ok) {
+        setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
+        setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+        setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
+        const fresh = await api.profile.get(profile.username);
+        if (fresh) setProfile(fresh);
+      }
+    } catch (err) {
+      console.error("Unfollow failed", err);
+    } finally {
+      setActionLoading(false);
+      setShowUnfollowConfirm(false);
+    }
+  };
+
+  const handleConfirmUnfriend = async () => {
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      const ok = await api.user.unfollow(profile.id);
+      if (ok) {
+        setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+        setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
+        setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
+        const fresh = await api.profile.get(profile.username);
+        if (fresh) setProfile(fresh);
+      }
+    } catch (err) {
+      console.error("Unfriend failed", err);
+    } finally {
+      setActionLoading(false);
+      setShowUnfriendConfirm(false);
+    }
+  };
+
+  const handleConfirmCancelRequest = async () => {
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      const ok = await api.user.unfollow(profile.id);
+      if (ok) {
+        setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
+      }
+    } catch (err) {
+      console.error("Cancel request failed", err);
+    } finally {
+      setActionLoading(false);
+      setShowCancelRequestConfirm(false);
     }
   };
 
   const handleBlockUser = async () => {
     if (!profile || isOwner) return;
     try {
-      // Placeholder for block API
       console.log("Blocking user:", profile.id);
       setShowMoreMenu(false);
       navigate("/home");
@@ -399,7 +451,11 @@ export default function ProfilePage() {
                   <div className="absolute right-0 top-12 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200 z-[100]">
                     {(isFollowing || isMutualFriend) && (
                        <button 
-                        onClick={() => { handleFollowToggle(); setShowMoreMenu(false); }}
+                        onClick={() => { 
+                          setShowMoreMenu(false);
+                          if (isMutualFriend) setShowUnfriendConfirm(true);
+                          else if (isFollowing) setShowUnfollowConfirm(true);
+                        }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
                       >
                         <UserMinus className="w-4 h-4" />
@@ -407,7 +463,7 @@ export default function ProfilePage() {
                       </button>
                     )}
                     <button 
-                      onClick={() => { /* Block logic placeholder */ setShowMoreMenu(false); }}
+                      onClick={() => { handleBlockUser(); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
                     >
                       <UserX className="w-4 h-4" />
@@ -457,97 +513,132 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
-              <CountButton
-                label="Followers"
-                count={followersCount}
-                onClick={isOwner ? () => setShowFollowers(true) : undefined}
-                disabled={!isOwner}
-              />
-              <CountButton
-                label="Following"
-                count={followingCount}
-                onClick={isOwner ? () => setShowFollowing(true) : undefined}
-                disabled={!isOwner}
-              />
-              <CountButton
-                label="Friends"
-                count={friendsCount}
-                onClick={isOwner ? () => setShowFriends(true) : undefined}
-                disabled={!isOwner}
-              />
-            </div>
-
-            <div className="mt-6 space-y-2 text-center md:text-left">
-              <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
-                {profile.bio || "No bio yet."}
+            {profile.isPrivate && !isAuthorized ? (
+              <div className="mt-8 text-center md:text-left">
+                <div className="inline-flex flex-col items-center sm:items-start p-6 rounded-2xl bg-white/[0.02] border border-white/5 max-w-lg">
+                  <div className="flex items-center gap-3 text-white font-bold text-base mb-2">
+                    <Lock className="w-5 h-5 text-zinc-400" />
+                    <span>Private Account</span>
+                  </div>
+                  <p className="text-sm text-zinc-400 leading-relaxed mb-6 text-center sm:text-left">
+                    This account is private. Follow to connect and see their protected content.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant={isPending ? "secondary" : "primary"}
+                      onClick={handleFollowToggle}
+                      disabled={isFollowLoading}
+                      className="px-6"
+                    >
+                      {isPending ? "Requested" : "Follow"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        sessionStorage.setItem("bitglow:dmUserId", profile.id);
+                        navigate("/messages");
+                      }}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" /> Message
+                    </Button>
+                  </div>
+                </div>
               </div>
-
-              {profile.website && (
-                <div className="pt-1">
-                  <a
-                    className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
-                    href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {profile.website}
-                  </a>
+            ) : (
+              <>
+                <div className="flex items-center justify-center md:justify-start gap-8 mt-6 text-sm">
+                  <CountButton
+                    label="Followers"
+                    count={followersCount}
+                    onClick={isOwner ? () => setShowFollowers(true) : undefined}
+                    disabled={!isOwner}
+                  />
+                  <CountButton
+                    label="Following"
+                    count={followingCount}
+                    onClick={isOwner ? () => setShowFollowing(true) : undefined}
+                    disabled={!isOwner}
+                  />
+                  <CountButton
+                    label="Friends"
+                    count={friendsCount}
+                    onClick={isOwner ? () => setShowFriends(true) : undefined}
+                    disabled={!isOwner}
+                  />
                 </div>
-              )}
 
-              {profile.location && (
-                <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
-                  {profile.location}
+                <div className="mt-6 space-y-2 text-center md:text-left">
+                  <div className="text-[15px] leading-relaxed text-zinc-200 whitespace-pre-line max-w-2xl">
+                    {profile.bio || "No bio yet."}
+                  </div>
+
+                  {profile.website && (
+                    <div className="pt-1">
+                      <a
+                        className="text-[15px] text-blue-500 hover:text-blue-400 hover:underline"
+                        href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {profile.website}
+                      </a>
+                    </div>
+                  )}
+
+                  {profile.location && (
+                    <div className="text-[15px] font-semibold text-zinc-400 tracking-wide">
+                      {profile.location}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="mt-8 flex flex-wrap justify-center md:justify-start gap-4">
-              {isOwner ? (
-                <>
-                  <Button variant="secondary" onClick={() => navigate("/profile/edit")}>
-                    <Edit3 className="w-4 h-4 mr-2" /> Edit Profile
-                  </Button>
-                  <Button variant="secondary" onClick={handleStartLiveChat}>
-                    <Video className="w-4 h-4 mr-2" /> Live Chat
-                  </Button>
-                  <Button variant="secondary" onClick={handleShare}>
-                    <Share2 className="w-4 h-4 mr-2" /> {shareLabel}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant={isMutualFriend || isFollowing || isPending ? "secondary" : "primary"}
-                    onClick={handleFollowToggle}
-                    disabled={isFollowLoading}
-                  >
-                    {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                    {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      sessionStorage.setItem("bitglow:dmUserId", profile.id);
-                      navigate("/messages");
-                    }}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2" /> Message
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={handleStartLiveChat}
-                    disabled={!canOpenLiveRoom}
-                  >
-                    <Video className="w-4 h-4 mr-2" /> Live Space
-                  </Button>
-                </>
-              )}
-            </div>
+                <div className="mt-8 flex flex-wrap justify-center md:justify-start gap-4">
+                  {isOwner ? (
+                    <>
+                      <Button variant="secondary" onClick={() => navigate("/profile/edit")}>
+                        <Edit3 className="w-4 h-4 mr-2" /> Edit Profile
+                      </Button>
+                      <Button variant="secondary" onClick={handleStartLiveChat}>
+                        <Video className="w-4 h-4 mr-2" /> Live Chat
+                      </Button>
+                      <Button variant="secondary" onClick={handleShare}>
+                        <Share2 className="w-4 h-4 mr-2" /> {shareLabel}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant={isMutualFriend || isFollowing || isPending ? "secondary" : "primary"}
+                        onClick={handleFollowToggle}
+                        disabled={isFollowLoading}
+                      >
+                        {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                        {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          sessionStorage.setItem("bitglow:dmUserId", profile.id);
+                          navigate("/messages");
+                        }}
+                      >
+                        <MessageSquare className="w-4 h-4 mr-2" /> Message
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={handleStartLiveChat}
+                        disabled={!canOpenLiveRoom}
+                      >
+                        <Video className="w-4 h-4 mr-2" /> Live Space
+                      </Button>
+                    </>
+                  )}
+                </div>
 
-            {!isOwner && !canOpenLiveRoom && (
-              <div className="mt-4 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Mutual friends only to access Live Space.</div>
+                {!isOwner && !canOpenLiveRoom && (
+                  <div className="mt-4 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Mutual friends only to access Live Space.</div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -594,6 +685,47 @@ export default function ProfilePage() {
           ) : undefined}
         />
       )}
+
+      <ConfirmDialog
+        open={showUnfollowConfirm}
+        title={`Unfollow @${profile.username}?`}
+        message={
+          profile.isPrivate
+            ? "Unfollowing will remove your connection. You will need to follow again and be accepted to reconnect."
+            : `Are you sure you want to unfollow @${profile.username}?`
+        }
+        confirmLabel="Unfollow"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmUnfollow}
+        onClose={() => setShowUnfollowConfirm(false)}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={showUnfriendConfirm}
+        title={`Unfriend @${profile.username}?`}
+        message={
+          profile.isPrivate
+            ? "Unfriending will remove your connection. You will need to follow again and be accepted to reconnect."
+            : `Are you sure you want to unfriend @${profile.username}?`
+        }
+        confirmLabel="Unfriend"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmUnfriend}
+        onClose={() => setShowUnfriendConfirm(false)}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={showCancelRequestConfirm}
+        title="Cancel follow request?"
+        message={`Cancel your pending follow request to @${profile.username}?`}
+        confirmLabel="Cancel Request"
+        cancelLabel="Keep Request"
+        onConfirm={handleConfirmCancelRequest}
+        onClose={() => setShowCancelRequestConfirm(false)}
+        loading={actionLoading}
+      />
     </div>
   );
 }

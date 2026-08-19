@@ -19,13 +19,13 @@ const getApiHost = () => {
     const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
     const hostname = window.location.hostname;
 
-    // Case 1: localhost — straightforward local dev
+    // Case 1: localhost â€” straightforward local dev
     if (hostname === "localhost" || hostname === "127.0.0.1") {
         return envHost ?? "http://127.0.0.1:3003";
     }
 
     // Case 2: LAN / private network IP (phone/tablet on same WiFi as dev machine)
-    // Backend is on the same machine — use same hostname but port 3003
+    // Backend is on the same machine â€” use same hostname but port 3003
     if (isPrivateNetworkHost(hostname)) {
         // If VITE_API_HOST is explicitly set to a non-loopback address, use it
         if (envHost && !isLoopbackHost(envHost)) return envHost;
@@ -33,12 +33,12 @@ const getApiHost = () => {
         return `http://${hostname}:3003`;
     }
 
-    // Case 3: Public domain (Vercel, etc.) — VITE_API_HOST MUST point to Render backend
+    // Case 3: Public domain (Vercel, etc.) â€” VITE_API_HOST MUST point to Render backend
     if (envHost && !isLoopbackHost(envHost)) {
         return envHost;
     }
 
-    // VITE_API_HOST not configured for production — fail loudly so misconfiguration
+    // VITE_API_HOST not configured for production â€” fail loudly so misconfiguration
     // is caught at deploy time rather than silently routing to a hardcoded host.
     const msg =
         "[BitGlow] VITE_API_HOST is not set for a production build. " +
@@ -581,6 +581,10 @@ export const api = {
         },
         acceptFollow: async (followerId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/follow/requests/${followerId}/accept`, { method: "POST" });
+            return res.ok;
+        },
+        rejectFollow: async (followerId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/follow/requests/${followerId}/reject`, { method: "POST" });
             return res.ok;
         },
     },
