@@ -331,11 +331,13 @@ function normalizeDisplayName(obj: any): string | undefined {
     return typeof obj?.username === "string" ? obj.username.trim() : undefined;
 }
 
-function normalizeUser<T extends Record<string, any>>(user: T): T & { avatarUrl?: string; displayName?: string } {
+function normalizeUser<T extends Record<string, any>>(user: T): T & { avatarUrl?: string; displayName?: string; isPrivate: boolean; onlineStatusVisible: boolean } {
     return {
         ...user,
         avatarUrl: normalizeAvatarUrl(user),
         displayName: normalizeDisplayName(user) || user?.username || "",
+        isPrivate: typeof user?.isPrivate === "boolean" ? user.isPrivate : (typeof user?.is_private === "boolean" ? user.is_private : false),
+        onlineStatusVisible: typeof user?.onlineStatusVisible === "boolean" ? user.onlineStatusVisible : (typeof user?.online_status_visible === "boolean" ? user.online_status_visible : true),
     };
 }
 

@@ -1158,11 +1158,11 @@ export const db = {
     async createUser(user: any, client: any = pool) {
         const query = `
             INSERT INTO users (id, username, display_name, email, password_hash, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, email_verified, verification_token, verification_expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15)
+            VALUES (COALESCE($1, uuid_generate_v4()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15)
             RETURNING *;
         `;
         const res = await client.query(query, [
-            user.id,
+            user.id || null,
             user.username,
             user.displayName,
             user.email,

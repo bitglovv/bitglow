@@ -87,16 +87,16 @@ export async function userRoutes(fastify: FastifyInstance) {
         return {
             id: dbUser.id,
             username: dbUser.username,
-            displayName: dbUser.display_name || dbUser.displayName,
+            displayName: dbUser.displayName || dbUser.display_name,
             email: dbUser.email,
-            avatarUrl: dbUser.avatar_url || dbUser.avatarUrl,
+            avatarUrl: dbUser.avatarUrl || dbUser.avatar_url,
             website: dbUser.website,
             location: dbUser.location,
             bio: dbUser.bio,
             followersCount,
             followsCount,
-            isPrivate: dbUser.is_private,
-            onlineStatusVisible: dbUser.online_status_visible,
+            isPrivate: Boolean(dbUser.isPrivate ?? dbUser.is_private),
+            onlineStatusVisible: dbUser.onlineStatusVisible !== undefined ? Boolean(dbUser.onlineStatusVisible) : (dbUser.online_status_visible !== undefined ? Boolean(dbUser.online_status_visible) : true),
         };
     });
 
