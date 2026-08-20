@@ -88,7 +88,7 @@ export default function LoginPage() {
                 return;
             }
 
-            login(res.token, res.user);
+            login(res.token, res.user, res.refreshToken);
             navigate("/home");
         } catch (err: any) {
             setError(err.message || "Invalid credentials.");

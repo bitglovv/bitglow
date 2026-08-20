@@ -158,13 +158,67 @@ export type Notification =
     | { type: "mention"; user: User; postId?: string; createdAt: string }
     | { type: "dm"; user: User; content: string; createdAt: string };
 
+let refreshPromise: Promise<string | null> | null = null;
+
+export async function refreshAccessToken(): Promise<string | null> {
+    const refreshToken = localStorage.getItem("refreshToken");
+    if (!refreshToken) {
+        return null;
+    }
+
+    if (refreshPromise) {
+        return refreshPromise;
+    }
+
+    refreshPromise = (async () => {
+        try {
+            const res = await fetch(`${API_URL}/auth/refresh`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refreshToken }),
+            });
+
+            if (!res.ok) {
+                // Refresh token is expired, invalid, or revoked
+                localStorage.removeItem("token");
+                localStorage.removeItem("refreshToken");
+                localStorage.removeItem("user");
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("bitglow:auth-expired"));
+                }
+                return null;
+            }
+
+            const data = await res.json();
+            if (data?.token) {
+                localStorage.setItem("token", data.token);
+                if (data?.refreshToken) {
+                    localStorage.setItem("refreshToken", data.refreshToken);
+                }
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("bitglow:auth-refreshed", { detail: { token: data.token } }));
+                }
+                return data.token as string;
+            }
+            return null;
+        } catch (error) {
+            console.error("Token refresh failed due to network error", error);
+            return null;
+        } finally {
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
+}
+
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
-    const token = localStorage.getItem("token");
+    let token = localStorage.getItem("token");
     const hasBody = options.body !== undefined && !(options.body instanceof FormData);
     const headers: Record<string, string> = {
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
         ...(options.headers || {}),
-    } as Record<string,string>;
+    } as Record<string, string>;
     if (token) headers.Authorization = `Bearer ${token}`;
 
     let fullUrl: string;
@@ -178,10 +232,25 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
         fullUrl = `${API_URL}/${url}`;
     }
 
-    const res = await fetch(fullUrl, {
+    let res = await fetch(fullUrl, {
         ...options,
         headers,
     });
+
+    const isAuthEndpoint = url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/signup");
+    if (res.status === 401 && !isAuthEndpoint) {
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+            const retryHeaders: Record<string, string> = {
+                ...headers,
+                Authorization: `Bearer ${newToken}`,
+            };
+            res = await fetch(fullUrl, {
+                ...options,
+                headers: retryHeaders,
+            });
+        }
+    }
 
     return res;
 }
@@ -308,9 +377,10 @@ async function checkRestorationResponse(res: Response) {
     return null;
 }
 
-async function readAuthResponse(res: Response): Promise<{ token: string; user: User }> {
+async function readAuthResponse(res: Response): Promise<{ token: string; refreshToken?: string; user: User }> {
     const data = await res.json();
     const token = data?.token;
+    const refreshToken = data?.refreshToken;
     const user = data?.user;
 
     if (!token || !user) {
@@ -319,9 +389,12 @@ async function readAuthResponse(res: Response): Promise<{ token: string; user: U
 
     const normalizedUser = normalizeUser(user);
     localStorage.setItem("token", token);
+    if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+    }
     localStorage.setItem("user", JSON.stringify(normalizedUser));
 
-    return { token, user: normalizedUser as User };
+    return { token, refreshToken, user: normalizedUser as User };
 }
 
 async function resolveEmailFromUsername(username: string): Promise<string | null> {
@@ -452,7 +525,7 @@ export const api = {
             identifier: string,
             password: string,
             otpCode: string
-        ): Promise<{ token: string; user: User }> => {
+        ): Promise<{ token: string; refreshToken?: string; user: User }> => {
             const res = await fetch(`${API_URL}/auth/restore-account`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -462,6 +535,26 @@ export const api = {
                 throw new Error(await readErrorMessage(res, "Failed to restore account"));
             }
             return readAuthResponse(res);
+        },
+        refresh: async (): Promise<{ token: string; refreshToken: string } | null> => {
+            const newToken = await refreshAccessToken();
+            if (!newToken) return null;
+            const refreshToken = localStorage.getItem("refreshToken") || "";
+            return { token: newToken, refreshToken };
+        },
+        logout: async (): Promise<void> => {
+            try {
+                await fetchWithAuth("/auth/logout", { method: "POST" });
+            } catch {
+                // Ignore network errors during logout
+            } finally {
+                localStorage.removeItem("token");
+                localStorage.removeItem("refreshToken");
+                localStorage.removeItem("user");
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("bitglow:auth-expired"));
+                }
+            }
         },
         me: async (): Promise<User> => {
             const res = await fetchWithAuth("/api/me", { cache: "no-store" });

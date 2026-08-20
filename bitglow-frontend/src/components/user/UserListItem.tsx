@@ -15,7 +15,7 @@ interface UserListItemProps {
   user: UserListItemUser;
   actionSlot?: React.ReactNode;
   href?: string;
-  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
   className?: string;
 }
 

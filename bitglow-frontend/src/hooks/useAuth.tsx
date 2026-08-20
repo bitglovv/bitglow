@@ -9,7 +9,7 @@ type AuthContextType = {
     token: string | null;
     isLoading: boolean;
     isAuthLoading: boolean;
-    login: (token: string, user?: User) => void;
+    login: (token: string, user?: User, refreshToken?: string) => void;
     logout: () => void;
     refreshUser: () => Promise<void>;
     updatePrivacy: (isPrivate: boolean) => Promise<boolean>;
@@ -20,6 +20,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function loadToken() {
     return localStorage.getItem("token");
+}
+
+function loadRefreshToken() {
+    return localStorage.getItem("refreshToken");
 }
 
 function loadStoredUser() {
@@ -68,10 +72,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const clearSession = () => {
         localStorage.removeItem("token");
+        localStorage.removeItem("refreshToken");
         localStorage.removeItem("user");
         setToken(null);
         setUser(null);
     };
+
+    useEffect(() => {
+        const handleAuthRefreshed = (e: Event) => {
+            const customEvent = e as CustomEvent<{ token?: string }>;
+            if (customEvent.detail?.token) {
+                setToken(customEvent.detail.token);
+            }
+        };
+
+        const handleAuthExpired = () => {
+            clearSession();
+            socketService.disconnect();
+        };
+
+        window.addEventListener("bitglow:auth-refreshed", handleAuthRefreshed);
+        window.addEventListener("bitglow:auth-expired", handleAuthExpired);
+
+        return () => {
+            window.removeEventListener("bitglow:auth-refreshed", handleAuthRefreshed);
+            window.removeEventListener("bitglow:auth-expired", handleAuthExpired);
+        };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -80,9 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("AUTH_START");
 
             const storedToken = loadToken();
-            if (!storedToken) {
+            const storedRefreshToken = loadRefreshToken();
+
+            if (!storedToken && !storedRefreshToken) {
                 if (!cancelled) {
                     setToken(null);
+                    setUser(null);
                     setIsAuthLoading(false);
                     console.log("AUTH_LOADING_COMPLETE");
                 }
@@ -98,10 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             try {
                 const version = ++userSyncVersion.current;
+                // api.auth.me uses fetchWithAuth which transparently refreshes if the access token is expired
                 const restoredUser = await api.auth.me();
                 if (cancelled) return;
 
-                setToken(storedToken);
+                const currentToken = loadToken() || storedToken;
+                setToken(currentToken);
                 applyUser(restoredUser, version);
                 console.log("AUTH_USER_RESTORED");
             } catch (error) {
@@ -208,8 +240,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("focus", handleFocus);
     }, [token, isAuthLoading]);
 
-    const login = (newToken: string, userData?: User) => {
+    const login = (newToken: string, userData?: User, newRefreshToken?: string) => {
         localStorage.setItem("token", newToken);
+        if (newRefreshToken) {
+            localStorage.setItem("refreshToken", newRefreshToken);
+        }
         setToken(newToken);
         setIsAuthLoading(false);
 
@@ -230,6 +265,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = () => {
+        void api.auth.logout();
+        socketService.disconnect();
         clearSession();
         setIsAuthLoading(false);
     };

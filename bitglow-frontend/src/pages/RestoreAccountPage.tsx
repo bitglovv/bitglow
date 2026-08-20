@@ -126,9 +126,9 @@ export default function RestoreAccountPage() {
     setError("");
 
     try {
-      const { token, user } = await api.auth.restoreAccount(identifier, password, otpCode.trim());
+      const { token, user, refreshToken } = await api.auth.restoreAccount(identifier, password, otpCode.trim());
       sessionStorage.removeItem(STORAGE_KEY);
-      login(token, user);
+      login(token, user, refreshToken);
       setStep(3);
     } catch (err: any) {
       setError(err.message || "Failed to restore account.");

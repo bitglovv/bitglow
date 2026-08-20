@@ -53,14 +53,27 @@ class SocketService {
     private subscribers: Subscriber[] = [];
     private url: string = getWsUrl();
     private reconnectInterval: number = 3000;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private isManuallyClosed: boolean = false;
 
     connect() {
+        this.isManuallyClosed = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        if (this.socket?.readyState === WebSocket.OPEN) return;
+        if (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) return;
 
-        this.socket = new WebSocket(this.url);
+        try {
+            this.socket = new WebSocket(this.url);
+        } catch (e) {
+            console.error("WS connection error", e);
+            return;
+        }
 
         this.socket.onopen = () => {
             console.log("WS Connected");
@@ -80,10 +93,11 @@ class SocketService {
         };
 
         this.socket.onclose = () => {
+            if (this.isManuallyClosed) return;
             console.log("WS Closed, reconnecting...");
             const freshToken = localStorage.getItem("token");
             if (freshToken) {
-                setTimeout(() => this.connect(), this.reconnectInterval);
+                this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectInterval);
             }
         };
     }
@@ -102,8 +116,15 @@ class SocketService {
     }
 
     disconnect() {
-        this.socket?.close();
-        this.socket = null;
+        this.isManuallyClosed = true;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
     }
 }
 

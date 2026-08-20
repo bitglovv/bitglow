@@ -6,6 +6,7 @@ interface AvatarProps {
     size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
     status?: 'online' | 'offline' | 'away' | 'none';
     className?: string;
+    onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -14,6 +15,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     size = 'md',
     status = 'none',
     className = '',
+    onClick,
 }) => {
     const sizes = {
         xs: 'w-6 h-6',
@@ -34,7 +36,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     const initials = alt.substring(0, 2).toUpperCase();
 
     return (
-        <div className={`relative inline-block ${className}`}>
+        <div className={`relative inline-block ${className}`} onClick={onClick}>
             <div className={`${sizes[size]} overflow-hidden rounded-full bg-transparent flex items-center justify-center`}>
                 <img 
                     src={src || "/default-avatar.png"} 
