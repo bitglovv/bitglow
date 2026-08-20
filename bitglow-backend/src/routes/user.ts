@@ -496,6 +496,25 @@ export async function userRoutes(fastify: FastifyInstance) {
         const following = await db.getFollowing(userId);
         return { following };
     });
+
+    /**
+     * DELETE /api/followers/:id
+     * Removes an accepted follower from the authenticated user's followers
+     */
+    fastify.delete("/followers/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id: followerId } = req.params as { id: string };
+
+        if (!followerId || followerId === userId) {
+            return reply.code(400).send({ message: "Invalid user" });
+        }
+
+        const removed = await db.removeFollower(userId, followerId);
+        if (!removed) {
+            return reply.code(404).send({ message: "Follower not found" });
+        }
+        return { ok: true };
+    });
 }
 
 function filterPublicUser(user: any, isAuthorized = false) {

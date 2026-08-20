@@ -680,6 +680,10 @@ export const api = {
             const res = await fetchWithAuth(`/follow/requests/${followerId}/reject`, { method: "POST" });
             return res.ok;
         },
+        removeFollower: async (followerId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/followers/${followerId}`, { method: "DELETE" });
+            return res.ok;
+        },
     },
     profile: {
         get: async (username: string): Promise<User> => {
