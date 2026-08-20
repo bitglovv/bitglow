@@ -101,6 +101,13 @@ server.addHook("onSend", async (_request, reply) => {
 server.setErrorHandler(async (error, request, reply) => {
   const statusCode = Number((error as any).statusCode) || 500;
 
+  // Include CORS headers on all error responses so the browser never masks errors as CORS failures.
+  const origin = request.headers.origin as string | undefined;
+  if (origin && isAllowedOrigin(origin)) {
+    reply.header("Access-Control-Allow-Origin", origin);
+    reply.header("Access-Control-Allow-Credentials", "true");
+  }
+
   if (statusCode === 429) {
     await db.insertSecurityLog({
       eventType: "rate_limit",
@@ -114,13 +121,6 @@ server.setErrorHandler(async (error, request, reply) => {
       userAgent: request.headers["user-agent"]?.toString(),
       details: { type: "rate_limit", path: request.url },
     });
-    // Include CORS headers on 429 so the browser reports the correct error
-    // instead of masking it as a CORS failure.
-    const origin = request.headers.origin as string | undefined;
-    if (origin && isAllowedOrigin(origin)) {
-      reply.header("Access-Control-Allow-Origin", origin);
-      reply.header("Access-Control-Allow-Credentials", "true");
-    }
     return reply.code(429).send({
       code: "TOO_MANY_ATTEMPTS",
       message: "Too many requests. Please try again later.",

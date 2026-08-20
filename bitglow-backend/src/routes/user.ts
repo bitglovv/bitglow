@@ -357,7 +357,12 @@ export async function userRoutes(fastify: FastifyInstance) {
      * GET /api/username/check?u=
      * Check username availability
      */
-    fastify.get("/username/check", { schema: usernameCheckSchema }, async (req, reply) => {
+    fastify.get("/username/check", {
+        schema: usernameCheckSchema,
+        // Dedicated rate limit: generous enough for debounced typing (400-500ms = ~120 chars/min max)
+        // but isolated from the auth rate limits so typing cannot exhaust login/signup quota.
+        config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    }, async (req, reply) => {
         const { u } = (req.query || {}) as { u?: string };
         if (!u) return reply.code(400).send({ message: "username required" });
         const candidate = u.toLowerCase();

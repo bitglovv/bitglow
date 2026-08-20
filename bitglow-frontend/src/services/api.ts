@@ -268,8 +268,19 @@ export const ERROR_MAPPINGS: Record<string, string> = {
 };
 
 export async function readErrorMessage(res: Response, fallback: string) {
-    const text = await res.text();
-    if (!text) return fallback;
+    if (res.status === 429) {
+        return ERROR_MAPPINGS.TOO_MANY_ATTEMPTS;
+    }
+    if (res.status === 503) {
+        return "Service is temporarily unavailable. Please try again in a moment.";
+    }
+
+    const text = await res.text().catch(() => "");
+    if (!text) {
+        if (res.status >= 500) return ERROR_MAPPINGS.SERVER_ERROR;
+        if (res.status === 409) return "Resource already exists or is in conflict.";
+        return fallback;
+    }
 
     try {
         const json = JSON.parse(text);
@@ -278,6 +289,7 @@ export async function readErrorMessage(res: Response, fallback: string) {
         }
         return json.message || json.error || fallback;
     } catch {
+        if (res.status >= 500) return ERROR_MAPPINGS.SERVER_ERROR;
         return fallback;
     }
 }
@@ -440,6 +452,12 @@ export const api = {
                 body: JSON.stringify(data),
             });
             if (!res.ok) {
+                if (res.status === 429) {
+                    throw new Error("Too many signup attempts. Please wait a few minutes and try again.");
+                }
+                if (res.status === 503 || res.status >= 500) {
+                    throw new Error("Service is temporarily unavailable. Please try again in a moment.");
+                }
                 throw new Error(await readErrorMessage(res, "Signup failed"));
             }
             return res.json();
@@ -547,13 +565,15 @@ export const api = {
             if (!res.ok) return [];
             return normalizeUsers(await res.json()) as User[];
         },
-        checkUsername: async (username: string): Promise<{ available: boolean }> => {
-            const res = await fetchWithAuth(`/api/username/check?u=${encodeURIComponent(username)}`);
+        checkUsername: async (username: string, signal?: AbortSignal): Promise<{ available: boolean; status: number }> => {
+            const res = await fetch(`${API_URL}/username/check?u=${encodeURIComponent(username)}`, {
+                signal,
+            });
             if (!res.ok) {
-                // If the backend is an older build without this route, allow save and rely on PUT /api/me (409) to reject duplicates.
-                return { available: res.status === 404 };
+                return { available: false, status: res.status };
             }
-            return res.json();
+            const data = await res.json().catch(() => ({ available: false }));
+            return { available: Boolean(data?.available), status: res.status };
         },
         get: async (id: string): Promise<User> => {
             const res = await fetchWithAuth(`/users/${id}`);
