@@ -410,10 +410,12 @@ export const api = {
         login: async (identifier: string, password: string): Promise<any> => {
             const normalizedIdentifier = identifier.trim();
 
-            let res = await performLoginRequest({
+            // Send exactly ONE request per login attempt.
+            // The backend resolves both email and username via the `identifier` field.
+            // Sending multiple requests per click burned through the rate limit quota,
+            // causing 429 → OPTIONS preflight to fail → browser misreported as a CORS error.
+            const res = await performLoginRequest({
                 identifier: normalizedIdentifier,
-                email: normalizedIdentifier,
-                username: normalizedIdentifier,
                 password,
             });
 
@@ -424,38 +426,12 @@ export const api = {
                 return readAuthResponse(res);
             }
 
-            const primaryError = await readErrorMessage(res, "Login failed");
-
-            res = await performLoginRequest({
-                email: normalizedIdentifier,
-                password,
-            });
-
-            const restoration2 = await checkRestorationResponse(res);
-            if (restoration2) return restoration2;
-
-            if (res.ok) {
-                return readAuthResponse(res);
+            if (res.status === 429) {
+                throw new Error("Too many login attempts. Please wait a few minutes before trying again.");
             }
 
-            if (!normalizedIdentifier.includes("@")) {
-                const resolvedEmail = await resolveEmailFromUsername(normalizedIdentifier);
-                if (resolvedEmail) {
-                    res = await performLoginRequest({
-                        email: resolvedEmail,
-                        password,
-                    });
-
-                    const restoration3 = await checkRestorationResponse(res);
-                    if (restoration3) return restoration3;
-
-                    if (res.ok) {
-                        return readAuthResponse(res);
-                    }
-                }
-            }
-
-            throw new Error(primaryError);
+            const errorMessage = await readErrorMessage(res, "Invalid credentials. Please check your email/username and password.");
+            throw new Error(errorMessage);
         },
         signup: async (data: any): Promise<{ message: string }> => {
             const res = await fetch(`${API_URL}/auth/signup`, {
