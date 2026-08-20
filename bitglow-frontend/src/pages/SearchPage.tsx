@@ -5,19 +5,13 @@ import { api, User } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/Button";
 import { UserListItem } from "../components/user/UserListItem";
-import ConfirmDialog from "../components/common/ConfirmDialog";
 
 export default function SearchPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [friends, setFriends] = useState<Set<string>>(new Set());
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
-
-  const [confirmTarget, setConfirmTarget] = useState<User | null>(null);
-  const [confirmType, setConfirmType] = useState<"unfollow" | "unfriend" | "cancel_request" | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => { document.title = "BitGlow"; }, []);
 
@@ -25,10 +19,9 @@ export default function SearchPage() {
     let cancelled = false;
     Promise.all([
       api.user.list(),
-      api.user.friends(),
       api.user.following(),
       api.user.pendingFollows()
-    ]).then(([list, friendsList, followingList, pendingList]) => {
+    ]).then(([list, followingList, pendingList]) => {
       if (cancelled) return;
       const normalizedUsers = (list || []).map((u) => {
         const username = u.username?.trim() || "";
@@ -41,7 +34,6 @@ export default function SearchPage() {
         };
       });
       setUsers(normalizedUsers);
-      setFriends(new Set((friendsList || []).map((u) => u.id)));
       setFollowing(new Set((followingList || []).map((u) => u.id)));
       setPending(new Set((pendingList || []).map((u) => u.id)));
     }).catch((err) => {
@@ -73,13 +65,12 @@ export default function SearchPage() {
       .filter(
         (u) =>
           u.id !== meId &&
-          !friends.has(u.id) &&
           !following.has(u.id) &&
           !pending.has(u.id)
       )
       .sort((a, b) => (Math.random() > 0.5 ? 1 : -1))
       .slice(0, 15);
-  }, [users, user?.id, friends, following, pending]);
+  }, [users, user?.id, following, pending]);
 
   const handleFollow = async (u: User) => {
     const status = await api.user.follow(u.id, u.username);
@@ -90,38 +81,8 @@ export default function SearchPage() {
     }
   };
 
-  const handleConfirmAction = async () => {
-    if (!confirmTarget || !confirmType) return;
-    setActionLoading(true);
-    try {
-      const ok = await api.user.unfollow(confirmTarget.id);
-      if (ok) {
-        setFollowing((prev) => {
-          const next = new Set(prev);
-          next.delete(confirmTarget.id);
-          return next;
-        });
-        setFriends((prev) => {
-          const next = new Set(prev);
-          next.delete(confirmTarget.id);
-          return next;
-        });
-        setPending((prev) => {
-          const next = new Set(prev);
-          next.delete(confirmTarget.id);
-          return next;
-        });
-      }
-    } catch (err) {
-      console.error("Action failed", err);
-    } finally {
-      setActionLoading(false);
-      setConfirmTarget(null);
-      setConfirmType(null);
-    }
-  };
-
   const listToRender = query.trim() ? results : suggestionList;
+  const isShowingSuggestions = !query.trim();
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-black text-white">
@@ -171,49 +132,18 @@ export default function SearchPage() {
                   actionSlot={(
                     <div className="ml-3 shrink-0 flex items-center gap-2">
                       {pending.has(u.id) ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmTarget(u);
-                            setConfirmType("cancel_request");
-                          }}
-                          className="rounded-full bg-white/[0.05] hover:bg-white/[0.1] px-4 py-1.5 text-[13px] font-semibold text-zinc-400 transition-all cursor-pointer"
-                        >
+                        <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-500">
                           Requested
-                        </button>
-                      ) : friends.has(u.id) ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmTarget(u);
-                            setConfirmType("unfriend");
-                          }}
-                          className="rounded-full bg-white/[0.05] hover:bg-white/[0.1] px-4 py-1.5 text-[13px] font-semibold text-zinc-300 transition-all cursor-pointer"
-                        >
-                          Friends
-                        </button>
+                        </span>
                       ) : following.has(u.id) ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmTarget(u);
-                            setConfirmType("unfollow");
-                          }}
-                          className="rounded-full bg-white/[0.05] hover:bg-white/[0.1] px-4 py-1.5 text-[13px] font-semibold text-zinc-400 transition-all cursor-pointer"
-                        >
+                        <span className="rounded-full bg-white/[0.05] px-4 py-1.5 text-[13px] font-semibold text-zinc-400">
                           Following
-                        </button>
+                        </span>
                       ) : (
                         <Button
                           size="sm"
                           variant="primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFollow(u);
-                          }}
+                          onClick={() => handleFollow(u)}
                           className="h-9 rounded-full px-5 text-[13px] font-semibold transition-all"
                         >
                           Follow
@@ -235,53 +165,6 @@ export default function SearchPage() {
           </div>
         </div>
       </main>
-
-      {confirmTarget && confirmType === "unfollow" && (
-        <ConfirmDialog
-          open={true}
-          title={`Unfollow @${confirmTarget.username}?`}
-          message={
-            confirmTarget.isPrivate
-              ? "Unfollowing will remove your connection. You will need to follow again and be accepted to reconnect."
-              : `Are you sure you want to unfollow @${confirmTarget.username}?`
-          }
-          confirmLabel="Unfollow"
-          cancelLabel="Cancel"
-          onConfirm={handleConfirmAction}
-          onClose={() => { setConfirmTarget(null); setConfirmType(null); }}
-          loading={actionLoading}
-        />
-      )}
-
-      {confirmTarget && confirmType === "unfriend" && (
-        <ConfirmDialog
-          open={true}
-          title={`Unfriend @${confirmTarget.username}?`}
-          message={
-            confirmTarget.isPrivate
-              ? "Unfriending will remove your connection. You will need to follow again and be accepted to reconnect."
-              : `Are you sure you want to unfriend @${confirmTarget.username}?`
-          }
-          confirmLabel="Unfriend"
-          cancelLabel="Cancel"
-          onConfirm={handleConfirmAction}
-          onClose={() => { setConfirmTarget(null); setConfirmType(null); }}
-          loading={actionLoading}
-        />
-      )}
-
-      {confirmTarget && confirmType === "cancel_request" && (
-        <ConfirmDialog
-          open={true}
-          title="Cancel follow request?"
-          message={`Cancel your pending follow request to @${confirmTarget.username}?`}
-          confirmLabel="Cancel Request"
-          cancelLabel="Keep Request"
-          onConfirm={handleConfirmAction}
-          onClose={() => { setConfirmTarget(null); setConfirmType(null); }}
-          loading={actionLoading}
-        />
-      )}
     </div>
   );
 }

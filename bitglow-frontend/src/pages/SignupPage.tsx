@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, API_URL } from "../services/api";
+import { api } from "../services/api";
 import AuthLayout from "../layouts/AuthLayout";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "../components/ui/Button";
@@ -37,84 +37,29 @@ export default function SignupPage() {
     });
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
-    const [usernameCheckError, setUsernameCheckError] = useState<"rate_limited" | "unavailable" | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
-    // Tracks which username value the last completed check corresponds to
-    // so stale completions from an earlier keypress are ignored.
-    const lastCheckedUsernameRef = useRef<string>("");
-    const abortControllerRef = useRef<AbortController | null>(null);
 
     const navigate = useNavigate();
 
-    // Debounced username availability check.
-    // Uses an AbortController so any in-flight check for a stale value is
-    // cancelled immediately when the user types again, preventing stale
-    // responses from overwriting the result for the current value.
     useEffect(() => {
-        const VALID_USERNAME_RE = /^[a-zA-Z0-9_.]+$/;
-        const username = form.username.trim();
-
-        // Skip check entirely for empty or invalid-format usernames.
-        if (!username || !VALID_USERNAME_RE.test(username) || username.length < 3) {
+        if (!form.username.trim() || !/^[a-zA-Z0-9_.]+$/.test(form.username)) {
             setUsernameAvailable(null);
-            setUsernameCheckError(null);
             return;
         }
-
-        // Cancel any pending check from a previous keystroke.
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-
-        const ac = new AbortController();
-        abortControllerRef.current = ac;
-
+        
         setCheckingUsername(true);
-        setUsernameCheckError(null);
-
         const timer = setTimeout(async () => {
-            // Username that triggered this scheduled check (captured at schedule time).
-            const checkingFor = username;
             try {
-                const result = await api.user.checkUsername(checkingFor, ac.signal);
-
-                // Ignore if user already typed something different while this was in-flight.
-                if (checkingFor !== form.username.trim()) return;
-
-                if (result.status === 429) {
-                    setUsernameCheckError("rate_limited");
-                    setUsernameAvailable(null);
-                    return;
-                }
-                if (result.status === 503 || result.status >= 500) {
-                    // Server temporarily unavailable (Render cold start, DB timeout, etc.).
-                    // Don't block the user — they can still try to submit.
-                    setUsernameCheckError("unavailable");
-                    setUsernameAvailable(null);
-                    return;
-                }
-                if (result.status >= 400 && result.status !== 404) {
-                    setUsernameAvailable(null);
-                    return;
-                }
-                setUsernameAvailable(result.available);
-                lastCheckedUsernameRef.current = checkingFor;
-            } catch (err: any) {
-                if (err?.name === "AbortError") return; // Intentional cancel — ignore
+                const res = await api.user.checkUsername(form.username);
+                setUsernameAvailable(res.available);
+            } catch {
                 setUsernameAvailable(null);
             } finally {
-                if (checkingFor === form.username.trim()) {
-                    setCheckingUsername(false);
-                }
+                setCheckingUsername(false);
             }
-        }, 450);
+        }, 500);
 
-        return () => {
-            clearTimeout(timer);
-            // Abort the in-flight request if the effect re-runs before it completes.
-            ac.abort();
-        };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        return () => clearTimeout(timer);
     }, [form.username]);
 
     const usernameError = useMemo(() => {
@@ -169,10 +114,7 @@ export default function SignupPage() {
         !emailError &&
         !passwordError &&
         !confirmPasswordError &&
-        // Don't block submit when check was rate-limited or server unavailable;
-        // the server will do a definitive check during POST /signup.
         usernameAvailable !== false &&
-        !checkingUsername &&
         form.username.trim() &&
         form.displayName.trim() &&
         form.email.trim() &&
@@ -190,7 +132,7 @@ export default function SignupPage() {
         });
         setError("");
 
-        if (!isFormValid || loading) return;
+        if (!isFormValid) return;
 
         setLoading(true);
 
@@ -203,14 +145,7 @@ export default function SignupPage() {
             });
             setIsSuccess(true);
         } catch (err: any) {
-            const msg = err?.message || "";
-            if (msg.toLowerCase().includes("too many") || msg.includes("429")) {
-                setError("Too many signup attempts. Please wait a few minutes and try again.");
-            } else if (msg.toLowerCase().includes("service unavailable") || msg.includes("503")) {
-                setError("Service is temporarily unavailable. Please try again in a moment.");
-            } else {
-                setError(msg || "Signup failed. Please try again.");
-            }
+            setError(err.message || "Signup failed.");
         } finally {
             setLoading(false);
         }
@@ -274,11 +209,7 @@ export default function SignupPage() {
                             onBlur={() => markTouched("username")}
                             error={usernameError}
                             helperText={
-                                usernameCheckError === "rate_limited"
-                                    ? "Checking too fast — please slow down"
-                                    : usernameCheckError === "unavailable"
-                                    ? "Can't verify right now — continue signup"
-                                    : usernameAvailable === true
+                                usernameAvailable === true
                                     ? "Username is available!"
                                     : checkingUsername
                                     ? "Checking availability..."

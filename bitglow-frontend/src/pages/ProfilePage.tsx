@@ -347,18 +347,6 @@ export default function ProfilePage() {
     }
   };
 
-  const handleModalRemoveFollower = async (targetId: string) => {
-    try {
-      const success = await api.user.removeFollower(targetId);
-      if (success) {
-        setFollowers((prev) => prev.filter((f) => f.id !== targetId));
-        setFriends((prev) => prev.filter((f) => f.id !== targetId));
-      }
-    } catch (err) {
-      console.error("Failed to remove follower", err);
-    }
-  };
-
   const handleModalFollow = async (targetId: string, targetUsername: string) => {
     try {
       const status = await api.user.follow(targetId, targetUsername);
@@ -665,15 +653,10 @@ export default function ProfilePage() {
           emptyText="No followers yet."
           renderAction={isOwner ? (f) => {
             const isFollowingThem = following.some(followed => followed.id === f.id);
-            return (
-              <div className="flex items-center gap-2">
-                {isFollowingThem ? (
-                  <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfollow</Button>
-                ) : (
-                  <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>Follow Back</Button>
-                )}
-                <Button variant="secondary" size="sm" className="text-zinc-400 hover:text-red-400" onClick={() => handleModalRemoveFollower(f.id)}>Remove</Button>
-              </div>
+            return isFollowingThem ? (
+              <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfollow</Button>
+            ) : (
+              <Button size="sm" onClick={() => handleModalFollow(f.id, f.username)}>Follow Back</Button>
             );
           } : undefined}
         />

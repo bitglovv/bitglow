@@ -71,11 +71,6 @@ server.register(rateLimit, {
   global: true,
   max: 120,
   timeWindow: "1 minute",
-  // Exempt CORS preflight requests from rate limiting.
-  // OPTIONS requests are browser-generated preflight checks, not user actions.
-  // Rate-limiting them causes 429 responses without CORS headers, which browsers
-  // report as CORS errors instead of rate-limit errors.
-  allowList: (request: import("fastify").FastifyRequest) => request.method === "OPTIONS",
 });
 
 server.register(helmet, {
@@ -99,16 +94,7 @@ server.addHook("onSend", async (_request, reply) => {
 });
 
 server.setErrorHandler(async (error, request, reply) => {
-  const statusCode = Number((error as any).statusCode) || 500;
-
-  // Include CORS headers on all error responses so the browser never masks errors as CORS failures.
-  const origin = request.headers.origin as string | undefined;
-  if (origin && isAllowedOrigin(origin)) {
-    reply.header("Access-Control-Allow-Origin", origin);
-    reply.header("Access-Control-Allow-Credentials", "true");
-  }
-
-  if (statusCode === 429) {
+  if ((error as any).statusCode === 429) {
     await db.insertSecurityLog({
       eventType: "rate_limit",
       ipAddress: request.ip,
@@ -121,32 +107,26 @@ server.setErrorHandler(async (error, request, reply) => {
       userAgent: request.headers["user-agent"]?.toString(),
       details: { type: "rate_limit", path: request.url },
     });
-    return reply.code(429).send({
-      code: "TOO_MANY_ATTEMPTS",
-      message: "Too many requests. Please try again later.",
-    });
   }
-
   if ((error as any).validation) {
     return reply.code(400).send({
       message: "Invalid request payload",
     });
   }
-
-  if (statusCode >= 400 && statusCode < 500) {
+  const statusCode = Number((error as any).statusCode);
+ if (statusCode >= 400 && statusCode < 500) {
     const message =
         error instanceof Error
             ? error.message
             : "Request failed";
+
     return reply.code(statusCode).send({
         message: statusCode === 404 ? "Not found" : message,
     });
-  }
-
+}
   if ((error as any).code === "23505") {
     return reply.code(409).send({ message: "Resource already exists" });
   }
-
   request.log.error({ err: error, requestId: request.id }, "request failed");
   return reply.code(500).send({ message: "Internal server error" });
 });
@@ -169,7 +149,33 @@ server.get("/health", async (_request, reply) => {
   }
 });
 
-// Note: Only one setErrorHandler is registered above. The duplicate below was removed.
+// Global Error Handler: Log internal details on server, expose structured user-friendly errors to client
+server.setErrorHandler((error: any, _request, reply) => {
+  server.log.error(error);
+
+  const statusCode = error.statusCode && error.statusCode >= 400 && error.statusCode < 600
+    ? error.statusCode
+    : 500;
+
+  if (statusCode === 429) {
+    return reply.code(429).send({
+      code: "TOO_MANY_ATTEMPTS",
+      message: "Too many requests. Please try again later.",
+    });
+  }
+
+  if (statusCode >= 500) {
+    return reply.code(500).send({
+      code: "SERVER_ERROR",
+      message: "An unexpected error occurred. Please try again later.",
+    });
+  }
+
+  return reply.code(statusCode).send({
+    code: error.code || "INVALID_INPUT",
+    message: error.message || "Please check your request and try again.",
+  });
+});
 
 import { startBackgroundAccountCleanup } from "./services/cleanup";
 
