@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import AuthLayout from "../layouts/AuthLayout";
@@ -37,29 +37,80 @@ export default function SignupPage() {
     });
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
+    const [usernameCheckError, setUsernameCheckError] = useState<"rate_limited" | "unavailable" | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
+    const lastCheckedUsernameRef = useRef<string>("");
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const navigate = useNavigate();
 
+    // Debounced username availability check.
+    // Uses an AbortController so any in-flight check for a stale value is
+    // cancelled immediately when the user types again, preventing stale
+    // responses from overwriting the result for the current value.
     useEffect(() => {
-        if (!form.username.trim() || !/^[a-zA-Z0-9_.]+$/.test(form.username)) {
+        const VALID_USERNAME_RE = /^[a-zA-Z0-9_.]+$/;
+        const username = form.username.trim();
+
+        // Skip check entirely for empty or invalid-format usernames.
+        if (!username || !VALID_USERNAME_RE.test(username) || username.length < 3) {
             setUsernameAvailable(null);
+            setUsernameCheckError(null);
             return;
         }
-        
+
+        // Cancel any pending check from a previous keystroke.
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        const ac = new AbortController();
+        abortControllerRef.current = ac;
+
         setCheckingUsername(true);
+        setUsernameCheckError(null);
+
         const timer = setTimeout(async () => {
+            const checkingFor = username;
             try {
-                const res = await api.user.checkUsername(form.username);
-                setUsernameAvailable(res.available);
-            } catch {
+                const result = await api.user.checkUsername(checkingFor, ac.signal);
+
+                // Ignore if user already typed something different while this was in-flight.
+                if (checkingFor !== form.username.trim()) return;
+
+                if (result.status === 429) {
+                    setUsernameCheckError("rate_limited");
+                    setUsernameAvailable(null);
+                    return;
+                }
+                if (result.status === 503 || result.status === 502 || result.status === 504 || result.status >= 500) {
+                    // Server temporarily unavailable (Render cold start, DB timeout, etc.).
+                    // Don't block the user — they can still try to submit.
+                    setUsernameCheckError("unavailable");
+                    setUsernameAvailable(null);
+                    return;
+                }
+                if (result.status >= 400 && result.status !== 404) {
+                    setUsernameAvailable(null);
+                    return;
+                }
+                setUsernameAvailable(result.available);
+                lastCheckedUsernameRef.current = checkingFor;
+            } catch (err: any) {
+                if (err?.name === "AbortError") return;
                 setUsernameAvailable(null);
             } finally {
-                setCheckingUsername(false);
+                if (checkingFor === form.username.trim()) {
+                    setCheckingUsername(false);
+                }
             }
-        }, 500);
+        }, 450);
 
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            ac.abort();
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.username]);
 
     const usernameError = useMemo(() => {
@@ -114,7 +165,10 @@ export default function SignupPage() {
         !emailError &&
         !passwordError &&
         !confirmPasswordError &&
+        // Don't block submit when check was rate-limited or server unavailable;
+        // the server will do a definitive check during POST /signup.
         usernameAvailable !== false &&
+        !checkingUsername &&
         form.username.trim() &&
         form.displayName.trim() &&
         form.email.trim() &&
@@ -132,7 +186,7 @@ export default function SignupPage() {
         });
         setError("");
 
-        if (!isFormValid) return;
+        if (!isFormValid || loading) return;
 
         setLoading(true);
 
@@ -209,7 +263,11 @@ export default function SignupPage() {
                             onBlur={() => markTouched("username")}
                             error={usernameError}
                             helperText={
-                                usernameAvailable === true
+                                usernameCheckError === "rate_limited"
+                                    ? "Checking too fast — please slow down"
+                                    : usernameCheckError === "unavailable"
+                                    ? "Can't verify right now — continue signup"
+                                    : usernameAvailable === true
                                     ? "Username is available!"
                                     : checkingUsername
                                     ? "Checking availability..."

@@ -63,7 +63,7 @@ export default function LoginPage() {
         setTouched({ identifier: true, password: true });
         setError("");
 
-        if (!identifier.trim() || !password || identifierError || passwordError) {
+        if (!identifier.trim() || !password || identifierError || passwordError || loading) {
             return;
         }
 

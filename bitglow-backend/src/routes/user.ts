@@ -357,7 +357,10 @@ export async function userRoutes(fastify: FastifyInstance) {
      * GET /api/username/check?u=
      * Check username availability
      */
-    fastify.get("/username/check", { schema: usernameCheckSchema }, async (req, reply) => {
+    fastify.get("/username/check", {
+        schema: usernameCheckSchema,
+        config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    }, async (req, reply) => {
         const { u } = (req.query || {}) as { u?: string };
         if (!u) return reply.code(400).send({ message: "username required" });
         const candidate = u.toLowerCase();
@@ -391,43 +394,35 @@ export async function userRoutes(fastify: FastifyInstance) {
             }
         }
 
-        if (!friendId || friendId === userId) {
-            return reply.code(400).send({ message: "Invalid user" });
+        if (!friendId) {
+            return reply.code(400).send({ message: "User not found" });
+        }
+
+        if (friendId === userId) {
+            return reply.code(400).send({ message: "Cannot follow yourself" });
         }
 
         const result = await db.followUser(userId, friendId);
         if (result.status === "blocked") {
             return reply.code(403).send({ message: "Follow blocked" });
         }
-        return { status: result.status };
+        return { ok: true, status: result.status };
     });
 
     // List incoming follow requests (for private accounts)
     fastify.get("/follow/requests", { preHandler: fastify.requireAuth }, async (req, reply) => {
         const userId = req.auth!.id;
 
-        const rows = await db.query(
-            `SELECT f.user_id as id, u.username, u.display_name, u.avatar_url
-             FROM friends f
-             JOIN users u ON u.id = f.user_id
-             WHERE f.friend_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
-            [userId]
-        );
-        return { requests: rows.rows };
+        const requests = await db.getFollowRequests(userId);
+        return { requests };
     });
 
     // List outgoing follow requests
     fastify.get("/follow/pending", { preHandler: fastify.requireAuth }, async (req, reply) => {
         const userId = req.auth!.id;
 
-        const rows = await db.query(
-            `SELECT f.friend_id as id, u.username, u.display_name, u.avatar_url
-             FROM friends f
-             JOIN users u ON u.id = f.friend_id
-             WHERE f.user_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE`,
-            [userId]
-        );
-        return { pending: rows.rows };
+        const pending = await db.getPendingFollows(userId);
+        return { pending };
     });
 
     // Accept a follow request
@@ -450,7 +445,7 @@ export async function userRoutes(fastify: FastifyInstance) {
 
     /**
      * DELETE /api/users/:id/follow
-     * Unfollow a user (removes mutual link)
+     * Unfollow a user
      */
     fastify.delete("/users/:id/follow", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
         const userId = req.auth!.id;
@@ -495,6 +490,25 @@ export async function userRoutes(fastify: FastifyInstance) {
 
         const following = await db.getFollowing(userId);
         return { following };
+    });
+
+    /**
+     * DELETE /api/followers/:id
+     * Removes an accepted follower from the authenticated user's followers
+     */
+    fastify.delete("/followers/:id", { preHandler: fastify.requireAuth, schema: idParamSchema }, async (req, reply) => {
+        const userId = req.auth!.id;
+        const { id: followerId } = req.params as { id: string };
+
+        if (!followerId || followerId === userId) {
+            return reply.code(400).send({ message: "Invalid user" });
+        }
+
+        const removed = await db.removeFollower(userId, followerId);
+        if (!removed) {
+            return reply.code(404).send({ message: "Follower not found" });
+        }
+        return { ok: true };
     });
 }
 

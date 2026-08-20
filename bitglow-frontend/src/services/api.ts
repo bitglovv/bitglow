@@ -16,7 +16,7 @@ const isPrivateNetworkHost = (hostname: string) =>
     /^169\.254\./.test(hostname);
 
 const getApiHost = () => {
-    const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
+    const envHost = (import.meta as any).env?.VITE_API_HOST || (import.meta as any).env?.VITE_API_URL as string | undefined;
     const hostname = window.location.hostname;
 
     // Case 1: localhost — straightforward local dev
@@ -27,24 +27,16 @@ const getApiHost = () => {
     // Case 2: LAN / private network IP (phone/tablet on same WiFi as dev machine)
     // Backend is on the same machine — use same hostname but port 3003
     if (isPrivateNetworkHost(hostname)) {
-        // If VITE_API_HOST is explicitly set to a non-loopback address, use it
         if (envHost && !isLoopbackHost(envHost)) return envHost;
-        // Otherwise auto-derive: same IP, port 3003
         return `http://${hostname}:3003`;
     }
 
-    // Case 3: Public domain (Vercel, etc.) — VITE_API_HOST MUST point to Render backend
+    // Case 3: Public domain (Vercel, etc.) — VITE_API_HOST points to Render backend
     if (envHost && !isLoopbackHost(envHost)) {
-        return envHost;
+        return envHost.replace(/\/api\/?$/, "").replace(/\/$/, "");
     }
 
-    // VITE_API_HOST not configured for production — fail loudly so misconfiguration
-    // is caught at deploy time rather than silently routing to a hardcoded host.
-    const msg =
-        "[BitGlow] VITE_API_HOST is not set for a production build. " +
-        "Add VITE_API_HOST=https://<your-backend>.onrender.com to your Vercel environment variables.";
-    console.error(msg);
-    throw new Error(msg)
+    return "https://bitglow-backend-hh2h.onrender.com";
 };
 
 const API_HOST = getApiHost();
@@ -179,7 +171,6 @@ export async function refreshAccessToken(): Promise<string | null> {
             });
 
             if (!res.ok) {
-                // Refresh token is expired, invalid, or revoked
                 localStorage.removeItem("token");
                 localStorage.removeItem("refreshToken");
                 localStorage.removeItem("user");
@@ -232,10 +223,15 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
         fullUrl = `${API_URL}/${url}`;
     }
 
-    let res = await fetch(fullUrl, {
-        ...options,
-        headers,
-    });
+    let res: Response;
+    try {
+        res = await fetch(fullUrl, {
+            ...options,
+            headers,
+        });
+    } catch (err: any) {
+        throw new Error("Unable to reach BitGlow server. Please check your connection.");
+    }
 
     const isAuthEndpoint = url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/signup");
     if (res.status === 401 && !isAuthEndpoint) {
@@ -245,10 +241,14 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
                 ...headers,
                 Authorization: `Bearer ${newToken}`,
             };
-            res = await fetch(fullUrl, {
-                ...options,
-                headers: retryHeaders,
-            });
+            try {
+                res = await fetch(fullUrl, {
+                    ...options,
+                    headers: retryHeaders,
+                });
+            } catch (err: any) {
+                throw new Error("Unable to reach BitGlow server. Please check your connection.");
+            }
         }
     }
 
@@ -268,18 +268,39 @@ export const ERROR_MAPPINGS: Record<string, string> = {
 };
 
 export async function readErrorMessage(res: Response, fallback: string) {
-    const text = await res.text();
-    if (!text) return fallback;
-
-    try {
-        const json = JSON.parse(text);
-        if (json.code && ERROR_MAPPINGS[json.code]) {
-            return ERROR_MAPPINGS[json.code];
-        }
-        return json.message || json.error || fallback;
-    } catch {
-        return fallback;
+    if (res.status === 429) {
+        return "Too many attempts. Please try again later.";
     }
+    if (res.status === 503 || res.status === 502 || res.status === 504) {
+        return "BitGlow server is temporarily unavailable. Please try again.";
+    }
+
+    const text = await res.text().catch(() => "");
+    if (text) {
+        try {
+            const json = JSON.parse(text);
+            if (json.code && ERROR_MAPPINGS[json.code]) {
+                return ERROR_MAPPINGS[json.code];
+            }
+            if (json.message || json.error) {
+                return json.message || json.error;
+            }
+        } catch {
+            // non-JSON
+        }
+    }
+
+    if (res.status === 401) {
+        return "Invalid username/email or password.";
+    }
+    if (res.status === 409) {
+        return "Username or email already exists.";
+    }
+    if (res.status >= 500) {
+        return "BitGlow server is temporarily unavailable. Please try again.";
+    }
+
+    return fallback;
 }
 
 async function parseJsonSafe<T>(res: Response): Promise<T | null> {
@@ -290,7 +311,7 @@ async function parseJsonSafe<T>(res: Response): Promise<T | null> {
     }
 }
 
-async function performLoginRequest(payload: Record<string, string>) {
+async function performLoginRequest(payload: { identifier: string; password: string }) {
     return fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -397,25 +418,20 @@ async function readAuthResponse(res: Response): Promise<{ token: string; refresh
     return { token, refreshToken, user: normalizedUser as User };
 }
 
-async function resolveEmailFromUsername(username: string): Promise<string | null> {
-    const res = await fetch(`${API_URL}/profile/${encodeURIComponent(username)}`);
-    if (!res.ok) return null;
-
-    const profile = await parseJsonSafe<{ email?: string }>(res);
-    return profile?.email?.trim() || null;
-}
-
 export const api = {
     auth: {
         login: async (identifier: string, password: string): Promise<any> => {
             const normalizedIdentifier = identifier.trim();
 
-            let res = await performLoginRequest({
-                identifier: normalizedIdentifier,
-                email: normalizedIdentifier,
-                username: normalizedIdentifier,
-                password,
-            });
+            let res: Response;
+            try {
+                res = await performLoginRequest({
+                    identifier: normalizedIdentifier,
+                    password,
+                });
+            } catch (err: any) {
+                throw new Error("Unable to reach BitGlow server. Please check your connection.");
+            }
 
             const restoration = await checkRestorationResponse(res);
             if (restoration) return restoration;
@@ -424,47 +440,23 @@ export const api = {
                 return readAuthResponse(res);
             }
 
-            const primaryError = await readErrorMessage(res, "Login failed");
-
-            res = await performLoginRequest({
-                email: normalizedIdentifier,
-                password,
-            });
-
-            const restoration2 = await checkRestorationResponse(res);
-            if (restoration2) return restoration2;
-
-            if (res.ok) {
-                return readAuthResponse(res);
-            }
-
-            if (!normalizedIdentifier.includes("@")) {
-                const resolvedEmail = await resolveEmailFromUsername(normalizedIdentifier);
-                if (resolvedEmail) {
-                    res = await performLoginRequest({
-                        email: resolvedEmail,
-                        password,
-                    });
-
-                    const restoration3 = await checkRestorationResponse(res);
-                    if (restoration3) return restoration3;
-
-                    if (res.ok) {
-                        return readAuthResponse(res);
-                    }
-                }
-            }
-
-            throw new Error(primaryError);
+            const errorMessage = await readErrorMessage(res, "Invalid username/email or password.");
+            throw new Error(errorMessage);
         },
         signup: async (data: any): Promise<{ message: string }> => {
-            const res = await fetch(`${API_URL}/auth/signup`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            });
+            let res: Response;
+            try {
+                res = await fetch(`${API_URL}/auth/signup`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data),
+                });
+            } catch (err: any) {
+                throw new Error("Unable to reach BitGlow server. Please check your connection.");
+            }
+
             if (!res.ok) {
-                throw new Error(await readErrorMessage(res, "Signup failed"));
+                throw new Error(await readErrorMessage(res, "Signup failed. Please check your information and try again."));
             }
             return res.json();
         },
@@ -571,13 +563,20 @@ export const api = {
             if (!res.ok) return [];
             return normalizeUsers(await res.json()) as User[];
         },
-        checkUsername: async (username: string): Promise<{ available: boolean }> => {
-            const res = await fetchWithAuth(`/api/username/check?u=${encodeURIComponent(username)}`);
-            if (!res.ok) {
-                // If the backend is an older build without this route, allow save and rely on PUT /api/me (409) to reject duplicates.
-                return { available: res.status === 404 };
+        checkUsername: async (username: string, signal?: AbortSignal): Promise<{ available: boolean; status: number }> => {
+            try {
+                const res = await fetch(`${API_URL}/username/check?u=${encodeURIComponent(username)}`, {
+                    signal,
+                });
+                if (!res.ok) {
+                    return { available: false, status: res.status };
+                }
+                const data = await res.json().catch(() => ({ available: false }));
+                return { available: Boolean(data?.available), status: res.status };
+            } catch (err: any) {
+                if (err?.name === "AbortError") throw err;
+                return { available: false, status: 0 };
             }
-            return res.json();
         },
         get: async (id: string): Promise<User> => {
             const res = await fetchWithAuth(`/users/${id}`);
@@ -678,6 +677,10 @@ export const api = {
         },
         rejectFollow: async (followerId: string): Promise<boolean> => {
             const res = await fetchWithAuth(`/follow/requests/${followerId}/reject`, { method: "POST" });
+            return res.ok;
+        },
+        removeFollower: async (followerId: string): Promise<boolean> => {
+            const res = await fetchWithAuth(`/followers/${followerId}`, { method: "DELETE" });
             return res.ok;
         },
     },

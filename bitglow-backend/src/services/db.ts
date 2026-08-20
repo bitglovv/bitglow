@@ -1450,7 +1450,7 @@ export const db = {
             return { status: 'blocked' };
         }
         const target = await this.getUserById(friendId);
-        const isPrivate = !!target?.is_private;
+        const isPrivate = !!(target?.isPrivate ?? target?.is_private);
         const status: 'pending' | 'accepted' = isPrivate ? 'pending' : 'accepted';
 
         await pool.query(
@@ -1495,28 +1495,33 @@ export const db = {
         return res.rows;
     },
 
+    async getPendingFollows(userId: string) {
+        const res = await pool.query(
+            `SELECT u.id, u.username, u.display_name as "displayName", u.avatar_url as "avatarUrl"
+             FROM friends f
+             JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = $1 AND f.status = 'pending' AND COALESCE(u.is_deleted, FALSE) = FALSE
+             ORDER BY f.created_at DESC`,
+            [userId]
+        );
+        return res.rows;
+    },
+
     async unfollowUser(userId: string, friendId: string) {
         await pool.query(
             `DELETE FROM friends
-             WHERE (user_id = $1 AND friend_id = $2)
-                OR (user_id = $2 AND friend_id = $1)`,
+             WHERE user_id = $1 AND friend_id = $2`,
             [userId, friendId]
         );
+    },
 
-        // Delete the DM conversation to reset chat history and route future messages to Requests
-        const convRes = await pool.query(
-            `SELECT id FROM dm_conversations
-             WHERE (user_a = $1 AND user_b = $2)
-                OR (user_a = $2 AND user_b = $1)`,
-            [userId, friendId]
+    async removeFollower(ownerId: string, followerId: string) {
+        const res = await pool.query(
+            `DELETE FROM friends
+             WHERE user_id = $1 AND friend_id = $2 AND status = 'accepted'`,
+            [followerId, ownerId]
         );
-
-        if (convRes.rowCount && convRes.rowCount > 0) {
-            for (const row of convRes.rows) {
-                await pool.query('DELETE FROM dm_messages WHERE conversation_id = $1', [row.id]);
-                await pool.query('DELETE FROM dm_conversations WHERE id = $1', [row.id]);
-            }
-        }
+        return (res.rowCount ?? 0) > 0;
     },
 
     async getFriends(userId: string) {

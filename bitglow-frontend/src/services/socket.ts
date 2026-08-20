@@ -17,7 +17,7 @@ const isPrivateNetworkHost = (hostname: string) =>
     /^169\.254\./.test(hostname);
 
 function getWsUrl(): string {
-    const envHost = (import.meta as any).env?.VITE_API_HOST as string | undefined;
+    const envHost = (import.meta as any).env?.VITE_API_HOST || (import.meta as any).env?.VITE_API_URL as string | undefined;
     const hostname = window.location.hostname;
 
     // Case 1: localhost
@@ -33,19 +33,12 @@ function getWsUrl(): string {
         return `ws://${hostname}:3003`;
     }
 
-    // Case 3: Public domain (Vercel) — derive wss:// from VITE_API_HOST
+    // Case 3: Public domain (Vercel) — derive wss:// from envHost or production fallback
     if (envHost && !isLoopbackHost(envHost)) {
-        return envHost.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
+        return envHost.replace(/\/api\/?$/, "").replace(/\/$/, "").replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
     }
 
-    // VITE_API_HOST is not configured for this production deployment.
-    // Throw so the misconfiguration is immediately visible rather than
-    // silently routing WebSocket traffic to a hardcoded host.
-    const msg =
-        "[BitGlow] VITE_API_HOST is not set for a production build. " +
-        "Add VITE_API_HOST=https://<your-backend>.onrender.com to your Vercel environment variables.";
-    console.error(msg);
-    throw new Error(msg);
+    return "wss://bitglow-backend-hh2h.onrender.com";
 }
 
 class SocketService {

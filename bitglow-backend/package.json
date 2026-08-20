@@ -6,6 +6,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test:privacy-toggle": "tsx scripts/testPrivacyToggle.ts",
+    "test:relationships": "tsx scripts/testPrivateAccountRelationships.ts",
+    "test:cors": "tsx scripts/testCorsAndSignup.ts",
     "start": "node dist/src/server.js",
     "audit:live-messages": "tsx scripts/audit-live-messages.ts",
     "audit:security": "tsx scripts/audit-security.ts"
