@@ -1,46 +1,5 @@
-const isLoopbackHost = (value?: string | null) => {
-    if (!value) return false;
-    try {
-        const host = new URL(value).hostname;
-        return host === "localhost" || host === "127.0.0.1";
-    } catch {
-        return value.includes("localhost") || value.includes("127.0.0.1");
-    }
-};
-
-/** Returns true for private/LAN IPs (192.168.x, 10.x, 172.16-31.x, 169.254.x) */
-const isPrivateNetworkHost = (hostname: string) =>
-    /^192\.168\./.test(hostname) ||
-    /^10\./.test(hostname) ||
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-    /^169\.254\./.test(hostname);
-
-const getApiHost = () => {
-    const envHost = (import.meta as any).env?.VITE_API_HOST || (import.meta as any).env?.VITE_API_URL as string | undefined;
-    const hostname = window.location.hostname;
-
-    // Case 1: localhost — straightforward local dev
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-        return envHost ?? "http://127.0.0.1:3003";
-    }
-
-    // Case 2: LAN / private network IP (phone/tablet on same WiFi as dev machine)
-    // Backend is on the same machine — use same hostname but port 3003
-    if (isPrivateNetworkHost(hostname)) {
-        if (envHost && !isLoopbackHost(envHost)) return envHost;
-        return `http://${hostname}:3003`;
-    }
-
-    // Case 3: Public domain (Vercel, etc.) — VITE_API_HOST points to Render backend
-    if (envHost && !isLoopbackHost(envHost)) {
-        return envHost.replace(/\/api\/?$/, "").replace(/\/$/, "");
-    }
-
-    return "https://api.bitglow.site";
-};
-
-const API_HOST = getApiHost();
-export const API_URL = `${API_HOST}/api`;
+import { API_URL, WS_URL } from "../config/env";
+export { API_URL, WS_URL };
 
 export type User = {
     id: string;

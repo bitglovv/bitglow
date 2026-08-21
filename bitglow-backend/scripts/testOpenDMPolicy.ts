@@ -88,6 +88,8 @@ async function runSecurityTests() {
             return mockMessages.filter(m => m.conversation_id === convoId);
         };
 
+        db.markDMConversationRead = async () => 0;
+
         db.listDMConversations = async (userId: string) => {
             const userConvs = mockConversations.filter(c => c.user_a === userId || c.user_b === userId);
             const res = [];

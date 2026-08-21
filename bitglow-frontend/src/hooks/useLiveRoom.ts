@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_URL, api, LiveRoom } from "../services/api";
+import { api, LiveRoom } from "../services/api";
+import { WS_URL } from "../config/env";
 import { useChatStore } from "../store/chatStore";
 
 type ChatMessage = {
@@ -26,57 +27,47 @@ const MAX_MESSAGES = 100;
 const MESSAGE_COOLDOWN = 1_000;
 const MAX_LENGTH = 200;
 
-const CACHE_KEY = "bitglow_live_messages_v1";
-const TIMESTAMP_KEY = "bitglow_live_msg_ts";
-const SCROLL_KEY = "bitglow_live_msg_scroll";
-
 export function useLiveRoom(token: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    try {
-      const rid = localStorage.getItem('bitglow_last_room_id');
-      const saved = sessionStorage.getItem(`${CACHE_KEY}_${rid}`);
-      const savedTs = sessionStorage.getItem(`${TIMESTAMP_KEY}_${rid}`);
-      if (saved && savedTs) {
-        const now = Date.now();
-        return JSON.parse(saved).filter((m: any) => (now - m.ts) < MESSAGE_TTL);
-      }
-    } catch(e) {}
-    return [];
-  });
-  
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [roomUsers, setRoomUsers] = useState<RoomUser[]>([]);
-  const [roomOnline, setRoomOnline] = useState(0);
+  const [roomOnline, setRoomOnline] = useState<number>(0);
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; ts: number }>>({});
-  const [selfId, setSelfId] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [activeRoom, setActiveRoom] = useState<LiveRoom | null>(null);
-  const [roomError, setRoomError] = useState("");
-  const [isResolvingRoom, setIsResolvingRoom] = useState(true);
-  const [hasJoinedChat, setHasJoinedChat] = useState(() => localStorage.getItem('bitglow_live_joined') === 'true');
+  const [isResolvingRoom, setIsResolvingRoom] = useState(false);
+  const [roomError, setRoomError] = useState<string>("");
+  const [selfId, setSelfId] = useState<string | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [hasJoinedChat, setHasJoinedChat] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
-  const idRef = useRef(0);
+  const expiryTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const activeRoomIdRef = useRef<string | null>(null);
   const resolveRequestRef = useRef(0);
+  const idRef = useRef(0);
   const lastSentAtRef = useRef(0);
   const lastTypingSentRef = useRef(0);
-  const timerMapRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  useEffect(() => {
-    activeRoomIdRef.current = activeRoom?.id ?? null;
-    if (activeRoom?.id) {
-       localStorage.setItem('bitglow_last_room_id', activeRoom.id);
-    }
-  }, [activeRoom]);
+  activeRoomIdRef.current = activeRoom?.id || null;
 
-  useEffect(() => {
-    const rid = activeRoomIdRef.current;
-    if (rid && hasJoinedChat) {
-       sessionStorage.setItem(`${CACHE_KEY}_${rid}`, JSON.stringify(messages));
-       sessionStorage.setItem(`${TIMESTAMP_KEY}_${rid}`, Date.now().toString());
+  const clearAllExpiryTimers = () => {
+    expiryTimersRef.current.forEach((t) => clearTimeout(t));
+    expiryTimersRef.current.clear();
+  };
+
+  const scheduleExpiry = (msgId: string, ts: number) => {
+    if (expiryTimersRef.current.has(msgId)) return;
+    const remaining = MESSAGE_TTL - (Date.now() - ts);
+    if (remaining <= 0) {
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      return;
     }
-  }, [messages, hasJoinedChat]);
+    const timer = setTimeout(() => {
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      expiryTimersRef.current.delete(msgId);
+    }, remaining);
+    expiryTimersRef.current.set(msgId, timer);
+  };
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -117,15 +108,29 @@ export function useLiveRoom(token: string | null) {
     if (!token) return;
 
     setStatus("connecting");
-    const wsHost = API_URL.replace("http://", "ws://").replace("https://", "wss://").replace("/api", "");
-    const socket = new WebSocket(wsHost);
-    socketRef.current = socket;
-
+    let socket: WebSocket;
     let didCleanup = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+    try {
+      socket = new WebSocket(WS_URL);
+    } catch (err) {
+      console.error("[LiveRoom] WebSocket creation error:", err);
+      setStatus("disconnected");
+      const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempt), 10000);
+      reconnectTimer = setTimeout(() => {
+        setReconnectAttempt((attempt) => attempt + 1);
+      }, delay);
+      return () => {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+      };
+    }
+
+    socketRef.current = socket;
+
     socket.onopen = () => {
       setStatus("connected");
+      setReconnectAttempt(0);
       socket.send(JSON.stringify({ type: "client:hello", token }));
     };
 
@@ -202,17 +207,21 @@ export function useLiveRoom(token: string | null) {
       }
     };
 
+    socket.onerror = () => {
+    };
+
     socket.onclose = () => {
       if (didCleanup) return;
       setStatus("disconnected");
+      const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempt), 10000);
       reconnectTimer = setTimeout(() => {
         setReconnectAttempt((attempt) => attempt + 1);
-      }, 1200);
+      }, delay);
     };
 
     const typingInterval = setInterval(() => {
       const now = Date.now();
-      setTypingUsers(prev => {
+      setTypingUsers((prev) => {
         let changed = false;
         const next = { ...prev };
         for (const uid in next) {
@@ -269,28 +278,6 @@ export function useLiveRoom(token: string | null) {
     };
   }, [activeRoom?.id, hasJoinedChat, status]);
 
-  function scheduleExpiry(msgId: string, msgTs: number) {
-    const existing = timerMapRef.current.get(msgId);
-    if (existing) clearTimeout(existing);
-
-    const remaining = MESSAGE_TTL - (Date.now() - msgTs);
-    if (remaining <= 0) {
-      setMessages((prev) => prev.filter((m) => m.id !== msgId));
-      return;
-    }
-
-    const tid = setTimeout(() => {
-      timerMapRef.current.delete(msgId);
-      setMessages((prev) => prev.filter((m) => m.id !== msgId));
-    }, remaining);
-    timerMapRef.current.set(msgId, tid);
-  }
-
-  function clearAllExpiryTimers() {
-    timerMapRef.current.forEach((tid) => clearTimeout(tid));
-    timerMapRef.current.clear();
-  }
-
   const handleSend = useCallback((rawText: string) => {
     const socket = socketRef.current;
     const roomId = activeRoom?.id;
@@ -309,7 +296,6 @@ export function useLiveRoom(token: string | null) {
   const handleTyping = useCallback(() => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || !activeRoom?.id || !hasJoinedChat) return;
-    const now = Date.now();
     if (now - lastTypingSentRef.current < 2000) return;
     lastTypingSentRef.current = now;
     socket.send(JSON.stringify({ type: "client:typing", roomId: activeRoom.id }));
