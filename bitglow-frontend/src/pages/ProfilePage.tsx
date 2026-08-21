@@ -218,8 +218,13 @@ export default function ProfilePage() {
         } else {
           setProfile(data);
         }
-      } catch (err) {
-        setError("User not found");
+      } catch (err: any) {
+        if (cancelled) return;
+        if (err?.status === 404 || err?.message === "User not found" || err?.message === "Profile not found") {
+          setError("User not found");
+        } else {
+          setError(err?.message || "Failed to load profile. Please try again.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

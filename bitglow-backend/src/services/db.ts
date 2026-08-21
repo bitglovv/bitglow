@@ -936,7 +936,7 @@ export const db = {
     },
 
     async findUserByUsername(username: string) {
-        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE username = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [username]);
+        const res = await pool.query('SELECT id, username, display_name, email, avatar_url, website, location, bio, followers_count, follows_count, role, is_private, online_status_visible, is_deleted, deleted_at, scheduled_deletion_at, deletion_reason, created_at, updated_at FROM users WHERE LOWER(username) = LOWER($1) AND COALESCE(is_deleted, FALSE) = FALSE', [username]);
         return res.rows[0];
     },
 

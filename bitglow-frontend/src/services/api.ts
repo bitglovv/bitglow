@@ -1,5 +1,5 @@
-import { API_URL, WS_URL } from "../config/env";
-export { API_URL, WS_URL };
+import { API_URL, WS_URL, API_HOST } from "../config/env";
+export { API_URL, WS_URL, API_HOST };
 
 export type User = {
     id: string;
@@ -175,14 +175,12 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
 
     let fullUrl: string;
-    if (url.startsWith("http")) {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
         fullUrl = url;
-    } else if (url.startsWith("/api")) {
-        fullUrl = `${API_HOST}${url}`;
-    } else if (url.startsWith("/")) {
-        fullUrl = `${API_URL}${url}`;
     } else {
-        fullUrl = `${API_URL}/${url}`;
+        const cleanPath = url.replace(/^\/?api\/?/, "/");
+        const pathWithSlash = cleanPath.startsWith("/") ? cleanPath : `/${cleanPath}`;
+        fullUrl = `${API_URL}${pathWithSlash}`;
     }
 
     let res: Response;
@@ -669,13 +667,33 @@ export const api = {
     },
     profile: {
         get: async (username: string): Promise<User> => {
-            const res = await fetchWithAuth(`/api/profile/${username}`);
-            if (!res.ok) throw new Error("Profile not found");
+            const res = await fetchWithAuth(`/profile/${encodeURIComponent(username)}`);
+            if (res.status === 404) {
+                const err: any = new Error("User not found");
+                err.status = 404;
+                throw err;
+            }
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to load profile");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
             return normalizeUser(await res.json()) as User;
         },
         me: async (): Promise<User> => {
-            const res = await fetchWithAuth("/api/me");
-            if (!res.ok) throw new Error("Failed to fetch my profile");
+            const res = await fetchWithAuth("/profile/me");
+            if (res.status === 404) {
+                const err: any = new Error("User not found");
+                err.status = 404;
+                throw err;
+            }
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to fetch my profile");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
             return normalizeUser(await res.json()) as User;
         }
     },

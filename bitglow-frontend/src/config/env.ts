@@ -99,3 +99,4 @@ export function getWsUrl(): string {
 
 export const API_URL = getApiUrl();
 export const WS_URL = getWsUrl();
+export const API_HOST = API_URL.replace(/\/api\/?$/, "");
