@@ -38,7 +38,7 @@ function getWsUrl(): string {
         return envHost.replace(/\/api\/?$/, "").replace(/\/$/, "").replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
     }
 
-    return "wss://bitglow-backend-hh2h.onrender.com";
+    return "wss://api.bitglow.site";
 }
 
 class SocketService {

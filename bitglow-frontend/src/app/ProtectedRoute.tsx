@@ -4,10 +4,8 @@ import { useAuth } from "../hooks/useAuth";
 export default function ProtectedRoute() {
     const { token, isAuthLoading, user } = useAuth();
 
-    if (isAuthLoading) {
-        // Auth is restoring silently — render nothing rather than a
-        // blocking fullscreen loader. Router.tsx also returns null during
-        // this window, so nothing renders until the check resolves.
+    if (isAuthLoading && !token) {
+        // Auth is restoring silently — render nothing only if there is no cached session.
         return null;
     }
 

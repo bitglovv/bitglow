@@ -166,19 +166,15 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
 
     // ── Render ────────────────────────────────────────────────────────────
 
-    if (phase === "done") {
-        // Splash is gone — render the app normally.
-        return <>{children}</>;
-    }
-
     return (
-        <SplashLoader
-            visible={phase === "splash"}
-            onExited={() => setPhase("done")}
-        />
-        // Children are intentionally NOT rendered during the splash.
-        // Auth runs in the background via <AuthProvider> which wraps this component.
-        // Once phase becomes "done", children (Router) mount and render immediately
-        // with the correct authenticated/unauthenticated state.
+        <>
+            {children}
+            {phase !== "done" && (
+                <SplashLoader
+                    visible={phase === "splash"}
+                    onExited={() => setPhase("done")}
+                />
+            )}
+        </>
     );
 }

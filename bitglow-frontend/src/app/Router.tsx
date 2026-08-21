@@ -36,9 +36,8 @@ import { useAuth } from "../hooks/useAuth";
 export default function Router() {
     const { token, user, isAuthLoading } = useAuth();
 
-    // Auth restores silently — render nothing while the check is in flight.
-    // The SplashScreen in App.tsx covers the very first load visually.
-    if (isAuthLoading) return null;
+    // Auth restores silently — render nothing while the check is in flight ONLY if no cached token.
+    if (isAuthLoading && !token) return null;
 
     return (
         <Routes>

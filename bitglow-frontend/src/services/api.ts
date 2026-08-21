@@ -36,7 +36,7 @@ const getApiHost = () => {
         return envHost.replace(/\/api\/?$/, "").replace(/\/$/, "");
     }
 
-    return "https://bitglow-backend-hh2h.onrender.com";
+    return "https://api.bitglow.site";
 };
 
 const API_HOST = getApiHost();
