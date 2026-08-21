@@ -25,6 +25,8 @@ export default function MessagesPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const dmChatPushedRef = useRef(false);
+  const handledTargetRef = useRef<string | null>(null);
+
   const {
     conversations,
     friends,
@@ -70,7 +72,7 @@ export default function MessagesPage() {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [setActiveConversation]);
 
   useEffect(() => {
     document.title = "BitGlow";
@@ -80,10 +82,8 @@ export default function MessagesPage() {
     fetchConversationsAndFriends();
   }, [fetchConversationsAndFriends]);
 
-  const lastHandledTargetRef = useRef<string | null>(null);
-
   useEffect(() => {
-    // 1. Extract target user from location state, search params, or sessionStorage
+    // Extract target user from location state, search params, or sessionStorage
     const stateUser = (location.state as any)?.directDmUser as { id: string; username?: string; displayName?: string; avatarUrl?: string } | undefined;
     const queryUserId = searchParams.get("userId") || undefined;
     const queryUsername = searchParams.get("username") || searchParams.get("user") || undefined;
@@ -101,14 +101,20 @@ export default function MessagesPage() {
     sessionStorage.removeItem("bitglow:dmDisplayName");
     sessionStorage.removeItem("bitglow:dmAvatarUrl");
 
+    // Don't re-run if we already opened this exact user
+    if (handledTargetRef.current === targetId) return;
+    handledTargetRef.current = targetId;
+
     // Gather available metadata
     let targetUsername = stateUser?.username || queryUsername || sessionUsername || "";
     let targetDisplayName = stateUser?.displayName || sessionDisplayName || targetUsername;
     let targetAvatarUrl = stateUser?.avatarUrl || sessionAvatarUrl;
 
-    // If metadata is incomplete, check in conversations or friends
-    const existingConv = conversations.find((c) => c.userId === targetId);
-    const existingFriend = friends.find((f) => f.id === targetId);
+    // If metadata is incomplete, check current snapshot in chatStore
+    const currentConversations = useChatStore.getState().conversations;
+    const currentFriends = useChatStore.getState().friends;
+    const existingConv = currentConversations.find((c) => c.userId === targetId);
+    const existingFriend = currentFriends.find((f) => f.id === targetId);
 
     if (existingConv) {
       targetUsername = targetUsername || existingConv.username || "";
@@ -135,7 +141,7 @@ export default function MessagesPage() {
     if (!targetUsername) {
       api.user.get(targetId)
         .then((fetchedUser) => {
-          if (fetchedUser) {
+          if (fetchedUser && handledTargetRef.current === targetId) {
             openFriendConversation({
               id: fetchedUser.id,
               username: fetchedUser.username || "",
@@ -146,7 +152,7 @@ export default function MessagesPage() {
         })
         .catch(() => {});
     }
-  }, [location.state, searchParams, conversations, friends, openFriendConversation]);
+  }, [location.state, searchParams, openFriendConversation]);
 
   const activeConversation = useMemo<Conversation | null>(() => {
     if (!activeConversationId) return null;
@@ -196,6 +202,7 @@ export default function MessagesPage() {
   };
 
   const handleSelectConversation = (userId: string) => {
+    handledTargetRef.current = userId;
     const fromInbox = mobileView === "inbox";
     setActiveConversation(userId);
     setMobileView("chat");
@@ -203,9 +210,11 @@ export default function MessagesPage() {
   };
 
   const handleOpenFromFriend = (friend: any) => {
+    const friendId = friend.id || friend.userId;
+    handledTargetRef.current = friendId;
     const fromInbox = mobileView === "inbox";
     openFriendConversation({
-      id: friend.id || friend.userId,
+      id: friendId,
       username: friend.username || "",
       displayName: friend.displayName || friend.username || "",
       avatarUrl: friend.avatarUrl,
@@ -216,6 +225,7 @@ export default function MessagesPage() {
   };
 
   const handleChatBack = () => {
+    handledTargetRef.current = null;
     setMobileView("inbox");
     setActiveConversation(null);
     if (dmChatPushedRef.current) {
@@ -278,7 +288,7 @@ export default function MessagesPage() {
   return (
     <div
       className="fixed left-0 right-0 top-0 bg-black flex flex-col text-white overflow-hidden"
-      style={{ height: `${viewport.height}px` }}
+      style={{ height: viewport.height ? `${viewport.height}px` : "100dvh" }}
     >
       <Header hideBottomNav={mobileView === "chat"} />
       <div className="flex-1 min-h-0 flex overflow-hidden bg-black relative w-full max-w-5xl mx-auto px-4 md:px-6">
