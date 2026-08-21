@@ -15,27 +15,40 @@ type Props = {
   showBackButton?: boolean;
   onViewProfile?: () => void;
   onMuteUser?: () => void;
+  onUnmuteUser?: () => void;
   onBlockUser?: () => void;
+  onUnblockUser?: () => void;
   onReportUser?: () => void;
 };
 
-export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = true, onViewProfile, onMuteUser, onBlockUser, onReportUser }: Props) => {
+export const ChatHeader = ({
+  conversation,
+  isOnline,
+  onBack,
+  showBackButton = true,
+  onViewProfile,
+  onMuteUser,
+  onUnmuteUser,
+  onBlockUser,
+  onUnblockUser,
+  onReportUser
+}: Props) => {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
 
   useEffect(() => {
     const s = useChatStore.getState();
-    setIsMuted(!!s.mutedUsers.has(conversation.userId));
-    setIsBlocked(!!s.restrictedUsers.has(conversation.userId));
+    setIsMuted(Boolean(s.mutedUsers.has(conversation.userId)));
+    setIsBlocked(Boolean(s.restrictedUsers.has(conversation.userId)));
 
     const onMute = (e: Event) => {
       const { userId, muted } = (e as CustomEvent).detail || {};
-      if (userId === conversation.userId) setIsMuted(!!muted);
+      if (userId === conversation.userId) setIsMuted(Boolean(muted));
     };
     const onBlock = (e: Event) => {
       const { userId, blocked } = (e as CustomEvent).detail || {};
-      if (userId === conversation.userId) setIsBlocked(!!blocked);
+      if (userId === conversation.userId) setIsBlocked(Boolean(blocked));
     };
 
     window.addEventListener('bitglow:mute-changed', onMute);
@@ -47,20 +60,37 @@ export const ChatHeader = ({ conversation, isOnline, onBack, showBackButton = tr
   }, [conversation.userId]);
 
   const handleMuteToggle = async () => {
-    if (onMuteUser) return onMuteUser();
-    // fallback behaviour: toggle via global actions
-    try {
-      if (isMuted) await unmuteUserEverywhere(conversation.userId);
-      else await muteUserEverywhere({ id: conversation.userId, username: conversation.username, displayName: conversation.displayName, avatarUrl: conversation.avatarUrl } as any);
-    } catch (e) { /* ignore */ }
+    if (isMuted) {
+      if (onUnmuteUser) return onUnmuteUser();
+      try { await unmuteUserEverywhere(conversation.userId); } catch (e) { /* ignore */ }
+    } else {
+      if (onMuteUser) return onMuteUser();
+      try {
+        await muteUserEverywhere({
+          id: conversation.userId,
+          username: conversation.username,
+          displayName: conversation.displayName,
+          avatarUrl: conversation.avatarUrl
+        } as any);
+      } catch (e) { /* ignore */ }
+    }
   };
 
   const handleBlockToggle = async () => {
-    if (onBlockUser) return onBlockUser();
-    try {
-      if (isBlocked) await unblockUserEverywhere(conversation.userId);
-      else await blockUserEverywhere({ id: conversation.userId, username: conversation.username, displayName: conversation.displayName, avatarUrl: conversation.avatarUrl } as any);
-    } catch (e) { /* ignore */ }
+    if (isBlocked) {
+      if (onUnblockUser) return onUnblockUser();
+      try { await unblockUserEverywhere(conversation.userId); } catch (e) { /* ignore */ }
+    } else {
+      if (onBlockUser) return onBlockUser();
+      try {
+        await blockUserEverywhere({
+          id: conversation.userId,
+          username: conversation.username,
+          displayName: conversation.displayName,
+          avatarUrl: conversation.avatarUrl
+        } as any);
+      } catch (e) { /* ignore */ }
+    }
   };
 
   const handleActionButtonClick = (event: MouseEvent<HTMLButtonElement>) => {

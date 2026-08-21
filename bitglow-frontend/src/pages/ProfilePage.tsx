@@ -9,12 +9,14 @@ import { Button } from "../components/ui/Button";
 import { 
   Settings, X, Edit3, Share2, Send, MessageSquare, 
   Video, UserPlus, ArrowLeft, MoreVertical, 
-  UserMinus, UserX, Link2, Lock 
+  UserMinus, UserX, UserCheck, Link2, Lock 
 } from "lucide-react";
 import clsx from "clsx";
 import { ProfileHeaderSkeleton, PostCardSkeleton } from "../components/ui/Skeleton";
 import { navigateBack } from "../utils/navigateBack";
 import ConfirmDialog from "../components/common/ConfirmDialog";
+import { blockUserEverywhere, unblockUserEverywhere } from "../utils/socialActions";
+import { useChatStore } from "../store/chatStore";
 
 function CountButton({
   label,
@@ -138,6 +140,9 @@ export default function ProfilePage() {
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
   const [showCancelRequestConfirm, setShowCancelRequestConfirm] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
@@ -162,6 +167,21 @@ export default function ProfilePage() {
   const followingCount = isOwner ? following.length : (profile?.followsCount ?? 0);
   const friendsCount = isOwner ? friends.length : ((profile as any)?.friendsCount ?? 0);
   const canOpenLiveRoom = Boolean(profile && (isOwner || isMutualFriend));
+
+  useEffect(() => {
+    if (!profile) return;
+    const s = useChatStore.getState();
+    setIsBlocked(s.restrictedUsers.has(profile.id));
+
+    const onBlockEvent = (e: Event) => {
+      const { userId, blocked } = (e as CustomEvent).detail || {};
+      if (profile && userId === profile.id) {
+        setIsBlocked(Boolean(blocked));
+      }
+    };
+    window.addEventListener("bitglow:block-changed", onBlockEvent);
+    return () => window.removeEventListener("bitglow:block-changed", onBlockEvent);
+  }, [profile?.id]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -344,14 +364,39 @@ export default function ProfilePage() {
     }
   };
 
-  const handleBlockUser = async () => {
+  const handleConfirmBlock = async () => {
     if (!profile || isOwner) return;
+    setActionLoading(true);
     try {
-      console.log("Blocking user:", profile.id);
-      setShowMoreMenu(false);
-      navigate("/home");
+      await blockUserEverywhere({
+        id: profile.id,
+        username: profile.username,
+        displayName: profile.displayName,
+        avatarUrl: profile.avatarUrl,
+      });
+      setIsBlocked(true);
+      setFollowing((prev) => prev.filter((f) => f.id !== profile.id));
+      setFriends((prev) => prev.filter((f) => f.id !== profile.id));
+      setPendingFollows((prev) => prev.filter((f) => f.id !== profile.id));
     } catch (err) {
-      console.error("Failed to block", err);
+      window.alert(err instanceof Error ? err.message : "Failed to block user");
+    } finally {
+      setActionLoading(false);
+      setShowBlockConfirm(false);
+    }
+  };
+
+  const handleConfirmUnblock = async () => {
+    if (!profile || isOwner) return;
+    setActionLoading(true);
+    try {
+      await unblockUserEverywhere(profile.id);
+      setIsBlocked(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+    } finally {
+      setActionLoading(false);
+      setShowUnblockConfirm(false);
     }
   };
 
@@ -564,13 +609,23 @@ export default function ProfilePage() {
                         {isMutualFriend ? "Unfriend" : "Unfollow"}
                       </button>
                     )}
-                    <button 
-                      onClick={() => { handleBlockUser(); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
-                    >
-                      <UserX className="w-4 h-4" />
-                      Block User
-                    </button>
+                    {isBlocked ? (
+                      <button 
+                        onClick={() => { setShowMoreMenu(false); setShowUnblockConfirm(true); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        Unblock User
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => { setShowMoreMenu(false); setShowBlockConfirm(true); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                      >
+                        <UserX className="w-4 h-4" />
+                        Block User
+                      </button>
+                    )}
                     <button 
                       onClick={() => { handleShare(); setShowMoreMenu(false); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
@@ -703,27 +758,39 @@ export default function ProfilePage() {
                     </>
                   ) : (
                     <>
-                      <Button
-                        variant={isMutualFriend || isFollowing || isPending ? "secondary" : "primary"}
-                        onClick={handleFollowToggle}
-                        disabled={isFollowLoading}
-                      >
-                        {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                        {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={handleDirectMessage}
-                      >
-                        <MessageSquare className="w-4 h-4 mr-2" /> Message
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={handleStartLiveChat}
-                        disabled={!canOpenLiveRoom}
-                      >
-                        <Video className="w-4 h-4 mr-2" /> Live Space
-                      </Button>
+                      {isBlocked ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => setShowUnblockConfirm(true)}
+                          className="flex items-center gap-2"
+                        >
+                          <UserCheck className="w-4 h-4" /> Unblock
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant={isMutualFriend || isFollowing || isPending ? "secondary" : "primary"}
+                            onClick={handleFollowToggle}
+                            disabled={isFollowLoading}
+                          >
+                            {isMutualFriend || isFollowing || isPending ? <Send className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                            {isMutualFriend ? "Friends" : isFollowing ? "Following" : isPending ? "Requested" : "Follow"}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={handleDirectMessage}
+                          >
+                            <MessageSquare className="w-4 h-4 mr-2" /> Message
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={handleStartLiveChat}
+                            disabled={!canOpenLiveRoom}
+                          >
+                            <Video className="w-4 h-4 mr-2" /> Live Space
+                          </Button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -820,6 +887,28 @@ export default function ProfilePage() {
         cancelLabel="Keep Request"
         onConfirm={handleConfirmCancelRequest}
         onClose={() => setShowCancelRequestConfirm(false)}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={showBlockConfirm}
+        title={`Block @${profile.username}?`}
+        message="Blocked accounts cannot follow, message, or view your posts. Are you sure you want to block?"
+        confirmLabel="Block"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmBlock}
+        onClose={() => setShowBlockConfirm(false)}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={showUnblockConfirm}
+        title={`Unblock @${profile.username}?`}
+        message="Unblocking will allow this user to view your profile, follow you, and message you again. Are you sure you want to unblock?"
+        confirmLabel="Unblock"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmUnblock}
+        onClose={() => setShowUnblockConfirm(false)}
         loading={actionLoading}
       />
     </div>

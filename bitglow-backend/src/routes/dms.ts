@@ -5,6 +5,16 @@ import { dmEditSchema, dmForwardSchema, dmMessageSchema, dmSendSchema, dmUserSch
 import { clients } from "../ws";
 import WebSocket from "ws";
 
+function broadcastDM(userIds: string[], event: any) {
+    const payload = JSON.stringify(event);
+    const targetSet = new Set(userIds);
+    for (const client of clients) {
+        if (targetSet.has(client.userId) && client.socket.readyState === WebSocket.OPEN) {
+            client.socket.send(payload);
+        }
+    }
+}
+
 export async function dmRoutes(fastify: FastifyInstance) {
     /**
      * GET /api/dms
@@ -51,9 +61,6 @@ export async function dmRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Invalid user" });
         }
 
-        // Open messaging enabled
-
-
         const convo = await db.getDMConversation(userId, otherId);
         if (!convo) {
             // No conversation exists yet. Do not create one on history reads.
@@ -78,7 +85,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
     /**
      * POST /api/dms/:userId
-     * Send a message to a user (friends only)
+     * Send a message to a user
      */
     fastify.post("/dms/:userId", {
         preHandler: fastify.requireAuth,
@@ -103,8 +110,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Invalid message" });
         }
 
-        // Check if recipient has blocked the sender — if so, prevent sending
-        if (await db.isBlockedBy(userId, otherId)) {
+        // Check if blocked in either direction — if so, prevent sending
+        if (await db.isBlockedEitherDirection(userId, otherId)) {
             return reply.code(403).send({ message: "Messaging blocked" });
         }
 
@@ -156,8 +163,9 @@ export async function dmRoutes(fastify: FastifyInstance) {
         }
         const source = await db.getForwardableDMMessage(messageId, req.auth.id);
         if (!source) return reply.code(404).send({ message: "Message not found" });
-        // Prevent forwarding if the target user has blocked the sender
-        if (await db.isBlockedBy(req.auth.id, targetUserId)) {
+
+        // Prevent forwarding if blocked in either direction
+        if (await db.isBlockedEitherDirection(req.auth.id, targetUserId)) {
             return reply.code(403).send({ message: "Messaging blocked" });
         }
 
@@ -266,74 +274,4 @@ export async function dmRoutes(fastify: FastifyInstance) {
         const readCount = await db.markDMConversationRead(convo.id, userId);
         return { ok: true, readCount };
     });
-
-    /**
-     * DELETE /api/dms/:userId
-     * Delete a conversation (used for rejecting requests)
-     */
-    fastify.delete("/dms/:userId", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
-        if (!req.auth) {
-            return reply.code(401).send({ message: "Not authenticated" });
-        }
-
-        const userId = req.auth.id;
-        const { userId: otherId } = req.params as { userId: string };
-
-        if (!otherId) {
-            return reply.code(400).send({ message: "Invalid user" });
-        }
-
-        // Delete the DM conversation
-        const convRes = await db.query(
-            `SELECT id FROM dm_conversations
-             WHERE (user_a = $1 AND user_b = $2)
-                OR (user_a = $2 AND user_b = $1)`,
-            [userId, otherId]
-        );
-        
-        if (convRes.rowCount && convRes.rowCount > 0) {
-            for (const row of convRes.rows) {
-                await db.query('DELETE FROM dm_messages WHERE conversation_id = $1', [row.id]);
-                await db.query('DELETE FROM dm_conversations WHERE id = $1', [row.id]);
-            }
-        }
-
-        return { ok: true };
-    });
-
-    /**
-     * POST /api/dms/:userId/accept
-     * Accept a message request from another user
-     */
-    fastify.post("/dms/:userId/accept", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
-        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
-        const userId = req.auth.id;
-        const { userId: otherId } = req.params as { userId: string };
-        const ok = await db.acceptDMRequest(userId, otherId);
-        if (!ok) return reply.code(404).send({ message: "Message request not found" });
-        broadcastDM([userId, otherId], { type: "dm_request_accepted", fromUserId: otherId, toUserId: userId });
-        return { ok: true };
-    });
-
-    /**
-     * POST /api/dms/:userId/reject
-     * Reject (delete) a message request from another user
-     */
-    fastify.post("/dms/:userId/reject", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
-        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
-        const userId = req.auth.id;
-        const { userId: otherId } = req.params as { userId: string };
-        const ok = await db.rejectDMRequest(userId, otherId);
-        if (!ok) return reply.code(404).send({ message: "Message request not found" });
-        return { ok: true };
-    });
-}
-
-function broadcastDM(userIds: string[], event: object) {
-    const payload = JSON.stringify(event);
-    for (const client of clients) {
-        if (userIds.includes(client.userId || "") && client.socket.readyState === WebSocket.OPEN) {
-            client.socket.send(payload);
-        }
-    }
 }

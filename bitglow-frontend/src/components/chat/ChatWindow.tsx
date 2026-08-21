@@ -3,12 +3,15 @@ import clsx from "clsx";
 import { Link } from "react-router-dom";
 import { Conversation, DMMessage } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useChatStore } from "../../store/chatStore";
 import { Avatar } from "../ui/Avatar";
+import { Button } from "../ui/Button";
 import { ChatHeader } from "./ChatHeader";
 import LiveMessageList from "./LiveMessageList";
 import { MessageComposer } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
 import { UserListItem } from "../user/UserListItem";
+import { UserCheck } from "lucide-react";
 
 interface ChatWindowProps {
   conversation: Conversation | null;
@@ -31,7 +34,9 @@ interface ChatWindowProps {
   onRejectRequest?: () => void;
   onViewProfile?: () => void;
   onMuteUser?: () => void;
+  onUnmuteUser?: () => void;
   onBlockUser?: () => void;
+  onUnblockUser?: () => void;
   onReportUser?: () => void;
 }
 
@@ -55,7 +60,9 @@ export const ChatWindow = ({
   onRejectRequest,
   onViewProfile,
   onMuteUser,
+  onUnmuteUser,
   onBlockUser,
+  onUnblockUser,
   onReportUser,
 }: ChatWindowProps) => {
   const { user } = useAuth();
@@ -68,6 +75,8 @@ export const ChatWindow = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [now, setNow] = useState(Date.now());
+
+  const isBlocked = useChatStore((s) => (conversation?.userId ? s.restrictedUsers.has(conversation.userId) : false));
 
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
@@ -141,7 +150,9 @@ export const ChatWindow = ({
         showBackButton={showHeaderBack}
         onViewProfile={onViewProfile}
         onMuteUser={onMuteUser}
+        onUnmuteUser={onUnmuteUser}
         onBlockUser={onBlockUser}
+        onUnblockUser={onUnblockUser}
         onReportUser={onReportUser}
       />
 
@@ -223,7 +234,7 @@ export const ChatWindow = ({
               }}
               onCopyMessage={(messageId) => {
                 const message = messages.find((item) => item.id === messageId);
-                if (message) void copyText(message.text);
+                if (message) void navigator.clipboard?.writeText(message.text);
               }}
               onForwardMessage={(messageId) => {
                 const message = messages.find((item) => item.id === messageId);
@@ -242,7 +253,22 @@ export const ChatWindow = ({
       <div
         className="shrink-0 bg-black px-3 pt-1.5 pb-[calc(8px+env(safe-area-inset-bottom))] md:px-4 md:py-2.5 md:pb-[max(10px,env(safe-area-inset-bottom))]"
       >
-        {isRequest ? (
+        {isBlocked ? (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3 px-4">
+            <p className="text-sm text-zinc-400 text-center sm:text-left">
+              You blocked @{conversation.username}. You cannot send or receive messages.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onUnblockUser}
+              className="flex items-center gap-1.5 shrink-0"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              Unblock
+            </Button>
+          </div>
+        ) : isRequest ? (
           <div className="flex flex-col gap-2 p-2 pt-0 md:flex-row md:items-center">
             <p className="text-xs text-zinc-500 mb-1 md:mb-0 md:mr-auto">
               Accept message request from {conversation.username}?
@@ -299,20 +325,30 @@ export const ChatWindow = ({
                 forwardTargets.map((target) => (
                   <UserListItem
                     key={target.userId}
-                    user={target}
-                    href={`/profile/${target.username}`}
-                    onClick={isForwarding ? undefined : async () => {
-                      setIsForwarding(true);
-                      try {
-                        await onForwardMessage(forwardingMessage.id, target.userId);
-                        setForwardingMessage(null);
-                      } catch (error) {
-                        window.alert(error instanceof Error ? error.message : "Failed to forward message");
-                      } finally {
-                        setIsForwarding(false);
-                      }
+                    user={{
+                      id: target.userId,
+                      username: target.username,
+                      displayName: target.displayName,
+                      avatarUrl: target.avatarUrl,
                     }}
-                    className="rounded-2xl px-3 py-2.5 hover:bg-white/[0.06]"
+                    actionSlot={
+                      <button
+                        type="button"
+                        disabled={isForwarding}
+                        onClick={async () => {
+                          setIsForwarding(true);
+                          try {
+                            await onForwardMessage(forwardingMessage.id, target.userId);
+                            setForwardingMessage(null);
+                          } finally {
+                            setIsForwarding(false);
+                          }
+                        }}
+                        className="rounded-full bg-white/[0.08] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand hover:text-black"
+                      >
+                        Send
+                      </button>
+                    }
                   />
                 ))
               )}
@@ -322,32 +358,16 @@ export const ChatWindow = ({
       )}
 
       {deletingMessage && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm">
-          <button
-            type="button"
-            aria-label="Close delete dialog"
-            className="absolute inset-0"
-            onClick={() => !isDeleting && setDeletingMessage(null)}
-          />
-          <div role="alertdialog" aria-modal="true" aria-labelledby="delete-message-title" className="relative z-10 w-full max-w-sm rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-2xl">
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-500/10 text-red-400">
-              <TrashIcon />
-            </div>
-            <h2 id="delete-message-title" className="text-lg font-bold text-white">Delete message?</h2>
-            <p className="mt-2 text-sm leading-5 text-zinc-400">
-              This message will be removed from both conversations. This action cannot be undone.
-            </p>
-            <div className="mt-3 truncate rounded-xl bg-white/[0.04] px-3 py-2 text-xs text-zinc-500">
-              {deletingMessage.text}
-            </div>
-            {deleteError && <p className="mt-3 text-xs font-medium text-red-400">{deleteError}</p>}
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeletingMessage(null)}
-                className="flex-1 rounded-full bg-white/[0.07] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.1] disabled:opacity-50"
-              >
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+          <button type="button" aria-label="Close delete dialog" className="absolute inset-0" onClick={() => !isDeleting && setDeletingMessage(null)} />
+          <div role="dialog" aria-modal="true" aria-label="Delete message" className="relative z-10 w-full overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 p-5 shadow-2xl sm:max-w-sm sm:rounded-3xl">
+            <h2 className="text-lg font-bold text-white">Delete message?</h2>
+            <p className="mt-1 text-sm text-zinc-400">This will remove the message for everyone in this chat.</p>
+            {deleteError && (
+              <p className="mt-2 text-xs font-medium text-rose-400">{deleteError}</p>
+            )}
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button type="button" disabled={isDeleting} onClick={() => setDeletingMessage(null)} className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-400 hover:bg-white/[0.06] hover:text-white">
                 Cancel
               </button>
               <button
@@ -355,18 +375,16 @@ export const ChatWindow = ({
                 disabled={isDeleting}
                 onClick={async () => {
                   setIsDeleting(true);
-                  setDeleteError("");
                   try {
-                    if (editingMessage?.id === deletingMessage.id) setEditingMessage(null);
                     await onDeleteMessage(deletingMessage.id);
                     setDeletingMessage(null);
-                  } catch (error) {
-                    setDeleteError(error instanceof Error ? error.message : "Failed to delete message");
+                  } catch (err) {
+                    setDeleteError(err instanceof Error ? err.message : "Failed to delete message");
                   } finally {
                     setIsDeleting(false);
                   }
                 }}
-                className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-50"
               >
                 {isDeleting ? "Deleting..." : "Delete"}
               </button>
@@ -377,26 +395,3 @@ export const ChatWindow = ({
     </div>
   );
 };
-
-function TrashIcon() {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6" />
-    </svg>
-  );
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand("copy");
-    textarea.remove();
-  }
-}

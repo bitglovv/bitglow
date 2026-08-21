@@ -51,6 +51,7 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState<"chats" | "requests">("chats");
   const [isStackedLayout, setIsStackedLayout] = useState(isStackedMessagesLayout);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const viewport = useVisualViewport();
@@ -261,6 +262,19 @@ export default function MessagesPage() {
     }
   };
 
+  const handleUnblockActive = async () => {
+    if (!activeTarget) return;
+    setActionLoading(true);
+    try {
+      await unblockUserEverywhere(activeTarget.id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to unblock user");
+    } finally {
+      setActionLoading(false);
+      setShowUnblockConfirm(false);
+    }
+  };
+
   const handleMuteActive = async () => {
     if (!activeTarget || actionLoading) return;
     setActionLoading(true);
@@ -268,6 +282,18 @@ export default function MessagesPage() {
       await muteUserEverywhere(activeTarget);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to mute user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnmuteActive = async () => {
+    if (!activeTarget || actionLoading) return;
+    setActionLoading(true);
+    try {
+      await unmuteUserEverywhere(activeTarget.id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to unmute user");
     } finally {
       setActionLoading(false);
     }
@@ -361,7 +387,9 @@ export default function MessagesPage() {
               }}
               onViewProfile={() => navigate(`/profile/${activeConversation.username}`)}
               onMuteUser={() => void handleMuteActive()}
+              onUnmuteUser={() => void handleUnmuteActive()}
               onBlockUser={() => setShowBlockConfirm(true)}
+              onUnblockUser={() => setShowUnblockConfirm(true)}
               onReportUser={() => setShowReportSheet(true)}
             />
           ) : (
@@ -372,12 +400,22 @@ export default function MessagesPage() {
       <ConfirmDialog
         open={showBlockConfirm}
         title="Block user"
-        message={<div>Block @{activeTarget?.username}? This closes the chat and prevents future messages.</div>}
+        message={<div>Block @{activeTarget?.username}? This closes the chat and prevents them from messaging or following you.</div>}
         confirmLabel="Block"
         cancelLabel="Cancel"
         loading={actionLoading}
         onConfirm={handleBlockActive}
         onClose={() => setShowBlockConfirm(false)}
+      />
+      <ConfirmDialog
+        open={showUnblockConfirm}
+        title="Unblock user"
+        message={<div>Unblock @{activeTarget?.username}? This will allow you and this user to exchange messages again.</div>}
+        confirmLabel="Unblock"
+        cancelLabel="Cancel"
+        loading={actionLoading}
+        onConfirm={handleUnblockActive}
+        onClose={() => setShowUnblockConfirm(false)}
       />
       <ReportSheet
         isOpen={showReportSheet}

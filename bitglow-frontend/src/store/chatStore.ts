@@ -52,7 +52,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   fetchConversationsAndFriends: async () => {
     set({ isLoadingConversations: true });
     try {
-      const [convs, friendList] = await Promise.all([api.dms.list(), api.user.friends()]);
+      const [convs, friendList, serverBlocked, serverMuted] = await Promise.all([
+        api.dms.list(),
+        api.user.friends(),
+        api.settings.getBlockedUsers().catch(() => []),
+        api.settings.getMutedUsers().catch(() => []),
+      ]);
       
       // Normalize avatar fields returned by different backend endpoints (avatar, avatar_url, avatarUrl)
       const normalizeAvatar = (obj: any) => {
@@ -75,10 +80,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       try {
           restricted = new Set(JSON.parse(restrictedStr));
       } catch (e) {}
-      // also hydrate muted users from localStorage
+      // merge with server blocked users
+      (serverBlocked || []).forEach((u: any) => { if (u?.id) restricted.add(u.id); });
+      try { localStorage.setItem("bitglow:restricted_users", JSON.stringify(Array.from(restricted))); } catch (e) {}
+
+      // also hydrate muted users from localStorage and server
       const mutedStr = localStorage.getItem("bitglow:muted_users") || "[]";
       let muted = new Set<string>();
       try { muted = new Set(JSON.parse(mutedStr)); } catch (e) {}
+      (serverMuted || []).forEach((u: any) => { if (u?.id) muted.add(u.id); });
+      try { localStorage.setItem("bitglow:muted_users", JSON.stringify(Array.from(muted))); } catch (e) {}
 
       // Keep conversations intact even for users marked as restricted so DM history is preserved locally.
       // Server-side access rules still prevent blocked users from viewing profile/posts/messages as appropriate.
