@@ -506,6 +506,10 @@ export default function ProfilePage() {
 
   const handleDirectMessage = () => {
     if (!profile) return;
+    if (profile.isPrivate && !isAuthorized) {
+      window.alert("This account is private. Follow request must be accepted before messaging.");
+      return;
+    }
     const targetUser = {
       id: profile.id,
       username: profile.username,
@@ -688,12 +692,6 @@ export default function ProfilePage() {
                       className="px-6"
                     >
                       {isPending ? "Requested" : "Follow"}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={handleDirectMessage}
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" /> Message
                     </Button>
                   </div>
                 </div>

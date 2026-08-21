@@ -1721,6 +1721,54 @@ export const db = {
         return res.rows;
     },
 
+    async canInitiateDM(senderId: string, recipientId: string): Promise<{
+        allowed: boolean;
+        conversationState?: 'accepted' | 'pending';
+        reason?: string;
+    }> {
+        if (!senderId || !recipientId) {
+            return { allowed: false, reason: 'INVALID_PARAMETERS' };
+        }
+        if (senderId === recipientId) {
+            return { allowed: false, reason: 'SELF_DM' };
+        }
+
+        // 1. Block protection in either direction
+        if (await this.isBlockedEitherDirection(senderId, recipientId)) {
+            return { allowed: false, reason: 'BLOCKED' };
+        }
+
+        // 2. Load recipient user
+        const recipient = await this.getUserById(recipientId);
+        if (!recipient) {
+            return { allowed: false, reason: 'USER_NOT_FOUND' };
+        }
+
+        // 3. Mutual friendship check (both users follow each other)
+        const isMutual = await this.isMutual(senderId, recipientId);
+        if (isMutual) {
+            return { allowed: true, conversationState: 'accepted' };
+        }
+
+        // 4. One-way follow check (sender follows recipient)
+        const senderFollowsRecipient = await this.isFollowing(senderId, recipientId);
+
+        // 5. If recipient account is private
+        if (recipient.is_private) {
+            if (!senderFollowsRecipient) {
+                return {
+                    allowed: false,
+                    reason: 'PRIVATE_ACCOUNT_REQUIRES_FOLLOW_ACCEPTANCE'
+                };
+            }
+            // Accepted follow to private account -> message request
+            return { allowed: true, conversationState: 'pending' };
+        }
+
+        // 6. Public account with non-mutual relationship -> message request
+        return { allowed: true, conversationState: 'pending' };
+    },
+
     async getDMConversation(userId: string, otherId: string) {
         const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
         const res = await pool.query(
@@ -1731,14 +1779,19 @@ export const db = {
     },
 
     async createDMConversation(userId: string, otherId: string) {
-        return await this.createDMConversationWithStatus(userId, otherId, 'accepted');
+        const check = await this.canInitiateDM(userId, otherId);
+        if (!check.allowed) return null;
+        return await this.createDMConversationWithStatus(userId, otherId, check.conversationState || 'pending');
     },
 
     async getOrCreateDMConversation(userId: string, otherId: string) {
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
 
-        return await this.createDMConversationWithStatus(userId, otherId, 'accepted');
+        const check = await this.canInitiateDM(userId, otherId);
+        if (!check.allowed) return null;
+
+        return await this.createDMConversationWithStatus(userId, otherId, check.conversationState || 'pending');
     },
 
     async createDMConversationWithStatus(userId: string, otherId: string, status: 'pending' | 'accepted' = 'accepted') {
@@ -1792,6 +1845,11 @@ export const db = {
                     m.sender_id as last_message_sender_id,
                     m.created_at as last_message_at,
                     COALESCE(unread.count, 0)::int as unread_count,
+                    EXISTS(
+                      SELECT 1 FROM friends f1
+                      JOIN friends f2 ON f1.user_id = $1 AND f1.friend_id = u.id AND f2.user_id = u.id AND f2.friend_id = $1
+                      WHERE f1.status = 'accepted' AND f2.status = 'accepted'
+                    ) AS is_mutual_friend,
                     -- is_masked when the other participant has blocked the viewer
                     EXISTS(
                       SELECT 1 FROM friends f
@@ -1827,7 +1885,11 @@ export const db = {
              LIMIT $2 OFFSET $3`,
             [userId, cappedLimit, safeOffset]
         );
-        return res.rows.map((r: any) => ({ ...r, conversationStatus: r.status || 'accepted' }));
+        return res.rows.map((r: any) => ({
+            ...r,
+            isMutualFriend: !!r.is_mutual_friend,
+            conversationStatus: r.is_mutual_friend ? 'accepted' : 'pending'
+        }));
     },
 
     async getDMHistory(conversationId: string, limit = 100) {

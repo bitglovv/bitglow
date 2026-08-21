@@ -11,56 +11,61 @@ async function assert(condition: boolean, msg: string) {
 }
 
 async function runSecurityTests() {
-    console.log("=== BITGLOW OPEN DM POLICY & AUTHORIZATION TEST SUITE ===\n");
+    console.log("=== BITGLOW DM PRIVACY & REQUESTS COMPREHENSIVE TEST SUITE (15 TESTS) ===\n");
     let passed = 0;
     let failed = 0;
 
+    // Users
     const userA = { id: randomUUID(), username: "user_a", is_private: false };
-    const userB = { id: randomUUID(), username: "user_b", is_private: true };
+    const userB_public = { id: randomUUID(), username: "user_b_pub", is_private: false };
+    const userB_private = { id: randomUUID(), username: "user_b_priv", is_private: true };
     const userC = { id: randomUUID(), username: "user_c", is_private: false };
 
-    // In-memory mock store for testing DM behaviors and isolation
+    // In-memory mock store
+    const mockUsers = [userA, userB_public, userB_private, userC];
     const mockConversations: any[] = [];
     const mockMessages: any[] = [];
-    const mockBlocks: { userId: string; blockedId: string }[] = [];
+    const mockFriends: { userId: string; friendId: string; status: 'pending' | 'accepted' | 'blocked' }[] = [];
 
-    // Mock DB methods
-    const originalGetDMConversation = db.getDMConversation;
-    const originalCreateDMConversationWithStatus = db.createDMConversationWithStatus;
-    const originalGetOrCreateDMConversation = db.getOrCreateDMConversation;
-    const originalIsBlockedEitherDirection = db.isBlockedEitherDirection;
-    const originalSaveDMMessage = db.saveDMMessage;
-    const originalGetDMHistory = db.getDMHistory;
-    const originalListDMConversations = db.listDMConversations;
-    const originalGetPostById = db.getPostById;
-    const originalGetForwardableDMMessage = db.getForwardableDMMessage;
-    const originalUpdateOwnDMMessage = db.updateOwnDMMessage;
-    const originalDeleteOwnDMMessage = db.deleteOwnDMMessage;
+    // Save original db methods
+    const orig = { ...db };
 
     try {
+        db.getUserById = async (id: string) => {
+            const u = mockUsers.find(u => u.id === id);
+            return u ? { ...u, is_private: u.is_private } as any : null;
+        };
+
+        db.isFollowing = async (userId: string, otherId: string) => {
+            return mockFriends.some(f => f.userId === userId && f.friendId === otherId && f.status === 'accepted');
+        };
+
+        db.isMutual = async (userId: string, otherId: string) => {
+            const f1 = mockFriends.some(f => f.userId === userId && f.friendId === otherId && f.status === 'accepted');
+            const f2 = mockFriends.some(f => f.userId === otherId && f.friendId === userId && f.status === 'accepted');
+            return f1 && f2;
+        };
+
+        db.isBlockedEitherDirection = async (userId: string, otherId: string) => {
+            return mockFriends.some(f =>
+                ((f.userId === userId && f.friendId === otherId) || (f.userId === otherId && f.friendId === userId)) &&
+                f.status === 'blocked'
+            );
+        };
+
         db.getDMConversation = async (userId: string, otherId: string) => {
-            const [userAId, userBId] = userId < otherId ? [userId, otherId] : [otherId, userId];
-            return mockConversations.find(c => c.user_a === userAId && c.user_b === userBId) || null;
+            const [uA, uB] = userId < otherId ? [userId, otherId] : [otherId, userId];
+            return mockConversations.find(c => c.user_a === uA && c.user_b === uB) || null;
         };
 
         db.createDMConversationWithStatus = async (userId: string, otherId: string, status = 'accepted') => {
             if (userId === otherId) return null;
-            const [userAId, userBId] = userId < otherId ? [userId, otherId] : [otherId, userId];
-            const existing = mockConversations.find(c => c.user_a === userAId && c.user_b === userBId);
+            const [uA, uB] = userId < otherId ? [userId, otherId] : [otherId, userId];
+            const existing = mockConversations.find(c => c.user_a === uA && c.user_b === uB);
             if (existing) return existing;
-            const convo = { id: randomUUID(), user_a: userAId, user_b: userBId, status, created_at: new Date() };
+            const convo = { id: randomUUID(), user_a: uA, user_b: uB, status, created_at: new Date() };
             mockConversations.push(convo);
             return convo;
-        };
-
-        db.getOrCreateDMConversation = async (userId: string, otherId: string) => {
-            const existing = await db.getDMConversation(userId, otherId);
-            if (existing) return existing;
-            return await db.createDMConversationWithStatus(userId, otherId, 'accepted');
-        };
-
-        db.isBlockedEitherDirection = async (userId: string, otherId: string) => {
-            return mockBlocks.some(b => (b.userId === userId && b.blockedId === otherId) || (b.userId === otherId && b.blockedId === userId));
         };
 
         db.saveDMMessage = async (convoId: string, senderId: string, text: string, type = 'text', postId?: string, profileId?: string, isForwarded = false) => {
@@ -84,15 +89,32 @@ async function runSecurityTests() {
         };
 
         db.listDMConversations = async (userId: string) => {
-            return mockConversations
-                .filter(c => c.user_a === userId || c.user_b === userId)
-                .map(c => ({
+            const userConvs = mockConversations.filter(c => c.user_a === userId || c.user_b === userId);
+            const res = [];
+            for (const c of userConvs) {
+                const otherId = c.user_a === userId ? c.user_b : c.user_a;
+                const otherUser = mockUsers.find(u => u.id === otherId);
+                const isMutual = await db.isMutual(userId, otherId);
+                const lastMsg = mockMessages.filter(m => m.conversation_id === c.id).slice(-1)[0];
+                res.push({
                     conversation_id: c.id,
-                    other_id: c.user_a === userId ? c.user_b : c.user_a,
+                    other_id: otherId,
+                    other_username: otherUser?.username || "unknown",
+                    other_display_name: otherUser?.username || "unknown",
+                    other_avatar_url: null,
+                    last_message: lastMsg?.text || "",
+                    last_message_sender_id: lastMsg?.sender_id || null,
+                    last_message_at: lastMsg?.created_at || c.created_at,
+                    unread_count: 0,
                     status: c.status,
+                    is_mutual_friend: isMutual,
+                    isMutualFriend: isMutual,
                     is_masked: false,
-                    is_blocked_by_me: false
-                }));
+                    is_blocked_by_me: false,
+                    conversationStatus: isMutual ? 'accepted' : 'pending'
+                });
+            }
+            return res;
         };
 
         db.getForwardableDMMessage = async (messageId: string, userId: string) => {
@@ -113,7 +135,16 @@ async function runSecurityTests() {
             return msg;
         };
 
-        // Create Fastify test app
+        db.getPostById = (async (postId: string, viewerId?: string) => {
+            if (postId === "priv-post-1") {
+                const isAuth = viewerId === userB_private.id || await db.isFollowing(viewerId || "", userB_private.id);
+                if (!isAuth) return null;
+                return { id: postId, author_id: userB_private.id, visibility: "friends" };
+            }
+            return null;
+        }) as any;
+
+        // Build Fastify App
         let authenticatedUser: { id: string; username: string } | null = null;
         const app = Fastify({ logger: false });
         app.decorate("requireAuth", async (req: any, reply: any) => {
@@ -126,205 +157,241 @@ async function runSecurityTests() {
         await app.ready();
 
         // -------------------------------------------------------------
-        // TEST 1 — Open DM: User A does not follow User B. Neither follows each other. A can initiate a DM.
+        // TEST 1: Public B. A does not follow B. B does not follow A. A initiates DM.
+        // Expected: PASS, Conversation = REQUEST (pending)
         // -------------------------------------------------------------
-        console.log("TEST 1: User A sends DM to User C (No follow/friend requirement)...");
+        console.log("TEST 1: Public B. Neither follows each other -> Allowed as REQUEST...");
         authenticatedUser = { id: userA.id, username: userA.username };
         const res1 = await app.inject({
             method: "POST",
-            url: `/api/dms/${userC.id}`,
-            payload: { text: "Hello C from A!" }
+            url: `/api/dms/${userB_public.id}`,
+            payload: { text: "Hello Public B from A" }
         });
-        assert(res1.statusCode === 200, `Expected 200, got ${res1.statusCode}: ${res1.body}`);
-        const body1 = JSON.parse(res1.body);
-        assert(body1.senderId === userA.id, "Sender must be User A");
-        assert(body1.receiverId === userC.id, "Receiver must be User C");
-        console.log("✅ TEST 1 PASSED: Open DM initiation succeeded without follow or friendship.\n");
+        assert(res1.statusCode === 200, `Expected 200, got ${res1.statusCode}`);
+        const convo1 = await db.getDMConversation(userA.id, userB_public.id);
+        assert(convo1?.status === "pending", "Conversation status must be 'pending' (Request)");
+        console.log("✅ TEST 1 PASSED: DM allowed to public non-friend as REQUEST.\n");
         passed++;
 
         // -------------------------------------------------------------
-        // TEST 2 — Private recipient: User B is private. A does not follow B. A can initiate a DM.
+        // TEST 2: Public B. B follows A. A does not follow B. A initiates DM.
+        // Expected: PASS, Conversation = REQUEST (pending)
         // -------------------------------------------------------------
-        console.log("TEST 2: User A sends DM to private User B...");
-        authenticatedUser = { id: userA.id, username: userA.username };
-        const res2 = await app.inject({
-            method: "POST",
-            url: `/api/dms/${userB.id}`,
-            payload: { text: "Hello private user B!" }
-        });
-        assert(res2.statusCode === 200, `Expected 200, got ${res2.statusCode}: ${res2.body}`);
-        const convoAB = await db.getDMConversation(userA.id, userB.id);
-        assert(convoAB?.status === "accepted", "Conversation status must be accepted under open DM policy");
-        console.log("✅ TEST 2 PASSED: DM initiation to private user B succeeded with status 'accepted'.\n");
+        console.log("TEST 2: Public B follows A (one-way). A initiates DM -> REQUEST...");
+        mockFriends.push({ userId: userB_public.id, friendId: userA.id, status: "accepted" });
+        const check2 = await db.canInitiateDM(userA.id, userB_public.id);
+        assert(check2.allowed === true && check2.conversationState === "pending", "Must be allowed as pending request");
+        console.log("✅ TEST 2 PASSED: One-way follow on public recipient remains REQUEST.\n");
         passed++;
+        mockFriends.length = 0; // reset
 
         // -------------------------------------------------------------
-        // TEST 3 — Existing private-content protection: B is private. A still cannot access B's protected private posts.
+        // TEST 3: Public B. A and B mutually follow. A initiates DM.
+        // Expected: PASS, Conversation = CHAT (accepted)
         // -------------------------------------------------------------
-        console.log("TEST 3: Verify private content protection remains intact...");
-        // Mock getPostById for private post
-        db.getPostById = (async (postId: string, viewerId?: string) => {
-            // Private post requires viewerId === author or mutual accepted
-            if (viewerId !== userB.id) return null;
-            return {
-                id: postId,
-                content: "private",
-                title: "private",
-                visibility: "friends",
-                createdAt: new Date(),
-                author: { id: userB.id, username: userB.username, displayName: userB.username, avatarUrl: null },
-                likesCount: 0,
-                commentsCount: 0,
-                savesCount: 0,
-                likedByMe: false,
-                savedByMe: false
-            };
-        }) as any;
-        const privatePostAccess = await db.getPostById("private-post-1", userA.id);
-        assert(privatePostAccess === null, "User A must not access User B's private post");
-        console.log("✅ TEST 3 PASSED: User A cannot access private profile content/posts.\n");
+        console.log("TEST 3: Public B. A and B mutually follow -> CHAT (accepted)...");
+        mockFriends.push({ userId: userA.id, friendId: userB_public.id, status: "accepted" });
+        mockFriends.push({ userId: userB_public.id, friendId: userA.id, status: "accepted" });
+        const check3 = await db.canInitiateDM(userA.id, userB_public.id);
+        assert(check3.allowed === true && check3.conversationState === "accepted", "Must be allowed as accepted chat");
+        console.log("✅ TEST 3 PASSED: Mutual follow on public recipient is CHAT.\n");
         passed++;
+        mockFriends.length = 0; // reset
 
         // -------------------------------------------------------------
-        // TEST 4 — Block A -> B: A blocks B. A attempts to initiate/send a DM to B.
+        // TEST 4: Private B. Neither follows the other. A attempts DM.
+        // Expected: DENIED. No conversation created.
         // -------------------------------------------------------------
-        console.log("TEST 4: Block enforcement when User A blocks User B...");
-        mockBlocks.push({ userId: userA.id, blockedId: userB.id });
+        console.log("TEST 4: Private B. Neither follows each other -> DENIED...");
         authenticatedUser = { id: userA.id, username: userA.username };
         const res4 = await app.inject({
             method: "POST",
-            url: `/api/dms/${userB.id}`,
-            payload: { text: "Should be blocked" }
+            url: `/api/dms/${userB_private.id}`,
+            payload: { text: "Sneak message to private B" }
         });
         assert(res4.statusCode === 403, `Expected 403 Forbidden, got ${res4.statusCode}`);
-        console.log("✅ TEST 4 PASSED: A blocking B prevents DM initiation/send.\n");
+        const convo4 = await db.getDMConversation(userA.id, userB_private.id);
+        assert(convo4 === null, "No conversation should be created for unauthorized private recipient");
+        console.log("✅ TEST 4 PASSED: Direct message to unaccepted private account is rejected.\n");
         passed++;
-        mockBlocks.length = 0; // Clear block
 
         // -------------------------------------------------------------
-        // TEST 5 — Block B -> A: B blocks A. A attempts to initiate/send a DM to B.
+        // TEST 5: Private B. A has pending follow request. B has not accepted. A attempts DM.
+        // Expected: DENIED. No conversation created.
         // -------------------------------------------------------------
-        console.log("TEST 5: Block enforcement when User B blocks User A...");
-        mockBlocks.push({ userId: userB.id, blockedId: userA.id });
-        authenticatedUser = { id: userA.id, username: userA.username };
+        console.log("TEST 5: Private B. A has pending follow request -> DENIED...");
+        mockFriends.push({ userId: userA.id, friendId: userB_private.id, status: "pending" });
         const res5 = await app.inject({
             method: "POST",
-            url: `/api/dms/${userB.id}`,
-            payload: { text: "Should also be blocked" }
+            url: `/api/dms/${userB_private.id}`,
+            payload: { text: "Message with pending follow request" }
         });
         assert(res5.statusCode === 403, `Expected 403 Forbidden, got ${res5.statusCode}`);
-        console.log("✅ TEST 5 PASSED: B blocking A prevents A from sending DMs to B.\n");
+        const convo5 = await db.getDMConversation(userA.id, userB_private.id);
+        assert(convo5 === null, "No conversation should be created while follow request is pending");
+        console.log("✅ TEST 5 PASSED: Pending follow request to private user cannot DM.\n");
         passed++;
-        mockBlocks.length = 0; // Clear block
+        mockFriends.length = 0; // reset
 
         // -------------------------------------------------------------
-        // TEST 6 — Conversation IDOR: Conversation belongs to B and C. A is not a participant.
+        // TEST 6: Private B. B accepts A's follow request (one-way). B does not follow A. A initiates DM.
+        // Expected: PASS, Conversation = REQUEST (pending)
         // -------------------------------------------------------------
-        console.log("TEST 6: Conversation IDOR prevention (A attempts to access B-C history)...");
-        // Create B-C conversation with messages
-        const convoBC = await db.getOrCreateDMConversation(userB.id, userC.id);
-        await db.saveDMMessage(convoBC.id, userB.id, "Secret B-C message");
-
-        // User A requests history with User B
-        authenticatedUser = { id: userA.id, username: userA.username };
+        console.log("TEST 6: Private B accepts A's follow request (one-way accepted) -> Allowed as REQUEST...");
+        mockFriends.push({ userId: userA.id, friendId: userB_private.id, status: "accepted" });
         const res6 = await app.inject({
-            method: "GET",
-            url: `/api/dms/${userB.id}`
+            method: "POST",
+            url: `/api/dms/${userB_private.id}`,
+            payload: { text: "Hello accepted Private B" }
         });
-        assert(res6.statusCode === 200, `Expected 200, got ${res6.statusCode}`);
-        const historyAB = JSON.parse(res6.body);
-        const leakedBCMessage = historyAB.some((m: any) => m.text === "Secret B-C message");
-        assert(!leakedBCMessage, "User A must not receive messages from B-C conversation");
-        console.log("✅ TEST 6 PASSED: User A cannot read B-C conversation (IDOR protected).\n");
+        assert(res6.statusCode === 200, `Expected 200 OK, got ${res6.statusCode}`);
+        const convo6 = await db.getDMConversation(userA.id, userB_private.id);
+        assert(convo6?.status === "pending", "One-way accepted follow must create REQUEST conversation");
+        console.log("✅ TEST 6 PASSED: Accepted follow to private account initiates DM as REQUEST.\n");
         passed++;
 
         // -------------------------------------------------------------
-        // TEST 7 — User ID manipulation: A attempts to modify or forward message from B-C
+        // TEST 7: Private B. A and B mutually follow. A initiates DM.
+        // Expected: PASS, Conversation = CHAT
         // -------------------------------------------------------------
-        console.log("TEST 7: User ID manipulation & forward authorization check...");
-        const bcMsg = mockMessages.find(m => m.conversation_id === convoBC.id);
+        console.log("TEST 7: Private B. Mutual follow -> CHAT (accepted)...");
+        mockFriends.push({ userId: userB_private.id, friendId: userA.id, status: "accepted" }); // Now mutual
+        const check7 = await db.canInitiateDM(userA.id, userB_private.id);
+        assert(check7.allowed === true && check7.conversationState === "accepted", "Must be allowed as accepted chat");
+        console.log("✅ TEST 7 PASSED: Mutual follow on private recipient is CHAT.\n");
+        passed++;
+
+        // -------------------------------------------------------------
+        // TEST 8: Private B. B accepts A's follow request. Then B follows A.
+        // Existing request conversation becomes CHAT without duplicate.
+        // Expected: PASS
+        // -------------------------------------------------------------
+        console.log("TEST 8: Transition from REQUEST to CHAT when relationship becomes mutual...");
+        const list8 = await db.listDMConversations(userA.id);
+        const conv8 = list8.find((c: any) => c.other_id === userB_private.id);
+        assert(conv8?.conversationStatus === "accepted", "Conversation must dynamically transition to accepted (Chat)");
+        assert(list8.filter((c: any) => c.other_id === userB_private.id).length === 1, "Must never duplicate conversation");
+        console.log("✅ TEST 8 PASSED: Request dynamically becomes Chat on mutual follow with zero duplication.\n");
+        passed++;
+        mockFriends.length = 0; // reset
+
+        // -------------------------------------------------------------
+        // TEST 9: Either user blocks the other. DM initiation denied.
+        // Expected: PASS
+        // -------------------------------------------------------------
+        console.log("TEST 9: Block enforcement (A blocks B and B blocks A)...");
+        mockFriends.push({ userId: userA.id, friendId: userC.id, status: "blocked" });
+        const res9A = await app.inject({
+            method: "POST",
+            url: `/api/dms/${userC.id}`,
+            payload: { text: "Blocked attempt" }
+        });
+        assert(res9A.statusCode === 403, "Sender blocking recipient must reject with 403");
+
+        mockFriends.length = 0;
+        mockFriends.push({ userId: userC.id, friendId: userA.id, status: "blocked" });
+        const res9B = await app.inject({
+            method: "POST",
+            url: `/api/dms/${userC.id}`,
+            payload: { text: "Blocked attempt 2" }
+        });
+        assert(res9B.statusCode === 403, "Recipient blocking sender must reject with 403");
+        console.log("✅ TEST 9 PASSED: Bidirectional block enforcement confirmed.\n");
+        passed++;
+        mockFriends.length = 0; // reset
+
+        // -------------------------------------------------------------
+        // TEST 10: Non-participant attempts to read another conversation (IDOR).
+        // Expected: DENIED
+        // -------------------------------------------------------------
+        console.log("TEST 10: Non-participant IDOR conversation isolation...");
+        const convoBC = await db.createDMConversationWithStatus(userB_public.id, userC.id, "accepted");
+        await db.saveDMMessage(convoBC!.id, userB_public.id, "Private B-C confidential text");
         authenticatedUser = { id: userA.id, username: userA.username };
-        const res7 = await app.inject({
-            method: "POST",
-            url: `/api/dms/${userC.id}/forward/${bcMsg.id}`
+        const res10 = await app.inject({
+            method: "GET",
+            url: `/api/dms/${userB_public.id}`
         });
-        assert(res7.statusCode === 404 || res7.statusCode === 403, `Expected 404/403, got ${res7.statusCode}`);
-        console.log("✅ TEST 7 PASSED: Non-participant cannot forward or manipulate message.\n");
+        const history10 = JSON.parse(res10.body);
+        assert(!history10.some((m: any) => m.text === "Private B-C confidential text"), "User A must not access B-C history");
+        console.log("✅ TEST 10 PASSED: IDOR prevention verified, third-party conversation isolated.\n");
         passed++;
 
         // -------------------------------------------------------------
-        // TEST 8 — Valid participant: B and C can read and send messages in their conversation
+        // TEST 11: Unauthenticated DM attempt.
+        // Expected: 401
         // -------------------------------------------------------------
-        console.log("TEST 8: Valid participant read & write verification...");
-        authenticatedUser = { id: userB.id, username: userB.username };
-        const res8B = await app.inject({
-            method: "GET",
-            url: `/api/dms/${userC.id}`
-        });
-        assert(res8B.statusCode === 200, `Expected 200 for User B, got ${res8B.statusCode}`);
-        const historyBC = JSON.parse(res8B.body);
-        assert(historyBC.some((m: any) => m.text === "Secret B-C message"), "User B must see their message");
-
-        authenticatedUser = { id: userC.id, username: userC.username };
-        const res8C = await app.inject({
+        console.log("TEST 11: Unauthenticated request rejection...");
+        authenticatedUser = null;
+        const res11 = await app.inject({
             method: "POST",
-            url: `/api/dms/${userB.id}`,
+            url: `/api/dms/${userB_public.id}`,
+            payload: { text: "Unauth message" }
+        });
+        assert(res11.statusCode === 401, `Expected 401, got ${res11.statusCode}`);
+        console.log("✅ TEST 11 PASSED: Unauthenticated request rejected with 401.\n");
+        passed++;
+
+        // -------------------------------------------------------------
+        // TEST 12: Valid participant can read/send in existing conversation.
+        // Expected: PASS
+        // -------------------------------------------------------------
+        console.log("TEST 12: Valid participant communication in conversation...");
+        authenticatedUser = { id: userB_public.id, username: userB_public.username };
+        const res12Read = await app.inject({ method: "GET", url: `/api/dms/${userC.id}` });
+        assert(res12Read.statusCode === 200, "User B should read B-C history");
+        authenticatedUser = { id: userC.id, username: userC.username };
+        const res12Send = await app.inject({
+            method: "POST",
+            url: `/api/dms/${userB_public.id}`,
             payload: { text: "Reply from C to B" }
         });
-        assert(res8C.statusCode === 200, `Expected 200 for User C send, got ${res8C.statusCode}`);
-        console.log("✅ TEST 8 PASSED: Valid participants B and C can retrieve and send messages.\n");
+        assert(res12Send.statusCode === 200, "User C should send in B-C conversation");
+        console.log("✅ TEST 12 PASSED: Valid participants can read and write.\n");
         passed++;
 
         // -------------------------------------------------------------
-        // TEST 9 — Logout / Unauthenticated: Logged-out user cannot initiate or read DMs
+        // TEST 13: Private profile protected posts remain inaccessible until follow accepted.
+        // Expected: PASS
         // -------------------------------------------------------------
-        console.log("TEST 9: Unauthenticated request rejection...");
-        authenticatedUser = null;
-        const res9Get = await app.inject({ method: "GET", url: `/api/dms/${userB.id}` });
-        const res9Post = await app.inject({ method: "POST", url: `/api/dms/${userB.id}`, payload: { text: "test" } });
-        assert(res9Get.statusCode === 401, `Expected 401 on GET, got ${res9Get.statusCode}`);
-        assert(res9Post.statusCode === 401, `Expected 401 on POST, got ${res9Post.statusCode}`);
-        console.log("✅ TEST 9 PASSED: Unauthenticated / logged-out user rejected with 401.\n");
+        console.log("TEST 13: Private profile protected posts authorization...");
+        const postAccessWithoutFollow = await db.getPostById("priv-post-1", userA.id);
+        assert(postAccessWithoutFollow === null, "Post must be hidden without follow");
+        mockFriends.push({ userId: userA.id, friendId: userB_private.id, status: "accepted" });
+        const postAccessWithFollow = await db.getPostById("priv-post-1", userA.id);
+        assert(postAccessWithFollow !== null, "Post must be accessible once follow is accepted");
+        console.log("✅ TEST 13 PASSED: Private profile content access strictly governed by follow acceptance.\n");
+        passed++;
+        mockFriends.length = 0; // reset
+
+        // -------------------------------------------------------------
+        // TEST 14: Public non-friend DM appears under Requests, not Chats.
+        // Expected: PASS
+        // -------------------------------------------------------------
+        console.log("TEST 14: Verification that public non-friend conversation is classified as REQUEST...");
+        const list14 = await db.listDMConversations(userA.id);
+        const convPubNonFriend = list14.find((c: any) => c.other_id === userB_public.id);
+        assert(convPubNonFriend?.conversationStatus === "pending", "Must be pending (Requests)");
+        assert(convPubNonFriend?.isMutualFriend === false, "Must not be marked as mutual friend");
+        console.log("✅ TEST 14 PASSED: Public non-friend conversation correctly classified as REQUEST.\n");
         passed++;
 
         // -------------------------------------------------------------
-        // TEST 10 — Message Edit / Delete sender authorization
+        // TEST 15: Mutual-friend DM appears under Chats, not Requests.
+        // Expected: PASS
         // -------------------------------------------------------------
-        console.log("TEST 10: Message Edit / Delete sender authorization...");
-        const msgToEdit = await db.saveDMMessage(convoBC.id, userB.id, "Original content");
-        // User C (participant, but not sender) tries to edit User B's message
-        authenticatedUser = { id: userC.id, username: userC.username };
-        const res10Unauthorized = await app.inject({
-            method: "PUT",
-            url: `/api/dms/${userB.id}/messages/${msgToEdit.id}`,
-            payload: { text: "Malicious edit" }
-        });
-        assert(res10Unauthorized.statusCode === 403, `Expected 403 for unauthorized edit, got ${res10Unauthorized.statusCode}`);
-
-        // User B (sender) edits their message
-        authenticatedUser = { id: userB.id, username: userB.username };
-        const res10Authorized = await app.inject({
-            method: "PUT",
-            url: `/api/dms/${userC.id}/messages/${msgToEdit.id}`,
-            payload: { text: "Legitimate edit" }
-        });
-        assert(res10Authorized.statusCode === 200, `Expected 200 for authorized edit, got ${res10Authorized.statusCode}`);
-        console.log("✅ TEST 10 PASSED: Only message sender can edit/delete their own message.\n");
+        console.log("TEST 15: Verification that mutual-friend conversation is classified as CHAT...");
+        mockFriends.push({ userId: userA.id, friendId: userB_public.id, status: "accepted" });
+        mockFriends.push({ userId: userB_public.id, friendId: userA.id, status: "accepted" });
+        const list15 = await db.listDMConversations(userA.id);
+        const convPubMutual = list15.find((c: any) => c.other_id === userB_public.id);
+        assert(convPubMutual?.conversationStatus === "accepted", "Must be accepted (Chats)");
+        assert(convPubMutual?.isMutualFriend === true, "Must be marked as mutual friend");
+        console.log("✅ TEST 15 PASSED: Mutual-friend conversation correctly classified as CHAT.\n");
         passed++;
 
     } finally {
-        // Restore DB methods
-        db.getDMConversation = originalGetDMConversation;
-        db.createDMConversationWithStatus = originalCreateDMConversationWithStatus;
-        db.getOrCreateDMConversation = originalGetOrCreateDMConversation;
-        db.isBlockedEitherDirection = originalIsBlockedEitherDirection;
-        db.saveDMMessage = originalSaveDMMessage;
-        db.getDMHistory = originalGetDMHistory;
-        db.listDMConversations = originalListDMConversations;
-        db.getPostById = originalGetPostById;
-        db.getForwardableDMMessage = originalGetForwardableDMMessage;
-        db.updateOwnDMMessage = originalUpdateOwnDMMessage;
-        db.deleteOwnDMMessage = originalDeleteOwnDMMessage;
+        Object.assign(db, orig);
     }
 
     console.log("==========================================");

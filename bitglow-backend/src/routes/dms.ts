@@ -38,7 +38,8 @@ export async function dmRoutes(fastify: FastifyInstance) {
             lastMessageSenderId: r.last_message_sender_id || null,
             lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
             unreadCount: Number(r.unread_count || 0),
-            conversationStatus: r.conversationStatus || r.status || "accepted",
+            conversationStatus: r.is_mutual_friend ? 'accepted' : 'pending',
+            isMutualFriend: !!r.is_mutual_friend,
             isMasked: !!r.is_masked,
             isBlockedByOther: !!r.is_masked,
             isBlockedByMe: !!r.is_blocked_by_me
@@ -112,14 +113,23 @@ export async function dmRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Invalid message" });
         }
 
-        // Check if blocked in either direction — if so, prevent sending
-        if (await db.isBlockedEitherDirection(userId, otherId)) {
-            return reply.code(403).send({ message: "Messaging blocked" });
+        // Authorize DM initiation/send
+        const check = await db.canInitiateDM(userId, otherId);
+        if (!check.allowed) {
+            if (check.reason === 'BLOCKED') {
+                return reply.code(403).send({ message: "Messaging blocked" });
+            }
+            if (check.reason === 'PRIVATE_ACCOUNT_REQUIRES_FOLLOW_ACCEPTANCE') {
+                return reply.code(403).send({
+                    code: "PRIVATE_ACCOUNT_REQUIRES_FOLLOW_ACCEPTANCE",
+                    message: "This account is private. Follow request must be accepted before messaging."
+                });
+            }
+            return reply.code(403).send({ message: "Cannot send message to this user" });
         }
 
-        // Open messaging enabled
         const convo = await db.getOrCreateDMConversation(userId, otherId);
-        if (!convo) return reply.code(404).send({ message: "Conversation not found" });
+        if (!convo) return reply.code(403).send({ message: "Unable to start conversation" });
         const saved = await db.saveDMMessage(convo.id, userId, sanitizeText(text.trim(), 2000), type || 'text', postId, profileId);
 
         const responseMsg = {
@@ -166,9 +176,13 @@ export async function dmRoutes(fastify: FastifyInstance) {
         const source = await db.getForwardableDMMessage(messageId, req.auth.id);
         if (!source) return reply.code(404).send({ message: "Message not found" });
 
-        // Prevent forwarding if blocked in either direction
-        if (await db.isBlockedEitherDirection(req.auth.id, targetUserId)) {
-            return reply.code(403).send({ message: "Messaging blocked" });
+        // Authorize DM forward
+        const check = await db.canInitiateDM(req.auth.id, targetUserId);
+        if (!check.allowed) {
+            if (check.reason === 'BLOCKED') {
+                return reply.code(403).send({ message: "Messaging blocked" });
+            }
+            return reply.code(403).send({ message: "Cannot forward message to this user" });
         }
 
         const conversation = await db.getOrCreateDMConversation(req.auth.id, targetUserId);
@@ -275,5 +289,29 @@ export async function dmRoutes(fastify: FastifyInstance) {
 
         const readCount = await db.markDMConversationRead(convo.id, userId);
         return { ok: true, readCount };
+    });
+
+    /**
+     * POST /api/dms/:userId/accept
+     * Accept a message request
+     */
+    fastify.post("/dms/:userId/accept", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const { userId: otherId } = req.params as { userId: string };
+        const ok = await db.acceptDMRequest(req.auth.id, otherId);
+        if (!ok) return reply.code(404).send({ message: "Message request not found" });
+        return { ok: true };
+    });
+
+    /**
+     * POST /api/dms/:userId/reject
+     * Reject and delete a message request
+     */
+    fastify.post("/dms/:userId/reject", { preHandler: fastify.requireAuth, schema: dmUserSchema }, async (req, reply) => {
+        if (!req.auth) return reply.code(401).send({ message: "Not authenticated" });
+        const { userId: otherId } = req.params as { userId: string };
+        const ok = await db.rejectDMRequest(req.auth.id, otherId);
+        if (!ok) return reply.code(404).send({ message: "Message request not found" });
+        return { ok: true };
     });
 }

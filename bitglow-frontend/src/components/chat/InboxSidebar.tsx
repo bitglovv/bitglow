@@ -44,20 +44,14 @@ export const InboxSidebar = ({
       })
     : [];
   
-  // Load accepted conversations from localStorage
-  const acceptedStr = typeof window !== "undefined" ? localStorage.getItem("bitglow:accepted_requests") || "[]" : "[]";
-  const acceptedIds = useMemo(() => {
-    try {
-      return new Set<string>(JSON.parse(acceptedStr));
-    } catch (e) {
-      return new Set<string>();
-    }
-  }, [acceptedStr]);
-
-  // Separate conversations into chats (friends or initiated by me) and requests (non-friends initiated by them)
-  const friendIds = new Set(friends.map((f) => f.id));
-  const chatConversations = conversations.filter((c) => friendIds.has(c.userId) || !c.lastMessageSenderId || c.lastMessageSenderId === currentUserId || acceptedIds.has(c.userId));
-  const requestConversations = conversations.filter((c) => !friendIds.has(c.userId) && c.lastMessageSenderId && c.lastMessageSenderId !== currentUserId && !acceptedIds.has(c.userId));
+  // Separate conversations into chats (mutual friends) and requests (non-mutual conversations)
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.id)), [friends]);
+  const chatConversations = conversations.filter(
+    (c) => friendIds.has(c.userId) || (c as any).isMutualFriend || c.conversationStatus === "accepted"
+  );
+  const requestConversations = conversations.filter(
+    (c) => !friendIds.has(c.userId) && !(c as any).isMutualFriend && c.conversationStatus !== "accepted"
+  );
 
   return (
     <aside className="flex flex-1 min-h-0 flex-col border-r-0 md:border-r border-white/[0.06] bg-black w-full max-w-full overflow-hidden">

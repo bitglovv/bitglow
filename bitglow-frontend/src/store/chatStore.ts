@@ -180,52 +180,62 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     // API Call
-    const savedMsg = await api.dms.send(userId, text, 'text', undefined, undefined, optimisticMsg.id);
-    if (savedMsg) {
-      set((state) => {
-        const convs = [...state.conversations];
-        const idx = convs.findIndex((c) => c.userId === userId);
+    try {
+      const savedMsg = await api.dms.send(userId, text, 'text', undefined, undefined, optimisticMsg.id);
+      if (savedMsg) {
+        set((state) => {
+          const convs = [...state.conversations];
+          const idx = convs.findIndex((c) => c.userId === userId);
 
-        if (idx !== -1) {
-          const updated = {
-            ...convs[idx],
-            lastMessage: savedMsg.text,
-            lastMessageAt: savedMsg.createdAt,
+          if (idx !== -1) {
+            const updated = {
+              ...convs[idx],
+              lastMessage: savedMsg.text,
+              lastMessageAt: savedMsg.createdAt,
+            };
+            convs.splice(idx, 1);
+            convs.unshift(updated);
+          } else if (state.activeConversationUser) {
+            convs.unshift({
+              userId,
+              username: state.activeConversationUser.username,
+              displayName: state.activeConversationUser.displayName,
+              avatarUrl: state.activeConversationUser.avatarUrl,
+              lastMessage: savedMsg.text,
+              lastMessageAt: savedMsg.createdAt,
+              unreadCount: 0,
+            });
+          } else {
+            convs.unshift({
+              userId,
+              username: "",
+              displayName: "",
+              lastMessage: savedMsg.text,
+              lastMessageAt: savedMsg.createdAt,
+              unreadCount: 0,
+            });
+          }
+
+          return {
+            messages: {
+              ...state.messages,
+              [userId]: (state.messages[userId] || []).map((m) =>
+                m.id === optimisticMsg.id ? savedMsg : m
+              )
+            },
+            conversations: convs,
+            activeConversationUser: null,
           };
-          convs.splice(idx, 1);
-          convs.unshift(updated);
-        } else if (state.activeConversationUser) {
-          convs.unshift({
-            userId,
-            username: state.activeConversationUser.username,
-            displayName: state.activeConversationUser.displayName,
-            avatarUrl: state.activeConversationUser.avatarUrl,
-            lastMessage: savedMsg.text,
-            lastMessageAt: savedMsg.createdAt,
-            unreadCount: 0,
-          });
-        } else {
-          convs.unshift({
-            userId,
-            username: "",
-            displayName: "",
-            lastMessage: savedMsg.text,
-            lastMessageAt: savedMsg.createdAt,
-            unreadCount: 0,
-          });
-        }
-
-        return {
-          messages: {
-            ...state.messages,
-            [userId]: (state.messages[userId] || []).map((m) =>
-              m.id === optimisticMsg.id ? savedMsg : m
-            )
-          },
-          conversations: convs,
-          activeConversationUser: null,
-        };
-      });
+        });
+      }
+    } catch (err: any) {
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [userId]: (state.messages[userId] || []).filter((m) => m.id !== optimisticMsg.id),
+        },
+      }));
+      window.alert(err instanceof Error ? err.message : "Failed to send message");
     }
   },
 
