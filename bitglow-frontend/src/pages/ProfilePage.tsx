@@ -379,6 +379,28 @@ export default function ProfilePage() {
     }
   };
 
+  const handleDirectMessage = () => {
+    if (!profile) return;
+    const targetUser = {
+      id: profile.id,
+      username: profile.username,
+      displayName: profile.displayName || profile.username,
+      avatarUrl: profile.avatarUrl,
+    };
+    sessionStorage.setItem("bitglow:dmUserId", targetUser.id);
+    sessionStorage.setItem("bitglow:dmUsername", targetUser.username);
+    sessionStorage.setItem("bitglow:dmDisplayName", targetUser.displayName);
+    if (targetUser.avatarUrl) {
+      sessionStorage.setItem("bitglow:dmAvatarUrl", targetUser.avatarUrl);
+    } else {
+      sessionStorage.removeItem("bitglow:dmAvatarUrl");
+    }
+
+    navigate(`/messages?userId=${encodeURIComponent(targetUser.id)}`, {
+      state: { directDmUser: targetUser },
+    });
+  };
+
   const handleStartLiveChat = () => {
     if (!profile || !canOpenLiveRoom) return;
     navigate("/live");
@@ -534,10 +556,7 @@ export default function ProfilePage() {
                     </Button>
                     <Button
                       variant="secondary"
-                      onClick={() => {
-                        sessionStorage.setItem("bitglow:dmUserId", profile.id);
-                        navigate("/messages");
-                      }}
+                      onClick={handleDirectMessage}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" /> Message
                     </Button>
@@ -617,10 +636,7 @@ export default function ProfilePage() {
                       </Button>
                       <Button
                         variant="secondary"
-                        onClick={() => {
-                          sessionStorage.setItem("bitglow:dmUserId", profile.id);
-                          navigate("/messages");
-                        }}
+                        onClick={handleDirectMessage}
                       >
                         <MessageSquare className="w-4 h-4 mr-2" /> Message
                       </Button>

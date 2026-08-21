@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import Header from "../components/common/Header";
 import { useAuth } from "../hooks/useAuth";
 import { InboxSidebar } from "../components/chat/InboxSidebar";
@@ -7,7 +7,7 @@ import { ChatWindow } from "../components/chat/ChatWindow";
 import { EmptyChatState } from "../components/chat/EmptyChatState";
 import { useChatStore } from "../store/chatStore";
 import { useVisualViewport } from "../hooks/useVisualViewport";
-import { api } from "../services/api";
+import { api, Conversation } from "../services/api";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { ReportSheet } from "../components/common/ReportSheet";
 import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
@@ -22,6 +22,8 @@ function isStackedMessagesLayout() {
 export default function MessagesPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const dmChatPushedRef = useRef(false);
   const {
     conversations,
@@ -78,37 +80,92 @@ export default function MessagesPage() {
     fetchConversationsAndFriends();
   }, [fetchConversationsAndFriends]);
 
-  const [hasProcessedInitialDm, setHasProcessedInitialDm] = useState(false);
+  const lastHandledTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isLoadingConversations || hasProcessedInitialDm) return;
+    // 1. Extract target user from location state, search params, or sessionStorage
+    const stateUser = (location.state as any)?.directDmUser as { id: string; username?: string; displayName?: string; avatarUrl?: string } | undefined;
+    const queryUserId = searchParams.get("userId") || undefined;
+    const queryUsername = searchParams.get("username") || searchParams.get("user") || undefined;
+    const sessionUserId = sessionStorage.getItem("bitglow:dmUserId") || undefined;
+    const sessionUsername = sessionStorage.getItem("bitglow:dmUsername") || undefined;
+    const sessionDisplayName = sessionStorage.getItem("bitglow:dmDisplayName") || undefined;
+    const sessionAvatarUrl = sessionStorage.getItem("bitglow:dmAvatarUrl") || undefined;
 
-    const dmUserId = sessionStorage.getItem("bitglow:dmUserId");
-    if (dmUserId) {
-      setHasProcessedInitialDm(true);
-      const dmUsername = sessionStorage.getItem("bitglow:dmUsername") || "";
-      const dmDisplayName = sessionStorage.getItem("bitglow:dmDisplayName") || "";
-      const dmAvatarUrl = sessionStorage.getItem("bitglow:dmAvatarUrl") || undefined;
-      
-      sessionStorage.removeItem("bitglow:dmUserId");
-      sessionStorage.removeItem("bitglow:dmUsername");
-      sessionStorage.removeItem("bitglow:dmDisplayName");
-      sessionStorage.removeItem("bitglow:dmAvatarUrl");
+    const targetId = stateUser?.id || queryUserId || sessionUserId;
+    if (!targetId) return;
 
-      openFriendConversation({
-        id: dmUserId,
-        username: dmUsername,
-        displayName: dmDisplayName,
-        avatarUrl: dmAvatarUrl,
-      });
-      setMobileView("chat");
+    // Clear session storage so it doesn't linger across unrelated navigations
+    sessionStorage.removeItem("bitglow:dmUserId");
+    sessionStorage.removeItem("bitglow:dmUsername");
+    sessionStorage.removeItem("bitglow:dmDisplayName");
+    sessionStorage.removeItem("bitglow:dmAvatarUrl");
+
+    // Gather available metadata
+    let targetUsername = stateUser?.username || queryUsername || sessionUsername || "";
+    let targetDisplayName = stateUser?.displayName || sessionDisplayName || targetUsername;
+    let targetAvatarUrl = stateUser?.avatarUrl || sessionAvatarUrl;
+
+    // If metadata is incomplete, check in conversations or friends
+    const existingConv = conversations.find((c) => c.userId === targetId);
+    const existingFriend = friends.find((f) => f.id === targetId);
+
+    if (existingConv) {
+      targetUsername = targetUsername || existingConv.username || "";
+      targetDisplayName = targetDisplayName || existingConv.displayName || targetUsername;
+      targetAvatarUrl = targetAvatarUrl || existingConv.avatarUrl;
+    } else if (existingFriend) {
+      targetUsername = targetUsername || existingFriend.username || "";
+      targetDisplayName = targetDisplayName || existingFriend.displayName || targetUsername;
+      targetAvatarUrl = targetAvatarUrl || existingFriend.avatarUrl;
     }
-  }, [isLoadingConversations, hasProcessedInitialDm, openFriendConversation]);
 
-  const activeConversation = useMemo(
-    () => conversations.find((c) => c.userId === activeConversationId) ?? activeConversationUser ?? null,
-    [conversations, activeConversationId, activeConversationUser]
-  );
+    const targetUserObj = {
+      id: targetId,
+      username: targetUsername,
+      displayName: targetDisplayName,
+      avatarUrl: targetAvatarUrl,
+    };
+
+    // Open target user conversation immediately
+    openFriendConversation(targetUserObj);
+    setMobileView("chat");
+
+    // If target username is still empty, fetch user info asynchronously to populate chat header
+    if (!targetUsername) {
+      api.user.get(targetId)
+        .then((fetchedUser) => {
+          if (fetchedUser) {
+            openFriendConversation({
+              id: fetchedUser.id,
+              username: fetchedUser.username || "",
+              displayName: fetchedUser.displayName || fetchedUser.username || "",
+              avatarUrl: fetchedUser.avatarUrl,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [location.state, searchParams, conversations, friends, openFriendConversation]);
+
+  const activeConversation = useMemo<Conversation | null>(() => {
+    if (!activeConversationId) return null;
+    const found = conversations.find((c) => c.userId === activeConversationId);
+    if (found) return found;
+
+    if (activeConversationUser && activeConversationUser.id === activeConversationId) {
+      return {
+        id: activeConversationUser.id,
+        userId: activeConversationUser.id,
+        username: activeConversationUser.username || "",
+        displayName: activeConversationUser.displayName || activeConversationUser.username || "",
+        avatarUrl: activeConversationUser.avatarUrl,
+        unreadCount: 0,
+      };
+    }
+
+    return null;
+  }, [conversations, activeConversationId, activeConversationUser]);
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
@@ -147,7 +204,12 @@ export default function MessagesPage() {
 
   const handleOpenFromFriend = (friend: any) => {
     const fromInbox = mobileView === "inbox";
-    openFriendConversation(friend);
+    openFriendConversation({
+      id: friend.id || friend.userId,
+      username: friend.username || "",
+      displayName: friend.displayName || friend.username || "",
+      avatarUrl: friend.avatarUrl,
+    });
     setSearchTerm("");
     setMobileView("chat");
     if (fromInbox) pushMobileDmHistory();
