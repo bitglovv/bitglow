@@ -214,7 +214,7 @@ export function MessageBubble(props: MessageBubbleProps) {
                   "px-4 py-2.5 text-[14.5px] leading-[1.45]",
                   isMe
                     ? "bg-[#0d3b2e] text-white font-medium"
-                    : "border border-white/[0.06] bg-[#111] text-white/90",
+                    : "border border-white/[0.08] bg-zinc-900/90 text-white",
                   isMe && isFirstInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[24px] rounded-tr-[4px]",
                   isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[24px] rounded-r-[4px]",
                   isMe && isLastInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[4px] rounded-tr-[4px]",

@@ -159,9 +159,9 @@ export default function LiveChatPage() {
               <button
                 onClick={handleEnterChat}
                 disabled={!activeRoom || status !== "connected"}
-                className="w-full h-12 rounded-full bg-white text-black font-bold text-[13px] uppercase tracking-widest hover:bg-zinc-200 transition-all duration-200 active:scale-[0.97] disabled:opacity-20 disabled:cursor-not-allowed"
+                className="w-full h-12 rounded-full bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-bold text-[13px] uppercase tracking-widest hover:opacity-90 transition-all duration-200 active:scale-[0.97] disabled:opacity-20 disabled:cursor-not-allowed"
               >
-                Enter
+                Enter Live Chat
               </button>
             </div>
           </div>
