@@ -296,6 +296,7 @@ export function useLiveRoom(token: string | null) {
   const handleTyping = useCallback(() => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || !activeRoom?.id || !hasJoinedChat) return;
+    const now = Date.now();
     if (now - lastTypingSentRef.current < 2000) return;
     lastTypingSentRef.current = now;
     socket.send(JSON.stringify({ type: "client:typing", roomId: activeRoom.id }));
@@ -306,11 +307,6 @@ export function useLiveRoom(token: string | null) {
     const rid = activeRoomIdRef.current;
     localStorage.removeItem('bitglow_live_joined');
     localStorage.removeItem('bitglow_live_joined_at');
-    if (rid) {
-        sessionStorage.removeItem(`${CACHE_KEY}_${rid}`);
-        sessionStorage.removeItem(`${TIMESTAMP_KEY}_${rid}`);
-        sessionStorage.removeItem(`${SCROLL_KEY}_${rid}`);
-    }
     if (socket && socket.readyState === WebSocket.OPEN && rid) {
       socket.send(JSON.stringify({ type: "client:leave_room", roomId: rid }));
     }
