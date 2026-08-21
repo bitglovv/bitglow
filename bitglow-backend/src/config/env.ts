@@ -1,6 +1,10 @@
 import dotenv from "dotenv";
 
+const explicitNodeEnv = process.env.NODE_ENV;
 dotenv.config();
+if (explicitNodeEnv) {
+    process.env.NODE_ENV = explicitNodeEnv;
+}
 
 function requireEnv(name: string): string {
     const value = process.env[name];

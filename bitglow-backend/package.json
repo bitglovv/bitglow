@@ -5,6 +5,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test:open-dm": "node -e \"process.env.NODE_ENV='test'; require('child_process').execSync('npx tsx scripts/testOpenDMPolicy.ts', { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'test' } });\"",
     "test:privacy-toggle": "tsx scripts/testPrivacyToggle.ts",
     "test:relationships": "tsx scripts/testPrivateAccountRelationships.ts",
     "test:cors": "tsx scripts/testCorsAndSignup.ts",

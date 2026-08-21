@@ -1724,44 +1724,22 @@ export const db = {
     async getDMConversation(userId: string, otherId: string) {
         const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
         const res = await pool.query(
-            'SELECT id, user_a, user_b, created_at FROM dm_conversations WHERE user_a = $1 AND user_b = $2',
+            'SELECT id, user_a, user_b, status, created_at FROM dm_conversations WHERE user_a = $1 AND user_b = $2',
             [userA, userB]
         );
         return res.rows[0] || null;
     },
 
     async createDMConversation(userId: string, otherId: string) {
-        if (userId === otherId) return null;
-        const [userA, userB] = userId < otherId ? [userId, otherId] : [otherId, userId];
-        const res = await pool.query(
-            `INSERT INTO dm_conversations (user_a, user_b)
-             SELECT $1, $2
-             WHERE EXISTS (SELECT 1 FROM users WHERE id = $1)
-               AND EXISTS (SELECT 1 FROM users WHERE id = $2)
-             ON CONFLICT (user_a, user_b) DO UPDATE SET user_a = EXCLUDED.user_a
-             RETURNING id, user_a, user_b, created_at`,
-            [userA, userB]
-        );
-        return res.rows[0] || null;
+        return await this.createDMConversationWithStatus(userId, otherId, 'accepted');
     },
 
     async getOrCreateDMConversation(userId: string, otherId: string) {
-        // Allow fetching or creating a conversation even if a block relationship exists.
         const existing = await this.getDMConversation(userId, otherId);
         if (existing) return existing;
 
-        // Check if other user is private and whether the requester can message directly.
-        const otherUser = await this.getUserById(otherId);
-        // A requester can message directly if they are following the other user (one-way accepted)
-        // or they are mutual friends (both directions accepted). Also allow creating your own convo.
-        const requesterFollows = await this.isFollowing(userId, otherId);
-        const mutual = await this.areFriends(userId, otherId);
-        const canMessageDirectly = requesterFollows || mutual || userId === otherId;
-        const status = (otherUser?.is_private && !canMessageDirectly && userId !== otherId) ? 'pending' : 'accepted';
-
-        return await this.createDMConversationWithStatus(userId, otherId, status);
+        return await this.createDMConversationWithStatus(userId, otherId, 'accepted');
     },
-
 
     async createDMConversationWithStatus(userId: string, otherId: string, status: 'pending' | 'accepted' = 'accepted') {
         if (userId === otherId) return null;
