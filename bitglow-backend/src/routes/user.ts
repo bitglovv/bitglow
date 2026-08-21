@@ -493,6 +493,84 @@ export async function userRoutes(fastify: FastifyInstance) {
     });
 
     /**
+     * GET /api/users/:id/followers
+     * Returns a user's accepted followers list.
+     * Private accounts: only visible to the owner or authorized viewers (accepted followers / mutual friends).
+     */
+    fastify.get("/users/:id/followers", { schema: idParamSchema }, async (req, reply) => {
+        const { id: targetId } = req.params as { id: string };
+        const requesterId = await getOptionalRequesterId(req);
+
+        const targetUser = await db.getUserById(targetId);
+        if (!targetUser) return reply.code(404).send({ message: "User not found" });
+
+        if (targetUser.is_private) {
+            if (!requesterId) return reply.code(403).send({ message: "Private account" });
+            const isSelf = requesterId === targetId;
+            const isFollower = await db.isFollowing(requesterId, targetId);
+            const isMutual = await db.areFriends(requesterId, targetId);
+            if (!isSelf && !isFollower && !isMutual) {
+                return reply.code(403).send({ message: "Private account" });
+            }
+        }
+
+        const followers = await db.getFollowers(targetId);
+        return { followers };
+    });
+
+    /**
+     * GET /api/users/:id/following
+     * Returns the list of users a given user follows.
+     * Private accounts: only visible to authorized viewers.
+     */
+    fastify.get("/users/:id/following", { schema: idParamSchema }, async (req, reply) => {
+        const { id: targetId } = req.params as { id: string };
+        const requesterId = await getOptionalRequesterId(req);
+
+        const targetUser = await db.getUserById(targetId);
+        if (!targetUser) return reply.code(404).send({ message: "User not found" });
+
+        if (targetUser.is_private) {
+            if (!requesterId) return reply.code(403).send({ message: "Private account" });
+            const isSelf = requesterId === targetId;
+            const isFollower = await db.isFollowing(requesterId, targetId);
+            const isMutual = await db.areFriends(requesterId, targetId);
+            if (!isSelf && !isFollower && !isMutual) {
+                return reply.code(403).send({ message: "Private account" });
+            }
+        }
+
+        const following = await db.getFollowing(targetId);
+        return { following };
+    });
+
+    /**
+     * GET /api/users/:id/friends
+     * Returns the mutual-friend list for a given user.
+     * Private accounts: only visible to authorized viewers.
+     */
+    fastify.get("/users/:id/friends", { schema: idParamSchema }, async (req, reply) => {
+        const { id: targetId } = req.params as { id: string };
+        const requesterId = await getOptionalRequesterId(req);
+
+        const targetUser = await db.getUserById(targetId);
+        if (!targetUser) return reply.code(404).send({ message: "User not found" });
+
+        if (targetUser.is_private) {
+            if (!requesterId) return reply.code(403).send({ message: "Private account" });
+            const isSelf = requesterId === targetId;
+            const isFollower = await db.isFollowing(requesterId, targetId);
+            const isMutual = await db.areFriends(requesterId, targetId);
+            if (!isSelf && !isFollower && !isMutual) {
+                return reply.code(403).send({ message: "Private account" });
+            }
+        }
+
+        const friends = await db.getFriends(targetId);
+        return { friends };
+    });
+
+    /**
      * DELETE /api/followers/:id
      * Removes an accepted follower from the authenticated user's followers
      */

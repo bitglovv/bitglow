@@ -48,12 +48,14 @@ function CountButton({
 function ListModal({
   title,
   items,
+  isLoading,
   onClose,
   emptyText,
-  renderAction
+  renderAction,
 }: {
   title: string;
   items: Friend[];
+  isLoading?: boolean;
   onClose: () => void;
   emptyText: string;
   renderAction?: (f: Friend) => React.ReactNode;
@@ -73,18 +75,31 @@ function ListModal({
           </button>
         </div>
 
-        {items.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
+          </div>
+        ) : items.length === 0 ? (
           <div className="text-sm text-zinc-500 text-center py-8">{emptyText}</div>
         ) : (
-          <div className="space-y-1 overflow-y-auto custom-scrollbar pr-1 flex-1">
+          <div className="space-y-1.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
             {items.map((f) => (
-              <div key={f.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.03] transition-colors">
-                <Link to={`/profile/${f.username}`} onClick={onClose} className="flex items-center gap-3 group shrink-0">
+              <div key={f.id} className="flex items-center justify-between gap-2 px-2 py-2.5 rounded-xl hover:bg-white/[0.04] transition-colors">
+                <Link
+                  to={`/profile/${f.username}`}
+                  onClick={onClose}
+                  className="flex items-center gap-3 group min-w-0"
+                >
                   <Avatar src={f.avatarUrl} alt={f.username} size="sm" />
-                  <div className="text-[15px] font-semibold text-white group-hover:underline">{f.username}</div>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold text-white group-hover:underline truncate">
+                      {f.displayName || f.username}
+                    </p>
+                    <p className="text-[12px] text-zinc-500 truncate">@{f.username}</p>
+                  </div>
                 </Link>
                 {renderAction && (
-                  <div className="ml-4 shrink-0">
+                  <div className="ml-auto shrink-0">
                     {renderAction(f)}
                   </div>
                 )}
@@ -114,6 +129,11 @@ export default function ProfilePage() {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
+  // Modal lists for viewed profile (may differ from own lists when viewing another user)
+  const [modalFollowers, setModalFollowers] = useState<Friend[]>([]);
+  const [modalFollowing, setModalFollowing] = useState<Friend[]>([]);
+  const [modalFriends, setModalFriends] = useState<Friend[]>([]);
+  const [isModalLoading, setIsModalLoading] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
@@ -341,6 +361,8 @@ export default function ProfilePage() {
       if (success) {
         setFollowing(prev => prev.filter(f => f.id !== targetId));
         setFriends(prev => prev.filter(f => f.id !== targetId));
+        setModalFollowing(prev => prev.filter(f => f.id !== targetId));
+        setModalFriends(prev => prev.filter(f => f.id !== targetId));
       }
     } catch (err) {
       console.error("Failed to unfollow", err);
@@ -351,13 +373,71 @@ export default function ProfilePage() {
     try {
       const status = await api.user.follow(targetId, targetUsername);
       if (status) {
-        const followerUser = followers.find(f => f.id === targetId);
+        const followerUser = (modalFollowers.length ? modalFollowers : followers).find(f => f.id === targetId);
         if (followerUser && !following.some(f => f.id === targetId)) {
           setFollowing(prev => [...prev, followerUser]);
+          setModalFollowing(prev => [...prev, followerUser]);
         }
       }
     } catch (err) {
       console.error("Failed to follow", err);
+    }
+  };
+
+  /** Open Followers modal — fetches the viewed profile's followers if not own */
+  const handleOpenFollowers = async () => {
+    setShowFollowers(true);
+    if (isOwner) {
+      setModalFollowers(followers);
+      return;
+    }
+    if (!profile) return;
+    setIsModalLoading(true);
+    try {
+      const list = await api.user.userFollowers(profile.id);
+      setModalFollowers(list);
+    } catch {
+      setModalFollowers([]);
+    } finally {
+      setIsModalLoading(false);
+    }
+  };
+
+  /** Open Following modal — fetches the viewed profile's following if not own */
+  const handleOpenFollowing = async () => {
+    setShowFollowing(true);
+    if (isOwner) {
+      setModalFollowing(following);
+      return;
+    }
+    if (!profile) return;
+    setIsModalLoading(true);
+    try {
+      const list = await api.user.userFollowing(profile.id);
+      setModalFollowing(list);
+    } catch {
+      setModalFollowing([]);
+    } finally {
+      setIsModalLoading(false);
+    }
+  };
+
+  /** Open Friends modal — fetches the viewed profile's friends if not own */
+  const handleOpenFriends = async () => {
+    setShowFriends(true);
+    if (isOwner) {
+      setModalFriends(friends);
+      return;
+    }
+    if (!profile) return;
+    setIsModalLoading(true);
+    try {
+      const list = await api.user.userFriends(profile.id);
+      setModalFriends(list);
+    } catch {
+      setModalFriends([]);
+    } finally {
+      setIsModalLoading(false);
     }
   };
 
@@ -569,20 +649,17 @@ export default function ProfilePage() {
                   <CountButton
                     label="Followers"
                     count={followersCount}
-                    onClick={isOwner ? () => setShowFollowers(true) : undefined}
-                    disabled={!isOwner}
+                    onClick={handleOpenFollowers}
                   />
                   <CountButton
                     label="Following"
                     count={followingCount}
-                    onClick={isOwner ? () => setShowFollowing(true) : undefined}
-                    disabled={!isOwner}
+                    onClick={handleOpenFollowing}
                   />
                   <CountButton
                     label="Friends"
                     count={friendsCount}
-                    onClick={isOwner ? () => setShowFriends(true) : undefined}
-                    disabled={!isOwner}
+                    onClick={handleOpenFriends}
                   />
                 </div>
 
@@ -664,8 +741,9 @@ export default function ProfilePage() {
       {showFollowers && (
         <ListModal
           title="Followers"
-          items={followers}
-          onClose={() => setShowFollowers(false)}
+          items={modalFollowers}
+          isLoading={isModalLoading}
+          onClose={() => { setShowFollowers(false); setModalFollowers([]); }}
           emptyText="No followers yet."
           renderAction={isOwner ? (f) => {
             const isFollowingThem = following.some(followed => followed.id === f.id);
@@ -681,8 +759,9 @@ export default function ProfilePage() {
       {showFollowing && (
         <ListModal
           title="Following"
-          items={following}
-          onClose={() => setShowFollowing(false)}
+          items={modalFollowing}
+          isLoading={isModalLoading}
+          onClose={() => { setShowFollowing(false); setModalFollowing([]); }}
           emptyText="Not following anyone yet."
           renderAction={isOwner ? (f) => (
             <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfollow</Button>
@@ -693,8 +772,9 @@ export default function ProfilePage() {
       {showFriends && (
         <ListModal
           title="Friends"
-          items={friends}
-          onClose={() => setShowFriends(false)}
+          items={modalFriends}
+          isLoading={isModalLoading}
+          onClose={() => { setShowFriends(false); setModalFriends([]); }}
           emptyText="No friends yet."
           renderAction={isOwner ? (f) => (
             <Button variant="secondary" size="sm" onClick={() => handleModalUnfollow(f.id)}>Unfriend</Button>

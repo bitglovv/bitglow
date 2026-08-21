@@ -661,6 +661,25 @@ export const api = {
             const data = await res.json();
             return normalizeUsers(data.following || []) as Friend[];
         },
+        // Lists for a specific user (by their ID) — visible to authorized viewers
+        userFollowers: async (userId: string): Promise<Friend[]> => {
+            const res = await fetchWithAuth(`/users/${userId}/followers`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return normalizeUsers(data.followers || []) as Friend[];
+        },
+        userFollowing: async (userId: string): Promise<Friend[]> => {
+            const res = await fetchWithAuth(`/users/${userId}/following`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return normalizeUsers(data.following || []) as Friend[];
+        },
+        userFriends: async (userId: string): Promise<Friend[]> => {
+            const res = await fetchWithAuth(`/users/${userId}/friends`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return normalizeUsers(data.friends || []) as Friend[];
+        },
         followRequests: async (): Promise<Friend[]> => {
             const res = await fetchWithAuth("/follow/requests");
             if (!res.ok) return [];
