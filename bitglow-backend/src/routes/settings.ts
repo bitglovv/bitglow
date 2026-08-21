@@ -153,15 +153,21 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ message: "Token has expired" });
         }
 
+        const dbUser = await db.getUserById(changeToken.user_id);
+        const oldEmail = dbUser?.email || null;
+
         // Update the user's email
         await db.updateUserEmail(changeToken.user_id, changeToken.new_email);
         
         // Mark token as used
         await db.markEmailChangeTokenUsed(changeToken.id);
+        await sendEmailChangedNotification(oldEmail ?? changeToken.new_email, changeToken.new_email, dbUser?.username || "");
+        await db.revokeSessionsForUser(changeToken.user_id);
+        await disconnectUserSockets(changeToken.user_id);
 
-        await logSecurityEvent("change_email_success", req, { newEmail: changeToken.new_email }, changeToken.user_id);
+        await logSecurityEvent("change_email_success", req, { oldEmail, newEmail: changeToken.new_email }, changeToken.user_id);
 
-        return { ok: true, message: "Email updated successfully" };
+        return { ok: true, message: "Email updated successfully. Please sign in again." };
     });
 
     /**
@@ -380,4 +386,3 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         return { ok: true };
     });
 }
-
