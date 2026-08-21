@@ -84,6 +84,9 @@ export type Conversation = {
     unreadCount?: number;
     pinned?: boolean;
     conversationStatus?: 'pending' | 'accepted';
+    isMasked?: boolean;
+    isBlockedByOther?: boolean;
+    isBlockedByMe?: boolean;
 };
 
 export type LiveRoom = {

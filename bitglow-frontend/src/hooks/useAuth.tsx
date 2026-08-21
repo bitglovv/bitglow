@@ -176,20 +176,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else if (data.type === "server:dm:deleted") {
                 useChatStore.getState().handleDeletedMessage(data, user.id);
             } else if (data.type === "server:user_relationship:update") {
-                const otherId = data.actorId === user.id ? data.targetId : data.actorId;
-                if (!otherId) return;
                 if (data.kind === "block") {
-                    useChatStore.getState().blockLocal(otherId);
-                    window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: otherId, blocked: true } }));
-                } else if (data.kind === "unblock" && data.actorId === user.id) {
-                    useChatStore.getState().unblockLocal(otherId);
-                    window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: otherId, blocked: false } }));
+                    if (data.actorId === user.id) {
+                        useChatStore.getState().blockLocal(data.targetId);
+                        window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: data.targetId, blocked: true } }));
+                    } else if (data.targetId === user.id) {
+                        useChatStore.getState().maskLocal(data.actorId, true);
+                        window.dispatchEvent(new CustomEvent("bitglow:masked-changed", { detail: { userId: data.actorId, masked: true } }));
+                    }
+                } else if (data.kind === "unblock") {
+                    if (data.actorId === user.id) {
+                        useChatStore.getState().unblockLocal(data.targetId);
+                        window.dispatchEvent(new CustomEvent("bitglow:block-changed", { detail: { userId: data.targetId, blocked: false } }));
+                    } else if (data.targetId === user.id) {
+                        useChatStore.getState().maskLocal(data.actorId, false);
+                        window.dispatchEvent(new CustomEvent("bitglow:masked-changed", { detail: { userId: data.actorId, masked: false } }));
+                        useChatStore.getState().fetchConversationsAndFriends();
+                    }
                 } else if (data.kind === "mute" && data.actorId === user.id) {
-                    useChatStore.getState().muteLocal(otherId);
-                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: otherId, muted: true } }));
+                    useChatStore.getState().muteLocal(data.targetId);
+                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: data.targetId, muted: true } }));
                 } else if (data.kind === "unmute" && data.actorId === user.id) {
-                    useChatStore.getState().unmuteLocal(otherId);
-                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: otherId, muted: false } }));
+                    useChatStore.getState().unmuteLocal(data.targetId);
+                    window.dispatchEvent(new CustomEvent("bitglow:mute-changed", { detail: { userId: data.targetId, muted: false } }));
                 }
             } else if (data.type === "server:user_status") {
                 // Update local presence store and notify interested components via a custom event.

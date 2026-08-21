@@ -1818,7 +1818,11 @@ export const db = {
                     EXISTS(
                       SELECT 1 FROM friends f
                       WHERE f.user_id = u.id AND f.friend_id = $1 AND f.status = 'blocked'
-                    ) AS is_masked
+                    ) AS is_masked,
+                    EXISTS(
+                      SELECT 1 FROM friends f
+                      WHERE f.user_id = $1 AND f.friend_id = u.id AND f.status = 'blocked'
+                    ) AS is_blocked_by_me
              FROM dm_conversations c
              JOIN users u ON u.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
              JOIN LATERAL (
@@ -2514,8 +2518,9 @@ export const db = {
             await client.query("BEGIN");
             await client.query(
                 `DELETE FROM friends
-                 WHERE (user_id = $1 AND friend_id = $2)
-                    OR (user_id = $2 AND friend_id = $1)`,
+                 WHERE ((user_id = $1 AND friend_id = $2)
+                     OR (user_id = $2 AND friend_id = $1))
+                   AND status != 'blocked'`,
                 [userId, blockedId]
             );
             await client.query(
@@ -2537,10 +2542,10 @@ export const db = {
     },
 
     async unblockUser(userId: string, unblockedId: string) {
-        // Remove any blocked relationship between the two users in either direction
+        // Remove only the block placed by userId on unblockedId
         await pool.query(
             `DELETE FROM friends
-             WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))
+             WHERE user_id = $1 AND friend_id = $2
                AND status = 'blocked'`,
             [userId, unblockedId]
         );

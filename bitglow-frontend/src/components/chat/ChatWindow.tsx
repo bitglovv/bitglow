@@ -77,6 +77,7 @@ export const ChatWindow = ({
   const [now, setNow] = useState(Date.now());
 
   const isBlocked = useChatStore((s) => (conversation?.userId ? s.restrictedUsers.has(conversation.userId) : false));
+  const isMasked = Boolean(conversation?.isMasked || (conversation as any)?.isBlockedByOther || conversation?.displayName === 'BitGlow User');
 
   const hasDenseTimeline = messages.length >= 10;
   const isSparseTimeline = messages.length > 0 && messages.length <= 3;
@@ -267,6 +268,12 @@ export const ChatWindow = ({
               <UserCheck className="w-3.5 h-3.5" />
               Unblock
             </Button>
+          </div>
+        ) : isMasked ? (
+          <div className="flex items-center justify-center rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3.5 px-4 text-center">
+            <p className="text-sm text-zinc-500">
+              You cannot send messages to BitGlow User.
+            </p>
           </div>
         ) : isRequest ? (
           <div className="flex flex-col gap-2 p-2 pt-0 md:flex-row md:items-center">

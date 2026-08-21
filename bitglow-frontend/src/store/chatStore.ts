@@ -34,6 +34,7 @@ interface ChatState {
   unblockLocal: (userId: string) => void;
   muteLocal: (userId: string) => void;
   unmuteLocal: (userId: string) => void;
+  maskLocal: (userId: string, masked: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -75,20 +76,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         avatarUrl: normalizeAvatar(f),
       }));
 
-      const restrictedStr = localStorage.getItem("bitglow:restricted_users") || "[]";
-      let restricted = new Set<string>();
-      try {
-          restricted = new Set(JSON.parse(restrictedStr));
-      } catch (e) {}
-      // merge with server blocked users
-      (serverBlocked || []).forEach((u: any) => { if (u?.id) restricted.add(u.id); });
+      // Server is the authoritative source for blocked/muted users
+      const restricted = new Set<string>((serverBlocked || []).map((u: any) => u?.id).filter(Boolean));
       try { localStorage.setItem("bitglow:restricted_users", JSON.stringify(Array.from(restricted))); } catch (e) {}
 
-      // also hydrate muted users from localStorage and server
-      const mutedStr = localStorage.getItem("bitglow:muted_users") || "[]";
-      let muted = new Set<string>();
-      try { muted = new Set(JSON.parse(mutedStr)); } catch (e) {}
-      (serverMuted || []).forEach((u: any) => { if (u?.id) muted.add(u.id); });
+      const muted = new Set<string>((serverMuted || []).map((u: any) => u?.id).filter(Boolean));
       try { localStorage.setItem("bitglow:muted_users", JSON.stringify(Array.from(muted))); } catch (e) {}
 
       // Keep conversations intact even for users marked as restricted so DM history is preserved locally.
@@ -480,9 +472,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { mutedUsers: next } as any;
     });
   },
+
+  maskLocal: (userId: string, masked: boolean) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.userId === userId
+          ? {
+              ...c,
+              isMasked: masked,
+              isBlockedByOther: masked,
+              displayName: masked ? "BitGlow User" : (c.displayName === "BitGlow User" ? c.username : c.displayName),
+              username: masked ? "bitglow_user" : c.username,
+              avatarUrl: masked ? undefined : c.avatarUrl,
+            }
+          : c
+      ),
+    }));
+  },
 }));
 
-// listen for global block/mute events to keep multiple UI surfaces in sync
+// listen for global block/mute/masked events to keep multiple UI surfaces in sync
 if (typeof window !== 'undefined') {
   window.addEventListener('bitglow:block-changed', (e: Event) => {
     const ev = e as CustomEvent;
@@ -491,6 +500,13 @@ if (typeof window !== 'undefined') {
     const state = useChatStore.getState();
     if (blocked) state.blockLocal(userId);
     else state.unblockLocal(userId);
+  });
+
+  window.addEventListener('bitglow:masked-changed', (e: Event) => {
+    const ev = e as CustomEvent;
+    const { userId, masked } = ev.detail || {};
+    if (!userId) return;
+    useChatStore.getState().maskLocal(userId, Boolean(masked));
   });
 
   window.addEventListener('bitglow:mute-changed', (e: Event) => {

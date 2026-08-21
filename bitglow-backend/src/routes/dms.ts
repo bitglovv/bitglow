@@ -31,7 +31,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
         const rows = await db.listDMConversations(userId, Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
         const conversations = rows.map((r: any) => ({
             userId: r.other_id,
-            username: r.other_username,
+            username: r.is_masked ? 'bitglow_user' : r.other_username,
             displayName: r.is_masked ? 'BitGlow User' : (r.other_display_name || r.other_username),
             avatarUrl: r.is_masked ? null : r.other_avatar_url,
             lastMessage: r.last_message || "",
@@ -39,7 +39,9 @@ export async function dmRoutes(fastify: FastifyInstance) {
             lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
             unreadCount: Number(r.unread_count || 0),
             conversationStatus: r.conversationStatus || r.status || "accepted",
-            isMasked: !!r.is_masked
+            isMasked: !!r.is_masked,
+            isBlockedByOther: !!r.is_masked,
+            isBlockedByMe: !!r.is_blocked_by_me
         }));
 
         return conversations;

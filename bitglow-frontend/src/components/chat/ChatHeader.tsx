@@ -102,6 +102,10 @@ export const ChatHeader = ({
     setShowActionSheet(true);
   };
 
+  const isMasked = Boolean(conversation.isMasked || (conversation as any).isBlockedByOther || conversation.displayName === 'BitGlow User');
+  const headerDisplayName = isMasked ? 'BitGlow User' : (conversation.displayName || conversation.username);
+  const headerAvatarUrl = isMasked ? undefined : conversation.avatarUrl;
+
   return (
     <div className="relative z-20 shrink-0 bg-black px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:px-4 md:pt-2.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -117,21 +121,35 @@ export const ChatHeader = ({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <Link to={`/profile/${conversation.username}`} className="relative shrink-0 transition-transform hover:scale-105">
-          <Avatar src={conversation.avatarUrl} alt={conversation.username} size="sm" />
-          {isOnline && (
-            <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-black bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.65)]" />
-          )}
-        </Link>
+        {isMasked ? (
+          <div className="relative shrink-0">
+            <Avatar src={undefined} alt="BitGlow User" size="sm" />
+          </div>
+        ) : (
+          <Link to={`/profile/${conversation.username}`} className="relative shrink-0 transition-transform hover:scale-105">
+            <Avatar src={headerAvatarUrl} alt={conversation.username} size="sm" />
+            {isOnline && (
+              <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-black bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.65)]" />
+            )}
+          </Link>
+        )}
 
-        <Link to={`/profile/${conversation.username}`} className="flex min-w-0 flex-1 flex-col hover:opacity-80 transition-opacity">
-          <span className="truncate text-[15px] font-bold text-white">
-            {conversation.displayName || conversation.username}
-          </span>
-          <span className="truncate text-[11px] font-medium text-zinc-500">
-            @{conversation.username}
-          </span>
-        </Link>
+        {isMasked ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[15px] font-bold text-white">
+              BitGlow User
+            </span>
+          </div>
+        ) : (
+          <Link to={`/profile/${conversation.username}`} className="flex min-w-0 flex-1 flex-col hover:opacity-80 transition-opacity">
+            <span className="truncate text-[15px] font-bold text-white">
+              {headerDisplayName}
+            </span>
+            <span className="truncate text-[11px] font-medium text-zinc-500">
+              @{conversation.username}
+            </span>
+          </Link>
+        )}
 
         <button
           type="button"
@@ -144,9 +162,12 @@ export const ChatHeader = ({
 
         <ActionSheet
           open={showActionSheet}
-          title={conversation.displayName || conversation.username}
+          title={headerDisplayName}
           onClose={() => setShowActionSheet(false)}
-          items={[
+          items={isMasked ? [
+            { label: "Report User", onClick: onReportUser || (() => {}) },
+            { label: isBlocked ? "Unblock User" : "Block User", onClick: handleBlockToggle, danger: !isBlocked },
+          ] : [
             { label: "View Profile", onClick: onViewProfile || (() => {}) },
             { label: "Report User", onClick: onReportUser || (() => {}) },
             { label: isMuted ? "Unmute User" : "Mute User", onClick: handleMuteToggle },

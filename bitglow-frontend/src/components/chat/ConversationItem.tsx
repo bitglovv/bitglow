@@ -38,24 +38,36 @@ export const ConversationItem = ({ conversation, isActive, isOnline: _isOnline, 
     >
       <div className="relative flex items-center gap-3">
         <div className="relative shrink-0">
-          <Link
-            to={`/profile/${conversation.username}`}
-            onClick={(event) => event.stopPropagation()}
-            className="block"
-          >
-            <Avatar src={avatarSrc} alt={displayName} size="md" />
-          </Link>
+          {isMasked ? (
+            <div className="block">
+              <Avatar src={undefined} alt="BitGlow User" size="md" />
+            </div>
+          ) : (
+            <Link
+              to={`/profile/${conversation.username}`}
+              onClick={(event) => event.stopPropagation()}
+              className="block"
+            >
+              <Avatar src={avatarSrc} alt={displayName} size="md" />
+            </Link>
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <Link
-              to={`/profile/${conversation.username}`}
-              onClick={(event) => event.stopPropagation()}
-              className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300 hover:underline"
-            >
-              {displayName}
-            </Link>
+            {isMasked ? (
+              <span className="truncate text-[14px] font-bold leading-5 text-zinc-100">
+                BitGlow User
+              </span>
+            ) : (
+              <Link
+                to={`/profile/${conversation.username}`}
+                onClick={(event) => event.stopPropagation()}
+                className="truncate text-[14px] font-bold leading-5 text-zinc-100 transition-colors duration-300 hover:underline"
+              >
+                {displayName}
+              </Link>
+            )}
           </div>
 
           <div className="mt-0.5 flex items-center gap-2">
