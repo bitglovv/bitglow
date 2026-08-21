@@ -211,10 +211,10 @@ export function MessageBubble(props: MessageBubbleProps) {
             // Only apply bubble styling for text messages
             !isPost && !isProfile
               ? clsx(
-                  "px-4 py-2.5 text-[14.5px] leading-[1.45] shadow-xl",
+                  "px-4 py-2.5 text-[14.5px] leading-[1.45]",
                   isMe
-                    ? "bg-brand text-black shadow-[0_12px_32px_rgba(16,185,129,0.18)] font-medium"
-                    : "border border-white/[0.08] bg-zinc-900/90 text-white backdrop-blur-sm shadow-[0_12px_32px_rgba(0,0,0,0.25)]",
+                    ? "bg-[#0d3b2e] text-white font-medium"
+                    : "border border-white/[0.06] bg-[#111] text-white/90",
                   isMe && isFirstInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[24px] rounded-tr-[4px]",
                   isMe && !isFirstInGroup && !isLastInGroup && "rounded-l-[24px] rounded-r-[4px]",
                   isMe && isLastInGroup && "rounded-tl-[24px] rounded-bl-[24px] rounded-br-[4px] rounded-tr-[4px]",
@@ -275,7 +275,7 @@ export function MessageBubble(props: MessageBubbleProps) {
           {isForwarded && (
             <div className={clsx(
               "mb-1.5 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em]",
-              isMe ? "border-black/15 bg-black/10 text-black/65" : "border-brand/20 bg-brand/10 text-brand/80"
+              isMe ? "border-white/10 bg-white/5 text-white/50" : "border-brand/20 bg-brand/10 text-brand/80"
             )}>
               <Forward className="h-2.5 w-2.5" />
               Forwarded
@@ -289,7 +289,7 @@ export function MessageBubble(props: MessageBubbleProps) {
           )}
         </div>
         {(timeLabel || editedAt) && (
-          <div className={clsx("mt-1 text-[10px] font-bold tracking-wider text-zinc-600", isMe ? "mr-1" : "ml-1")}>
+          <div className={clsx("mt-1 text-[10px] font-medium tracking-wider text-zinc-600", isMe ? "mr-1" : "ml-1")}>
             {timeLabel}{editedAt ? `${timeLabel ? " · " : ""}(edited)` : ""}
           </div>
         )}

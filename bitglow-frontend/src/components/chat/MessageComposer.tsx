@@ -129,7 +129,7 @@ export const MessageComposer = ({
       className={clsx(
         "flex w-full max-w-full items-end transition-colors duration-200 ease-out",
         isLive
-          ? "gap-2.5 rounded-[28px] border border-white/[0.08] bg-zinc-950/95 p-2 shadow-[0_-10px_34px_rgba(0,0,0,0.32)]"
+          ? "gap-2.5 rounded-[28px] border border-white/[0.05] bg-[#080808] p-2"
           : "gap-2 bg-black",
         !isLive && (compact ? "p-0 py-0" : "p-3 bg-black")
       )}
@@ -160,7 +160,7 @@ export const MessageComposer = ({
         aria-label="Send message"
         className={clsx(
           "mb-0.5 flex shrink-0 self-end items-center justify-center rounded-full bg-brand text-black transition-all duration-200 ease-out hover:bg-brand-light focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/25 active:scale-95 disabled:scale-100 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-60",
-          isLive ? "h-11 w-11 shadow-[0_10px_24px_rgba(16,185,129,0.22)]" : "h-10 w-10"
+          isLive ? "h-11 w-11" : "h-10 w-10"
         )}
       >
         <Send className="h-5 w-5" />
