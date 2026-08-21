@@ -11,17 +11,19 @@ export default function SearchPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
 
-  useEffect(() => { document.title = "BitGlow"; }, []);
+  useEffect(() => { document.title = "BitGlow \u2022 Search"; }, []);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       api.user.list(),
       api.user.following(),
-      api.user.pendingFollows()
-    ]).then(([list, followingList, pendingList]) => {
+      api.user.pendingFollows(),
+      api.settings.getBlockedUsers().catch(() => [])
+    ]).then(([list, followingList, pendingList, blockedList]) => {
       if (cancelled) return;
       const normalizedUsers = (list || []).map((u) => {
         const username = u.username?.trim() || "";
@@ -36,6 +38,7 @@ export default function SearchPage() {
       setUsers(normalizedUsers);
       setFollowing(new Set((followingList || []).map((u) => u.id)));
       setPending(new Set((pendingList || []).map((u) => u.id)));
+      setBlocked(new Set((blockedList || []).map((u: any) => u.id)));
     }).catch((err) => {
       console.error("Failed to load search data", err);
     });
@@ -48,7 +51,7 @@ export default function SearchPage() {
     const meId = user?.id;
     const q = query.trim().toLowerCase();
     return users
-      .filter((u) => u.id !== meId)
+      .filter((u) => u.id !== meId && !blocked.has(u.id))
       .filter((u) => {
         if (!q) return true;
         return (
@@ -57,7 +60,7 @@ export default function SearchPage() {
         );
       })
       .slice(0, 50);
-  }, [users, user?.id, query]);
+  }, [users, user?.id, query, blocked]);
 
   const suggestionList = useMemo(() => {
     const meId = user?.id;
@@ -65,19 +68,25 @@ export default function SearchPage() {
       .filter(
         (u) =>
           u.id !== meId &&
+          !blocked.has(u.id) &&
           !following.has(u.id) &&
           !pending.has(u.id)
       )
       .sort((a, b) => (Math.random() > 0.5 ? 1 : -1))
       .slice(0, 15);
-  }, [users, user?.id, following, pending]);
+  }, [users, user?.id, following, pending, blocked]);
 
   const handleFollow = async (u: User) => {
-    const status = await api.user.follow(u.id, u.username);
-    if (status === "accepted") {
-      setFollowing((prev) => new Set(prev).add(u.id));
-    } else if (status === "pending") {
-      setPending((prev) => new Set(prev).add(u.id));
+    if (blocked.has(u.id)) return;
+    try {
+      const status = await api.user.follow(u.id, u.username);
+      if (status === "accepted") {
+        setFollowing((prev) => new Set(prev).add(u.id));
+      } else if (status === "pending") {
+        setPending((prev) => new Set(prev).add(u.id));
+      }
+    } catch (err) {
+      console.error("Follow error:", err);
     }
   };
 

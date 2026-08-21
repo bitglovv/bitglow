@@ -110,6 +110,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         const users = await db.getAllUsers(Math.min(Number(limit) || 50, 100), Math.max(Number(offset) || 0, 0));
         const filtered = [];
         for (const user of users) {
+            if (requesterId && (await db.isBlockedEitherDirection(requesterId, user.id))) {
+                continue;
+            }
             const isFollower = requesterId ? await db.isFollowing(requesterId, user.id) : false;
             const isMutual = requesterId ? await db.areFriends(requesterId, user.id) : false;
             const authorized = requesterId === user.id || (!!requesterId && (isFollower || isMutual));

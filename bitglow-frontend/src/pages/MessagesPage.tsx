@@ -10,7 +10,7 @@ import { useVisualViewport } from "../hooks/useVisualViewport";
 import { api, Conversation } from "../services/api";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { ReportSheet } from "../components/common/ReportSheet";
-import { blockUserEverywhere, muteUserEverywhere, reportUser } from "../utils/socialActions";
+import { blockUserEverywhere, unblockUserEverywhere, muteUserEverywhere, unmuteUserEverywhere, reportUser } from "../utils/socialActions";
 
 const STACKED_MAX_PX = 767;
 
