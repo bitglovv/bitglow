@@ -1888,7 +1888,7 @@ export const db = {
         return res.rows.map((r: any) => ({
             ...r,
             isMutualFriend: !!r.is_mutual_friend,
-            conversationStatus: r.is_mutual_friend ? 'accepted' : 'pending'
+            conversationStatus: (r.is_mutual_friend || r.status === 'accepted') ? 'accepted' : 'pending'
         }));
     },
 

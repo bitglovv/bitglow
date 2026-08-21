@@ -38,7 +38,7 @@ export async function dmRoutes(fastify: FastifyInstance) {
             lastMessageSenderId: r.last_message_sender_id || null,
             lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
             unreadCount: Number(r.unread_count || 0),
-            conversationStatus: r.is_mutual_friend ? 'accepted' : 'pending',
+            conversationStatus: (r.is_mutual_friend || r.status === 'accepted') ? 'accepted' : 'pending',
             isMutualFriend: !!r.is_mutual_friend,
             isMasked: !!r.is_masked,
             isBlockedByOther: !!r.is_masked,

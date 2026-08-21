@@ -369,8 +369,10 @@ export default function MessagesPage() {
                   try {
                     await api.settings.acceptDMRequest(activeConversationId);
                     await fetchConversationsAndFriends();
+                    setActiveTab("chats");
                   } catch (e) {
                     console.error("Failed to accept message request", e);
+                    window.alert("Failed to accept message request");
                   }
                 }
               }}
