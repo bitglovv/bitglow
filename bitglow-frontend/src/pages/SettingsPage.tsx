@@ -238,6 +238,7 @@ export default function SettingsPage() {
             <SettingsSection title="Personal">
               <SettingsItem icon={<CircleUserRound className="h-5 w-5" />} title="View Profile" subtitle={`@${user?.username || "profile"}`} to={user?.username ? `/profile/${user.username}` : "/profile"} />
               <SettingsItem icon={<UserRoundCog className="h-5 w-5" />} title="Edit Profile" subtitle="Name, avatar, username, bio, website" to="/profile/edit" />
+              <SettingsItem icon={<Shield className="h-5 w-5" />} title="BitGlow Identity" subtitle="Status and attributes" to="/identity" />
             </SettingsSection>
 
             <SettingsSection title="Account Security">

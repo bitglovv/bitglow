@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/user";
 import { profileRoutes } from "./routes/profile";
+import { identityRoutes } from "./routes/identity";
 import { startWS } from "./ws";
 import { liveRoutes } from "./routes/live";
 import { dmRoutes } from "./routes/dms";
@@ -157,6 +158,7 @@ server.setErrorHandler(async (error, request, reply) => {
 server.register(authRoutes, { prefix: "/api/auth" });
 server.register(userRoutes, { prefix: "/api" });
 server.register(profileRoutes, { prefix: "/api/profile" });
+server.register(identityRoutes, { prefix: "/api/identity" });
 server.register(liveRoutes, { prefix: "/api" });
 server.register(dmRoutes, { prefix: "/api" });
 server.register(postRoutes, { prefix: "/api" });

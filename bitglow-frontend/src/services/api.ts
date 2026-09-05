@@ -20,6 +20,26 @@ export type User = {
     isVerified?: boolean;
 };
 
+export type IdentityAttribute = {
+    id: string;
+    attributeType: string;
+    attributeValue: string;
+    verificationStatus: "not_verified" | "verified" | "pending" | "revoked";
+    source: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+export type Identity = {
+    id: string;
+    userId: string;
+    status: "active";
+    emailVerified: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+    attributes: IdentityAttribute[];
+};
+
 export type DMMessage = {
     id: string;
     senderId: string;
@@ -696,6 +716,101 @@ export const api = {
             }
             return normalizeUser(await res.json()) as User;
         }
+    },
+    identity: {
+        getCurrent: async (): Promise<Identity> => {
+            const res = await fetchWithAuth("/identity");
+            if (res.status === 404) {
+                const err: any = new Error("Identity not found");
+                err.status = 404;
+                throw err;
+            }
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to load identity");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
+            const data = await res.json();
+            return {
+                id: data.id,
+                userId: data.userId,
+                status: data.status,
+                emailVerified: Boolean(data.emailVerified),
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+                attributes: Array.isArray(data.attributes) ? data.attributes.map((attribute: any) => ({
+                    id: attribute.id,
+                    attributeType: attribute.attributeType,
+                    attributeValue: attribute.attributeValue,
+                    verificationStatus: attribute.verificationStatus,
+                    source: attribute.source,
+                    createdAt: attribute.createdAt,
+                    updatedAt: attribute.updatedAt,
+                })) : [],
+            };
+        },
+        create: async (): Promise<Identity> => {
+            const res = await fetchWithAuth("/identity", {
+                method: "POST",
+            });
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to create identity");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
+            const data = await res.json();
+            return {
+                id: data.id,
+                userId: data.userId,
+                status: data.status,
+                emailVerified: Boolean(data.emailVerified),
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+                attributes: Array.isArray(data.attributes) ? data.attributes.map((attribute: any) => ({
+                    id: attribute.id,
+                    attributeType: attribute.attributeType,
+                    attributeValue: attribute.attributeValue,
+                    verificationStatus: attribute.verificationStatus,
+                    source: attribute.source,
+                    createdAt: attribute.createdAt,
+                    updatedAt: attribute.updatedAt,
+                })) : [],
+            };
+        },
+        updateStatus: async (status: "active"): Promise<Identity> => {
+            const res = await fetchWithAuth("/identity", {
+                method: "PUT",
+                body: JSON.stringify({ status }),
+            });
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to update identity status");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
+            return api.identity.getCurrent();
+        },
+        getAttributes: async (): Promise<IdentityAttribute[]> => {
+            const res = await fetchWithAuth("/identity/attributes");
+            if (!res.ok) {
+                const message = await readErrorMessage(res, "Failed to load identity attributes");
+                const err: any = new Error(message);
+                err.status = res.status;
+                throw err;
+            }
+            const data = await res.json();
+            return Array.isArray(data.attributes) ? data.attributes.map((attribute: any) => ({
+                id: attribute.id,
+                attributeType: attribute.attributeType,
+                attributeValue: attribute.attributeValue,
+                verificationStatus: attribute.verificationStatus,
+                source: attribute.source,
+                createdAt: attribute.createdAt,
+                updatedAt: attribute.updatedAt,
+            })) : [];
+        },
     },
     live: {
         rooms: async (): Promise<LiveRoom[]> => {

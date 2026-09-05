@@ -8,6 +8,7 @@
     "test:open-dm": "node -e \"process.env.NODE_ENV='test'; require('child_process').execSync('npx tsx scripts/testOpenDMPolicy.ts', { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'test' } });\"",
     "test:privacy-toggle": "tsx scripts/testPrivacyToggle.ts",
     "test:relationships": "tsx scripts/testPrivateAccountRelationships.ts",
+    "test:identity": "node -e \"process.env.NODE_ENV='test'; require('child_process').execSync('npx tsx scripts/testIdentityFoundation.ts', { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'test' } });\"",
     "test:cors": "tsx scripts/testCorsAndSignup.ts",
     "start": "node dist/src/server.js",
     "audit:live-messages": "tsx scripts/audit-live-messages.ts",

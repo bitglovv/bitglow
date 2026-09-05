@@ -297,6 +297,39 @@ const initCoreTables = async () => {
     }
 };
 
+const initIdentityTables = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS identities (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active')),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_identities_user_id ON identities(user_id);
+            CREATE INDEX IF NOT EXISTS idx_identities_status ON identities(status);
+
+            CREATE TABLE IF NOT EXISTS identity_attributes (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                identity_id UUID NOT NULL REFERENCES identities(id) ON DELETE CASCADE,
+                attribute_type TEXT NOT NULL,
+                attribute_value TEXT NOT NULL DEFAULT 'not_set',
+                verification_status TEXT NOT NULL DEFAULT 'not_verified' CHECK (verification_status IN ('not_verified', 'verified', 'pending', 'revoked')),
+                source TEXT NOT NULL DEFAULT 'internal',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (identity_id, attribute_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_identity_attributes_identity_id ON identity_attributes(identity_id);
+            CREATE INDEX IF NOT EXISTS idx_identity_attributes_type ON identity_attributes(attribute_type);
+        `);
+    } catch (err) {
+        console.error("Failed to ensure identity tables", err);
+        throw err;
+    }
+};
+
 // Ensure posts + related tables exist for blogging
 const initPostsTable = async () => {
     try {
@@ -619,6 +652,7 @@ const initLiveTables = async () => {
 // Sequential startup — each step awaits the previous to avoid race conditions
 export async function initializeDatabase() {
     await initCoreTables();
+    await initIdentityTables();
     await initPostsTable();
     await initSecurityTables();
     await initDMTables();
@@ -742,6 +776,122 @@ export const db = {
 
     async healthCheck() {
         await pool.query("SELECT 1");
+    },
+
+    async getIdentityByUserId(userId: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, status, created_at, updated_at
+             FROM identities
+             WHERE user_id = $1
+             LIMIT 1`,
+            [userId]
+        );
+        return res.rows[0] || null;
+    },
+
+    async getIdentityById(identityId: string) {
+        const res = await pool.query(
+            `SELECT id, user_id, status, created_at, updated_at
+             FROM identities
+             WHERE id = $1
+             LIMIT 1`,
+            [identityId]
+        );
+        return res.rows[0] || null;
+    },
+
+    async createIdentityForUser(userId: string, status = "active") {
+        const res = await pool.query(
+            `INSERT INTO identities (user_id, status)
+             VALUES ($1, $2)
+             RETURNING id, user_id, status, created_at, updated_at`,
+            [userId, status]
+        );
+        return res.rows[0];
+    },
+
+    async updateIdentityStatus(identityId: string, status: string) {
+        const res = await pool.query(
+            `UPDATE identities
+             SET status = $2, updated_at = now()
+             WHERE id = $1
+             RETURNING id, user_id, status, created_at, updated_at`,
+            [identityId, status]
+        );
+        return res.rows[0] || null;
+    },
+
+    async getIdentityAttributesByIdentityId(identityId: string) {
+        const res = await pool.query(
+            `SELECT id, identity_id, attribute_type, attribute_value, verification_status, source, created_at, updated_at
+             FROM identity_attributes
+             WHERE identity_id = $1
+             ORDER BY attribute_type ASC`,
+            [identityId]
+        );
+        return res.rows;
+    },
+
+    async ensureIdentityAttributesForUser(userId: string, identityId?: string) {
+        let targetIdentityId = identityId;
+        if (!targetIdentityId) {
+            const identity = await this.getIdentityByUserId(userId);
+            if (!identity) {
+                throw new Error("IDENTITY_NOT_FOUND");
+            }
+            targetIdentityId = identity.id;
+        }
+
+        const user = await this.getUserById(userId);
+        if (!user) {
+            throw new Error("USER_NOT_FOUND");
+        }
+
+        const attributeSeeds = [
+            {
+                attributeType: "bitglow_account",
+                attributeValue: "active",
+                verificationStatus: "verified",
+                source: "internal",
+            },
+            {
+                attributeType: "email_verified",
+                attributeValue: user.email_verified ? "true" : "false",
+                verificationStatus: user.email_verified ? "verified" : "not_verified",
+                source: "internal",
+            },
+            {
+                attributeType: "student",
+                attributeValue: "not_set",
+                verificationStatus: "not_verified",
+                source: "internal",
+            },
+            {
+                attributeType: "college_member",
+                attributeValue: "not_set",
+                verificationStatus: "not_verified",
+                source: "internal",
+            },
+        ];
+
+        const rows = [] as any[];
+        for (const seed of attributeSeeds) {
+            const res = await pool.query(
+                `INSERT INTO identity_attributes (identity_id, attribute_type, attribute_value, verification_status, source)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (identity_id, attribute_type)
+                 DO UPDATE SET
+                    attribute_value = EXCLUDED.attribute_value,
+                    verification_status = EXCLUDED.verification_status,
+                    source = EXCLUDED.source,
+                    updated_at = now()
+                 RETURNING id, identity_id, attribute_type, attribute_value, verification_status, source, created_at, updated_at`,
+                [targetIdentityId, seed.attributeType, seed.attributeValue, seed.verificationStatus, seed.source]
+            );
+            rows.push(res.rows[0]);
+        }
+
+        return rows;
     },
 
     async close() {

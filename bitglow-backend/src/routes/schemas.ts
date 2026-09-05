@@ -79,6 +79,27 @@ export const logoutSchema = {
     },
 } as const;
 
+export const identityCreateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+            status: { type: "string", enum: ["active"] },
+        },
+    },
+} as const;
+
+export const identityUpdateSchema = {
+    body: {
+        type: "object",
+        additionalProperties: false,
+        required: ["status"],
+        properties: {
+            status: { type: "string", enum: ["active"] },
+        },
+    },
+} as const;
+
 export const userUpdateSchema = {
     body: {
         type: "object",

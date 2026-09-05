@@ -21,6 +21,7 @@ import SearchPage from "../pages/SearchPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import PostPage from "../pages/PostPage";
 import SettingsPage from "../pages/SettingsPage";
+import IdentityPage from "../pages/IdentityPage";
 import BlockedUsersPage from "../pages/settings/BlockedUsersPage";
 import MutedUsersPage from "../pages/settings/MutedUsersPage";
 import SavedPostsPage from "../pages/settings/SavedPostsPage";
@@ -70,6 +71,7 @@ export default function Router() {
                     <Route path="/messages" element={<MessagesPage />} />
                     <Route path="/notifications" element={<NotificationsPage />} />
                     <Route path="/posts/:postId" element={<PostPage />} />
+                    <Route path="/identity" element={<IdentityPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/settings/change-email" element={<ChangeEmailPage />} />
                     <Route path="/settings/change-password" element={<ChangePasswordPage />} />
